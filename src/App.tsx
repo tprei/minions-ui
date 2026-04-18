@@ -1,13 +1,16 @@
 import { signal } from '@preact/signals'
-import { useState } from 'preact/hooks'
+import { useState, useEffect } from 'preact/hooks'
 import { connections, activeId, getActiveStore } from './connections/store'
 import { ConnectionSettings } from './connections/ConnectionSettings'
+import { ConnectionPicker } from './connections/ConnectionPicker'
+import { ConnectionsDrawer } from './connections/ConnectionsDrawer'
 import { UniverseCanvas } from './components/UniverseCanvas'
 import { ChatPanel } from './chat/ChatPanel'
 import { ConfirmRoot } from './hooks/useConfirm'
 import type { ApiSession } from './api/types'
 
 const showSettings = signal(false)
+const showDrawer = signal(false)
 
 function ConnectionStatusBadge({ status }: { status: string }) {
   const color =
@@ -31,6 +34,11 @@ function ActiveView() {
   const store = id ? getActiveStore() : null
   const conn = connections.value.find((c) => c.id === id)
   const [chatSessionId, setChatSessionId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const color = conn?.color ?? '#3b82f6'
+    document.documentElement.style.setProperty('--accent', color)
+  }, [conn?.color])
 
   if (!store || !conn) return null
 
@@ -64,18 +72,8 @@ function ActiveView() {
   return (
     <div class="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900">
       <header class="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-        <span
-          class="h-3 w-3 rounded-full flex-shrink-0"
-          style={{ backgroundColor: conn.color }}
-        />
-        <span class="font-medium text-slate-900 dark:text-slate-100 flex-1">{conn.label}</span>
+        <ConnectionPicker onManage={() => { showDrawer.value = true }} />
         <ConnectionStatusBadge status={store.status.value} />
-        <button
-          onClick={() => { showSettings.value = true }}
-          class="text-xs text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 ml-2"
-        >
-          Manage connections
-        </button>
       </header>
       {store.error.value && (
         <div class="flex items-center gap-3 px-4 py-2 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
@@ -99,6 +97,7 @@ function ActiveView() {
           onOpenThread={handleOpenThread}
           isActionLoading={false}
           onOpenChat={handleOpenChat}
+          accentColor={conn.color}
         />
       </main>
       {chatSession && (
@@ -108,6 +107,9 @@ function ActiveView() {
           onSend={handleSendMessage}
           sseStatus={store.status.value}
         />
+      )}
+      {showDrawer.value && (
+        <ConnectionsDrawer onClose={() => { showDrawer.value = false }} />
       )}
     </div>
   )

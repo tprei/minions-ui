@@ -1,11 +1,12 @@
 import { signal } from '@preact/signals'
+import { del } from 'idb-keyval'
 import { createApiClient } from '../api/client'
 import { createConnectionStore } from '../state/store'
 import type { ConnectionStore } from '../state/types'
 import type { Connection, ConnectionsState } from './types'
+import { nextColor } from '../theme/colors'
 
 const STORAGE_KEY = 'minions-ui:connections:v1'
-const DEFAULT_COLOR = '#3b82f6'
 
 function migrate(raw: unknown): ConnectionsState {
   if (
@@ -55,8 +56,9 @@ function saveState() {
   persist({ version: 1, connections: connections.value, activeId: activeId.value })
 }
 
-export function addConnection(c: Omit<Connection, 'id' | 'color'>): Connection {
-  const conn: Connection = { ...c, id: crypto.randomUUID(), color: DEFAULT_COLOR }
+export function addConnection(c: Omit<Connection, 'id' | 'color'> & { color?: string }): Connection {
+  const color = c.color ?? nextColor(connections.value.map((x) => x.color))
+  const conn: Connection = { ...c, id: crypto.randomUUID(), color }
   connections.value = [...connections.value, conn]
   saveState()
   return conn
@@ -76,6 +78,7 @@ export function removeConnection(id: string): void {
   connections.value = connections.value.filter((c) => c.id !== id)
   if (activeId.value === id) activeId.value = null
   saveState()
+  void del(`minions-ui:snapshot:${id}`)
 }
 
 export function setActive(id: string | null): void {
