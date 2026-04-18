@@ -14,7 +14,7 @@ import { ConfirmRoot } from './hooks/useConfirm'
 import { InstallPrompt } from './pwa/InstallPrompt'
 import { useOnlineStatus } from './pwa/useOnlineStatus'
 import { useMediaQuery } from './hooks/useMediaQuery'
-import type { ApiSession, QuickAction } from './api/types'
+import type { ApiSession, MinionCommand, QuickAction } from './api/types'
 
 const showSettings = signal(false)
 const showDrawer = signal(false)
@@ -162,15 +162,18 @@ function SessionList({
 function ChatPane({
   session,
   onSend,
+  onCommand,
 }: {
   session: ApiSession
   onSend: (text: string, sessionId: string) => Promise<void>
+  onCommand: (cmd: MinionCommand) => Promise<void>
 }) {
   const [text, setText] = useState('')
+  const [pending, setPending] = useState<'stop' | 'close' | null>(null)
   const handleSend = (t: string) => onSend(t, session.id)
   const handleQuickAction = (action: QuickAction) => onSend(action.message, session.id)
 
-  const handleCommand = async (fullText: string, cmd: SlashCommand) => {
+  const handleSlashCommand = async (fullText: string, cmd: SlashCommand) => {
     if (cmd.destructive) {
       const ok = await confirm({
         title: `Run ${cmd.cmd}?`,
@@ -184,13 +187,48 @@ function ChatPane({
     setText('')
   }
 
+  const handleStop = async () => {
+    const ok = await confirm({
+      title: `Stop ${session.slug}?`,
+      message: 'Interrupts the running session. You can continue it later.',
+      destructive: true,
+      confirmLabel: 'Stop',
+    })
+    if (!ok) return
+    setPending('stop')
+    try {
+      await onCommand({ action: 'stop', sessionId: session.id })
+    } finally {
+      setPending(null)
+    }
+  }
+
+  const handleClose = async () => {
+    const ok = await confirm({
+      title: `Close ${session.slug}?`,
+      message: 'Closes this session permanently. Conversation history stays, but you cannot resume it.',
+      destructive: true,
+      confirmLabel: 'Close',
+    })
+    if (!ok) return
+    setPending('close')
+    try {
+      await onCommand({ action: 'close', sessionId: session.id })
+    } finally {
+      setPending(null)
+    }
+  }
+
+  const stoppable = session.status === 'running' || session.status === 'pending'
+  const closable = session.status !== 'completed' && session.status !== 'failed'
+
   return (
     <div class="flex flex-col flex-1 min-h-0 bg-white dark:bg-slate-800">
       <header class="flex items-center gap-2 px-4 py-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
         <span class={`inline-block h-2 w-2 rounded-full ${statusDot(session.status)}`} />
         <span class="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
         <span class="text-xs text-slate-500 dark:text-slate-400">{session.status}</span>
-        <span class="ml-auto text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">
+        <span class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 ml-2">
           {session.mode}
         </span>
         {session.prUrl && (
@@ -198,16 +236,38 @@ function ChatPane({
             href={session.prUrl}
             target="_blank"
             rel="noopener noreferrer"
-            class="text-xs underline text-indigo-600 dark:text-indigo-400"
+            class="text-xs underline text-indigo-600 dark:text-indigo-400 ml-2"
           >
             PR
           </a>
         )}
+        <div class="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => void handleStop()}
+            disabled={!stoppable || pending !== null}
+            title={stoppable ? 'Stop this session' : 'Session is not running'}
+            class="rounded-md border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 text-xs font-medium hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-40 disabled:cursor-not-allowed"
+            data-testid="chat-stop-btn"
+          >
+            {pending === 'stop' ? 'Stopping…' : 'Stop'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleClose()}
+            disabled={!closable || pending !== null}
+            title={closable ? 'Close this session permanently' : 'Session is already terminal'}
+            class="rounded-md border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 px-2 py-1 text-xs font-medium hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-40 disabled:cursor-not-allowed"
+            data-testid="chat-close-btn"
+          >
+            {pending === 'close' ? 'Closing…' : 'Close'}
+          </button>
+        </div>
       </header>
       <ConversationView messages={session.conversation} />
       <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
         <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />
-        <SlashCommandMenu session={session} context={text} onCommand={handleCommand} />
+        <SlashCommandMenu session={session} context={text} onCommand={handleSlashCommand} />
         <MessageInput session={session} value={text} onValueChange={setText} onSend={handleSend} />
       </div>
     </div>
@@ -246,6 +306,10 @@ function ActiveView() {
     await store.client.sendMessage(text, sid)
   }
 
+  const handleCommand = async (cmd: MinionCommand) => {
+    await store.sendCommand(cmd)
+  }
+
   const handleNewTask = async (text: string) => {
     await store.client.sendMessage(text)
   }
@@ -280,7 +344,11 @@ function ActiveView() {
               orientation="vertical"
             />
           </aside>
-          {selected ? <ChatPane session={selected} onSend={handleSendMessage} /> : <EmptyPane />}
+          {selected ? (
+            <ChatPane session={selected} onSend={handleSendMessage} onCommand={handleCommand} />
+          ) : (
+            <EmptyPane />
+          )}
         </div>
       ) : (
         <div class="flex flex-col flex-1 min-h-0">
@@ -290,7 +358,11 @@ function ActiveView() {
             onSelect={setSessionId}
             orientation="horizontal"
           />
-          {selected ? <ChatPane session={selected} onSend={handleSendMessage} /> : <EmptyPane />}
+          {selected ? (
+            <ChatPane session={selected} onSend={handleSendMessage} onCommand={handleCommand} />
+          ) : (
+            <EmptyPane />
+          )}
         </div>
       )}
       {showDrawer.value && (
