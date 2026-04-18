@@ -279,8 +279,16 @@ function ActiveView() {
 }
 
 function PwaController() {
-  useRegisterSW({
-    onNeedRefresh() {},
+  const { updateServiceWorker } = useRegisterSW({
+    immediate: true,
+    onRegisteredSW(_, registration) {
+      if (registration) {
+        setInterval(() => { void registration.update() }, 60_000)
+      }
+    },
+    onNeedRefresh() {
+      void updateServiceWorker(true)
+    },
     onOfflineReady() {},
   })
   return null

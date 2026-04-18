@@ -1,14 +1,53 @@
-import { useEffect, useRef } from 'preact/hooks'
+import { useEffect, useMemo, useRef } from 'preact/hooks'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import type { ConversationMessage } from '../api/types'
-import { useTheme } from '../hooks/useTheme'
+
+marked.setOptions({ gfm: true, breaks: true })
 
 interface ConversationViewProps {
   messages: ConversationMessage[]
 }
 
+function renderMarkdown(text: string): string {
+  const raw = marked.parse(text, { async: false }) as string
+  return DOMPurify.sanitize(raw, {
+    ALLOWED_TAGS: [
+      'p', 'br', 'strong', 'em', 'code', 'pre', 'blockquote',
+      'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'a', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'del', 'ins', 'span', 'div',
+    ],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+  })
+}
+
+function AssistantMessage({ text }: { text: string }) {
+  const html = useMemo(() => renderMarkdown(text), [text])
+  return (
+    <div class="group flex gap-3 justify-start" data-testid="message-assistant">
+      <div class="shrink-0 mt-1 w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
+        M
+      </div>
+      <div
+        class="flex-1 min-w-0 prose prose-sm dark:prose-invert max-w-none prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-pre:rounded-lg prose-pre:px-3 prose-pre:py-2 prose-pre:text-xs prose-code:before:content-none prose-code:after:content-none prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded text-slate-800 dark:text-slate-200"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </div>
+  )
+}
+
+function UserMessage({ text }: { text: string }) {
+  return (
+    <div class="group flex gap-3 justify-end" data-testid="message-user">
+      <div class="max-w-[80%] rounded-lg px-3 py-2 text-sm font-mono bg-slate-900 dark:bg-slate-700 text-slate-100 whitespace-pre-wrap break-words">
+        {text}
+      </div>
+    </div>
+  )
+}
+
 export function ConversationView({ messages }: ConversationViewProps) {
-  const theme = useTheme()
-  const isDark = theme.value === 'dark'
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevLengthRef = useRef(messages.length)
 
@@ -18,37 +57,28 @@ export function ConversationView({ messages }: ConversationViewProps) {
     const prevLen = prevLengthRef.current
     prevLengthRef.current = messages.length
     if (messages.length <= prevLen) return
-    const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 80
-    if (nearBottom) {
-      el.scrollTop = el.scrollHeight
-    }
+    const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 120
+    if (nearBottom) el.scrollTop = el.scrollHeight
   }, [messages.length])
 
   return (
     <div
       ref={scrollRef}
-      class="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3"
+      class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 bg-slate-50 dark:bg-slate-900"
       data-testid="conversation-view"
     >
-      {messages.map((msg, idx) => {
-        const isUser = msg.role === 'user'
-        const bubbleBg = isUser
-          ? isDark ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'
-          : isDark ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-900'
-        return (
-          <div
-            key={idx}
-            class={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
-            data-testid={`message-${msg.role}`}
-          >
-            <div
-              class={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${bubbleBg}`}
-            >
-              {msg.text}
-            </div>
-          </div>
+      {messages.length === 0 && (
+        <div class="text-xs text-slate-500 dark:text-slate-400 italic text-center py-8">
+          No messages yet.
+        </div>
+      )}
+      {messages.map((msg, idx) =>
+        msg.role === 'assistant' ? (
+          <AssistantMessage key={idx} text={msg.text} />
+        ) : (
+          <UserMessage key={idx} text={msg.text} />
         )
-      })}
+      )}
     </div>
   )
 }
