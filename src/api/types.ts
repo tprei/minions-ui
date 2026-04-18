@@ -62,8 +62,14 @@ export type MinionCommand =
   | { action: 'close'; sessionId: string }
   | { action: 'plan_action'; sessionId: string; planAction: PlanActionType }
 
+export interface RepoEntry {
+  alias: string
+  url: string
+}
+
 export interface VersionInfo {
   apiVersion: string
   libraryVersion: string
   features: string[]
+  repos?: RepoEntry[]
 }

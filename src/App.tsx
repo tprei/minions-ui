@@ -14,7 +14,7 @@ import { ConfirmRoot } from './hooks/useConfirm'
 import { InstallPrompt } from './pwa/InstallPrompt'
 import { useOnlineStatus } from './pwa/useOnlineStatus'
 import { useMediaQuery } from './hooks/useMediaQuery'
-import type { ApiSession, MinionCommand, QuickAction } from './api/types'
+import type { ApiSession, MinionCommand, QuickAction, RepoEntry } from './api/types'
 
 const showSettings = signal(false)
 const showDrawer = signal(false)
@@ -43,14 +43,37 @@ function statusDot(status: ApiSession['status']): string {
   return 'bg-slate-400'
 }
 
-function NewTaskBar({ onSend }: { onSend: (text: string) => Promise<void> }) {
+const TASK_LIKE_COMMANDS = ['/task', '/plan', '/think', '/dag', '/split', '/stack', '/ship', '/doctor']
+
+function injectRepo(text: string, repo: string): string {
+  const trimmed = text.trimStart()
+  const spaceIdx = trimmed.indexOf(' ')
+  if (spaceIdx === -1) return text
+  const head = trimmed.slice(0, spaceIdx)
+  const rest = trimmed.slice(spaceIdx + 1)
+  if (!TASK_LIKE_COMMANDS.includes(head)) return text
+  const restTrimmed = rest.trimStart()
+  const firstToken = restTrimmed.split(' ', 1)[0] ?? ''
+  if (firstToken === repo) return `${head} ${restTrimmed}`
+  return `${head} ${repo} ${restTrimmed}`
+}
+
+function NewTaskBar({
+  repos,
+  onSend,
+}: {
+  repos: RepoEntry[]
+  onSend: (text: string) => Promise<void>
+}) {
   const text = useSignal('')
   const sending = useSignal(false)
   const error = useSignal<string | null>(null)
+  const selectedRepo = useSignal<string>(repos.length > 0 ? repos[0].alias : '')
 
   const submit = async () => {
-    const value = text.value.trim()
-    if (!value || sending.value) return
+    const raw = text.value.trim()
+    if (!raw || sending.value) return
+    const value = selectedRepo.value ? injectRepo(raw, selectedRepo.value) : raw
     sending.value = true
     error.value = null
     try {
@@ -66,6 +89,21 @@ function NewTaskBar({ onSend }: { onSend: (text: string) => Promise<void> }) {
   return (
     <div class="flex flex-col gap-1 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
       <div class="flex items-center gap-2">
+        {repos.length > 0 && (
+          <select
+            value={selectedRepo.value}
+            onChange={(e) => { selectedRepo.value = (e.currentTarget as HTMLSelectElement).value }}
+            disabled={sending.value}
+            title="Repo to run the task against (auto-inserted after the slash command)"
+            class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-2 text-sm text-slate-900 dark:text-slate-100 disabled:opacity-50"
+            data-testid="new-task-repo-select"
+          >
+            {repos.map((r) => (
+              <option key={r.alias} value={r.alias}>{r.alias}</option>
+            ))}
+            <option value="">(no repo)</option>
+          </select>
+        )}
         <input
           type="text"
           value={text.value}
@@ -101,11 +139,21 @@ function SessionItem({ session, active, onSelect }: { session: ApiSession; activ
       <div class="flex items-center gap-2">
         <span class={`inline-block h-2 w-2 rounded-full shrink-0 ${statusDot(session.status)}`} />
         <span class="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
+        {session.repo && (
+          <span class="text-[10px] font-mono rounded bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 text-slate-600 dark:text-slate-300 truncate">
+            {shortRepo(session.repo)}
+          </span>
+        )}
         <span class="ml-auto text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{session.status}</span>
       </div>
       <div class="text-xs text-slate-600 dark:text-slate-400 truncate">{preview || '—'}</div>
     </button>
   )
+}
+
+function shortRepo(repoUrl: string): string {
+  const match = repoUrl.match(/[/:]([^/]+\/[^/]+?)(?:\.git)?$/)
+  return match ? match[1] : repoUrl
 }
 
 function SessionList({
@@ -342,7 +390,7 @@ function ActiveView() {
           <button onClick={() => void store.refresh()} class="text-xs font-medium underline">Retry</button>
         </div>
       )}
-      <NewTaskBar onSend={handleNewTask} />
+      <NewTaskBar repos={store.version.value?.repos ?? []} onSend={handleNewTask} />
       {isDesktop.value ? (
         <div class="flex flex-1 min-h-0">
           <aside class="w-72 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-y-auto shrink-0">
