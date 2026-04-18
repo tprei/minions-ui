@@ -3,6 +3,52 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { installMockEventSource } from './sse-mock'
 import type { VersionInfo, ApiSession, ApiDagGraph } from '../src/api/types'
 
+vi.mock('@reactflow/core', () => ({
+  ReactFlow: vi.fn(({ nodes, nodeTypes, children }) => (
+    <div data-testid="react-flow">
+      {nodes?.map((n: { id: string; type: string; data: Record<string, unknown> }) => {
+        const Comp = nodeTypes?.[n.type]
+        return Comp ? (
+          <div key={n.id} data-testid={`flow-node-${n.id}`}>
+            <Comp data={n.data} />
+          </div>
+        ) : (
+          <div key={n.id}>{String(n.data?.label ?? n.id)}</div>
+        )
+      })}
+      {children}
+    </div>
+  )),
+  useNodesState: vi.fn((initial: unknown[]) => [initial, vi.fn(), vi.fn()]),
+  useEdgesState: vi.fn((initial: unknown[]) => [initial, vi.fn(), vi.fn()]),
+  MarkerType: { ArrowClosed: 'arrowClosed' },
+  Handle: vi.fn(() => null),
+  Position: { Top: 'top', Bottom: 'bottom' },
+}))
+
+vi.mock('@reactflow/background', () => ({ Background: vi.fn(() => null) }))
+vi.mock('@reactflow/controls', () => ({ Controls: vi.fn(() => null) }))
+vi.mock('@reactflow/minimap', () => ({ MiniMap: vi.fn(() => null) }))
+
+vi.mock('dagre', () => {
+  function MockGraph(this: {
+    setDefaultEdgeLabel: ReturnType<typeof vi.fn>
+    setGraph: ReturnType<typeof vi.fn>
+    setNode: ReturnType<typeof vi.fn>
+    setEdge: ReturnType<typeof vi.fn>
+    node: ReturnType<typeof vi.fn>
+    graph: ReturnType<typeof vi.fn>
+  }) {
+    this.setDefaultEdgeLabel = vi.fn()
+    this.setGraph = vi.fn()
+    this.setNode = vi.fn()
+    this.setEdge = vi.fn()
+    this.node = vi.fn(() => ({ x: 100, y: 100 }))
+    this.graph = vi.fn(() => ({ width: 400, height: 300 }))
+  }
+  return { default: { graphlib: { Graph: MockGraph }, layout: vi.fn() } }
+})
+
 const VERSION: VersionInfo = { apiVersion: '1', libraryVersion: '0.1.0', features: [] }
 
 function stubFetch(sessions: ApiSession[] = [], dags: ApiDagGraph[] = []) {

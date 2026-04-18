@@ -81,6 +81,9 @@ export function createConnectionStore(client: ApiClient): ConnectionStore {
     error,
     version,
     refresh,
+    sendCommand(cmd) {
+      return client.sendCommand(cmd)
+    },
     dispose() {
       handle.close()
     },
