@@ -75,6 +75,7 @@ export function createConnectionStore(client: ApiClient): ConnectionStore {
   void refresh()
 
   return {
+    client,
     sessions,
     dags,
     status,

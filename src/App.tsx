@@ -3,7 +3,7 @@ import { useState } from 'preact/hooks'
 import { connections, activeId, getActiveStore } from './connections/store'
 import { ConnectionSettings } from './connections/ConnectionSettings'
 import { UniverseCanvas } from './components/UniverseCanvas'
-import { NodeDetailPopup } from './components/NodeDetailPopup'
+import { ChatPanel } from './chat/ChatPanel'
 import { ConfirmRoot } from './hooks/useConfirm'
 import type { ApiSession } from './api/types'
 
@@ -30,7 +30,7 @@ function ActiveView() {
   const id = activeId.value
   const store = id ? getActiveStore() : null
   const conn = connections.value.find((c) => c.id === id)
-  const [selectedSession, setSelectedSession] = useState<ApiSession | null>(null)
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null)
 
   if (!store || !conn) return null
 
@@ -47,6 +47,18 @@ function ActiveView() {
   }
 
   const handleOpenThread = (_session: ApiSession) => {
+  }
+
+  const handleOpenChat = (sessionId: string) => {
+    setChatSessionId(sessionId)
+  }
+
+  const chatSession = chatSessionId
+    ? store.sessions.value.find((s) => s.id === chatSessionId) ?? null
+    : null
+
+  const handleSendMessage = async (text: string, sessionId: string) => {
+    await store.client.sendMessage(text, sessionId)
   }
 
   return (
@@ -86,13 +98,15 @@ function ActiveView() {
           onCloseSession={handleCloseSession}
           onOpenThread={handleOpenThread}
           isActionLoading={false}
-          onNodeSelect={setSelectedSession}
+          onOpenChat={handleOpenChat}
         />
       </main>
-      {selectedSession && (
-        <NodeDetailPopup
-          session={selectedSession}
-          onClose={() => setSelectedSession(null)}
+      {chatSession && (
+        <ChatPanel
+          session={chatSession}
+          onClose={() => setChatSessionId(null)}
+          onSend={handleSendMessage}
+          sseStatus={store.status.value}
         />
       )}
     </div>

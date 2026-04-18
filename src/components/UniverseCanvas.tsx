@@ -156,6 +156,7 @@ export interface UniverseCanvasProps {
   onOpenThread: (session: ApiSession) => void
   isActionLoading: boolean
   onNodeSelect?: (session: ApiSession) => void
+  onOpenChat?: (sessionId: string) => void
   accentColor?: string
 }
 
@@ -169,6 +170,7 @@ export function UniverseCanvas({
   onOpenThread,
   isActionLoading,
   onNodeSelect,
+  onOpenChat,
 }: UniverseCanvasProps) {
   const theme = useTheme()
   const isDark = theme.value === 'dark'
@@ -326,6 +328,7 @@ export function UniverseCanvas({
         <NodeDetailPopup
           session={detailSession}
           onClose={() => setDetailSession(null)}
+          onOpenChat={onOpenChat}
         />
       )}
     </div>

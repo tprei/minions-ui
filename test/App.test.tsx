@@ -122,4 +122,97 @@ describe('App', () => {
     expect(screen.getByText('My Minion')).toBeTruthy()
     await screen.findByText('brave-fox')
   })
+
+  it('clicking node opens NodeDetailPopup, then Open Chat opens ChatPanel', async () => {
+    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
+      version: 1,
+      connections: [
+        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+      ],
+      activeId: 'c1',
+    }))
+
+    const sessions: ApiSession[] = [
+      {
+        id: 's1',
+        slug: 'brave-fox',
+        status: 'running',
+        command: '/task foo',
+        createdAt: '2024-01-01',
+        updatedAt: '2024-01-01',
+        childIds: [],
+        needsAttention: false,
+        attentionReasons: [],
+        quickActions: [],
+        mode: 'task',
+        conversation: [{ role: 'user', text: 'hello' }],
+      },
+    ]
+    stubFetch(sessions)
+
+    const App = (await import('../src/App')).default
+    render(<App />)
+
+    await screen.findByText('brave-fox')
+
+    const node = screen.getByTestId('universe-node-s1')
+    node.click()
+
+    await screen.findByRole('button', { name: 'Open Chat' })
+
+    const openChatBtn = screen.getByRole('button', { name: 'Open Chat' })
+    openChatBtn.click()
+
+    await screen.findByTestId('conversation-view')
+    expect(screen.getByText('hello')).toBeTruthy()
+  })
+
+  it('ChatPanel close button removes the panel', async () => {
+    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
+      version: 1,
+      connections: [
+        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+      ],
+      activeId: 'c1',
+    }))
+
+    const sessions: ApiSession[] = [
+      {
+        id: 's1',
+        slug: 'swift-cat',
+        status: 'running',
+        command: '/task bar',
+        createdAt: '2024-01-01',
+        updatedAt: '2024-01-01',
+        childIds: [],
+        needsAttention: false,
+        attentionReasons: [],
+        quickActions: [],
+        mode: 'task',
+        conversation: [],
+      },
+    ]
+    stubFetch(sessions)
+
+    const App = (await import('../src/App')).default
+    render(<App />)
+
+    await screen.findByText('swift-cat')
+
+    const node = screen.getByTestId('universe-node-s1')
+    node.click()
+
+    await screen.findByRole('button', { name: 'Open Chat' })
+
+    const openChatBtn = screen.getByRole('button', { name: 'Open Chat' })
+    openChatBtn.click()
+
+    await screen.findByTestId('chat-close-btn')
+
+    const closeBtn = screen.getByTestId('chat-close-btn')
+    closeBtn.click()
+
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId('chat-close-btn')).toBeNull()
+  })
 })
