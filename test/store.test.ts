@@ -4,6 +4,12 @@ import { createConnectionStore } from '../src/state/store'
 import { installMockEventSource, MockEventSource } from './sse-mock'
 import type { ApiSession, ApiDagGraph, VersionInfo } from '../src/api/types'
 
+vi.mock('idb-keyval', () => ({
+  get: vi.fn().mockResolvedValue(undefined),
+  set: vi.fn().mockResolvedValue(undefined),
+  del: vi.fn().mockResolvedValue(undefined),
+}))
+
 const BASE_URL = 'https://example.com'
 const TOKEN = 'tok'
 
@@ -64,7 +70,7 @@ describe('ConnectionStore SSE events', () => {
   function setup(initialSessions: ApiSession[] = [], initialDags: ApiDagGraph[] = []) {
     vi.stubGlobal('fetch', makeResponses(initialSessions, initialDags))
     const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
-    const store = createConnectionStore(client)
+    const store = createConnectionStore(client, 'test-conn')
     const es = [...mock.instances.values()][0] as MockEventSource
     return { store, es }
   }
@@ -129,7 +135,7 @@ describe('ConnectionStore SSE events', () => {
     const setSpy = vi.spyOn(globalThis, 'setTimeout')
 
     const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
-    const store = createConnectionStore(client)
+    const store = createConnectionStore(client, 'test-conn')
     const es = [...mock.instances.values()][0] as MockEventSource
 
     es.simulateError()
@@ -144,7 +150,7 @@ describe('ConnectionStore SSE events', () => {
     const fetchMock = makeResponses()
     vi.stubGlobal('fetch', fetchMock)
     const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
-    const store = createConnectionStore(client)
+    const store = createConnectionStore(client, 'test-conn')
     const es = [...mock.instances.values()][0] as MockEventSource
 
     await Promise.resolve()

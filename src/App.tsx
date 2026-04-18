@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals'
 import { useState, useEffect } from 'preact/hooks'
+import { useRegisterSW } from 'virtual:pwa-register/preact'
 import { connections, activeId, getActiveStore } from './connections/store'
 import { ConnectionSettings } from './connections/ConnectionSettings'
 import { ConnectionPicker } from './connections/ConnectionPicker'
@@ -7,6 +8,8 @@ import { ConnectionsDrawer } from './connections/ConnectionsDrawer'
 import { UniverseCanvas } from './components/UniverseCanvas'
 import { ChatPanel } from './chat/ChatPanel'
 import { ConfirmRoot } from './hooks/useConfirm'
+import { InstallPrompt } from './pwa/InstallPrompt'
+import { useOnlineStatus } from './pwa/useOnlineStatus'
 import type { ApiSession } from './api/types'
 
 const showSettings = signal(false)
@@ -34,6 +37,7 @@ function ActiveView() {
   const store = id ? getActiveStore() : null
   const conn = connections.value.find((c) => c.id === id)
   const [chatSessionId, setChatSessionId] = useState<string | null>(null)
+  const isOnline = useOnlineStatus()
 
   useEffect(() => {
     const color = conn?.color ?? '#3b82f6'
@@ -69,8 +73,15 @@ function ActiveView() {
     await store.client.sendMessage(text, sessionId)
   }
 
+  const showOfflineBanner = !isOnline.value && store.stale.value
+
   return (
     <div class="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900">
+      {showOfflineBanner && (
+        <div class="flex items-center justify-center px-4 py-2 bg-amber-500 text-amber-950 text-xs font-medium" data-testid="offline-banner">
+          Offline — showing last snapshot
+        </div>
+      )}
       <header class="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
         <ConnectionPicker onManage={() => { showDrawer.value = true }} />
         <ConnectionStatusBadge status={store.status.value} />
@@ -115,6 +126,14 @@ function ActiveView() {
   )
 }
 
+function PwaController() {
+  useRegisterSW({
+    onNeedRefresh() {},
+    onOfflineReady() {},
+  })
+  return null
+}
+
 export default function App() {
   if (connections.value.length === 0 || showSettings.value) {
     return (
@@ -138,6 +157,8 @@ export default function App() {
           )}
         </div>
         <ConfirmRoot />
+        <InstallPrompt />
+        <PwaController />
       </>
     )
   }
@@ -146,6 +167,8 @@ export default function App() {
     <>
       <ActiveView />
       <ConfirmRoot />
+      <InstallPrompt />
+      <PwaController />
     </>
   )
 }

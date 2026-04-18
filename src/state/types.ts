@@ -12,6 +12,7 @@ export interface ConnectionStore {
   status: ReadonlySignal<SseStatus>
   error: ReadonlySignal<string | null>
   version: ReadonlySignal<VersionInfo | null>
+  stale: ReadonlySignal<boolean>
   refresh(): Promise<void>
   sendCommand(cmd: MinionCommand): Promise<CommandResult>
   dispose(): void

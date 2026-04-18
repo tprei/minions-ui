@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals'
-import { del } from 'idb-keyval'
 import { createApiClient } from '../api/client'
 import { createConnectionStore } from '../state/store'
+import { clearSnapshot } from '../state/persist'
 import type { ConnectionStore } from '../state/types'
 import type { Connection, ConnectionsState } from './types'
 import { nextColor } from '../theme/colors'
@@ -47,7 +47,7 @@ function getOrCreateStore(id: string): ConnectionStore {
   const conn = connections.value.find((c) => c.id === id)
   if (!conn) throw new Error(`Connection ${id} not found`)
   const client = createApiClient({ baseUrl: conn.baseUrl, token: conn.token })
-  const store = createConnectionStore(client)
+  const store = createConnectionStore(client, id)
   storeCache.set(id, store)
   return store
 }
@@ -78,7 +78,7 @@ export function removeConnection(id: string): void {
   connections.value = connections.value.filter((c) => c.id !== id)
   if (activeId.value === id) activeId.value = null
   saveState()
-  void del(`minions-ui:snapshot:${id}`)
+  void clearSnapshot(id)
 }
 
 export function setActive(id: string | null): void {

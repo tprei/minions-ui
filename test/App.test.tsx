@@ -3,6 +3,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { installMockEventSource } from './sse-mock'
 import type { VersionInfo, ApiSession, ApiDagGraph } from '../src/api/types'
 
+vi.mock('virtual:pwa-register/preact', () => ({
+  useRegisterSW: vi.fn().mockReturnValue({}),
+}))
+
+vi.mock('idb-keyval', () => ({
+  get: vi.fn().mockResolvedValue(undefined),
+  set: vi.fn().mockResolvedValue(undefined),
+  del: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock('@reactflow/core', () => ({
   ReactFlow: vi.fn(({ nodes, nodeTypes, children }) => (
     <div data-testid="react-flow">

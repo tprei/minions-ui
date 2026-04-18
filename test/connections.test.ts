@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { installMockEventSource } from './sse-mock'
 import type { ApiSession, ApiDagGraph, VersionInfo } from '../src/api/types'
 
+vi.mock('idb-keyval', () => ({
+  get: vi.fn().mockResolvedValue(undefined),
+  set: vi.fn().mockResolvedValue(undefined),
+  del: vi.fn().mockResolvedValue(undefined),
+}))
+
 const VERSION: VersionInfo = { apiVersion: '1', libraryVersion: '0.1.0', features: [] }
 const SESSIONS: ApiSession[] = []
 const DAGS: ApiDagGraph[] = []
@@ -72,8 +78,8 @@ describe('connections store', () => {
     const disposeSpy = vi.fn()
     const origCreate = createConnectionStore
 
-    vi.spyOn(await import('../src/state/store'), 'createConnectionStore').mockImplementation((client) => {
-      const store = origCreate(client)
+    vi.spyOn(await import('../src/state/store'), 'createConnectionStore').mockImplementation((client, connectionId) => {
+      const store = origCreate(client, connectionId)
       const origDispose = store.dispose.bind(store)
       store.dispose = () => {
         disposeSpy()
