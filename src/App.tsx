@@ -1,4 +1,5 @@
 import { signal } from '@preact/signals'
+import { useSignal } from '@preact/signals'
 import { useState, useEffect } from 'preact/hooks'
 import { useRegisterSW } from 'virtual:pwa-register/preact'
 import { connections, activeId, getActiveStore } from './connections/store'
@@ -29,6 +30,51 @@ function ConnectionStatusBadge({ status }: { status: string }) {
       <span class={`inline-block h-2 w-2 rounded-full ${color}`} />
       {status}
     </span>
+  )
+}
+
+function NewTaskBar({ onSend }: { onSend: (text: string) => Promise<void> }) {
+  const text = useSignal('')
+  const sending = useSignal(false)
+  const error = useSignal<string | null>(null)
+
+  const submit = async () => {
+    const value = text.value.trim()
+    if (!value || sending.value) return
+    sending.value = true
+    error.value = null
+    try {
+      await onSend(value)
+      text.value = ''
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Send failed'
+    } finally {
+      sending.value = false
+    }
+  }
+
+  return (
+    <div class="flex flex-col gap-1 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          value={text.value}
+          onInput={(e) => { text.value = (e.currentTarget as HTMLInputElement).value }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit() } }}
+          disabled={sending.value}
+          placeholder="/task <prompt>, /plan, /think, /dag, /split, /stack, /doctor, /ship"
+          class="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 disabled:opacity-50"
+        />
+        <button
+          onClick={() => void submit()}
+          disabled={sending.value || !text.value.trim()}
+          class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {sending.value ? 'Sending…' : 'Send'}
+        </button>
+      </div>
+      {error.value && <div class="text-xs text-red-600 dark:text-red-400">{error.value}</div>}
+    </div>
   )
 }
 
@@ -97,6 +143,7 @@ function ActiveView() {
           </button>
         </div>
       )}
+      <NewTaskBar onSend={(text) => store.client.sendMessage(text).then(() => undefined)} />
       <main class="flex-1 overflow-hidden">
         <UniverseCanvas
           sessions={store.sessions.value}
