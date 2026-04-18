@@ -1,19 +1,20 @@
-import { useState, useRef, useCallback } from 'preact/hooks'
+import { useRef, useCallback, useState } from 'preact/hooks'
 import type { ApiSession } from '../api/types'
 import { useTheme } from '../hooks/useTheme'
 
 const PLACEHOLDER =
-  'Message or /command — /task, /plan, /think, /stop, /close, /dag, /split, /stack, /ship, /doctor'
+  'Message or /command — or click a command button to use this text as context'
 
 interface MessageInputProps {
   session: ApiSession
+  value: string
+  onValueChange: (text: string) => void
   onSend: (text: string) => Promise<void>
 }
 
-export function MessageInput({ onSend }: MessageInputProps) {
+export function MessageInput({ value, onValueChange, onSend }: MessageInputProps) {
   const theme = useTheme()
   const isDark = theme.value === 'dark'
-  const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [errorText, setErrorText] = useState<string | null>(null)
   const pendingRef = useRef<string | null>(null)
@@ -29,15 +30,15 @@ export function MessageInput({ onSend }: MessageInputProps) {
   }, [])
 
   const submit = useCallback(
-    async (value: string) => {
-      const trimmed = value.trim()
+    async (text: string) => {
+      const trimmed = text.trim()
       if (!trimmed || sending) return
       pendingRef.current = trimmed
       setErrorText(null)
       setSending(true)
       try {
         await onSend(trimmed)
-        setText('')
+        onValueChange('')
         pendingRef.current = null
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto'
@@ -48,25 +49,25 @@ export function MessageInput({ onSend }: MessageInputProps) {
         setSending(false)
       }
     },
-    [sending, onSend]
+    [sending, onSend, onValueChange]
   )
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
-        void submit(text)
+        void submit(value)
       }
     },
-    [text, submit]
+    [value, submit]
   )
 
   const handleInput = useCallback(
     (e: Event) => {
-      setText((e.target as HTMLTextAreaElement).value)
+      onValueChange((e.target as HTMLTextAreaElement).value)
       adjustHeight()
     },
-    [adjustHeight]
+    [onValueChange, adjustHeight]
   )
 
   const handleRetry = useCallback(() => {
@@ -105,7 +106,7 @@ export function MessageInput({ onSend }: MessageInputProps) {
       <div class="flex items-end gap-2">
         <textarea
           ref={textareaRef}
-          value={text}
+          value={value}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
           disabled={sending}
@@ -116,8 +117,8 @@ export function MessageInput({ onSend }: MessageInputProps) {
           data-testid="message-textarea"
         />
         <button
-          onClick={() => void submit(text)}
-          disabled={sending || !text.trim()}
+          onClick={() => void submit(value)}
+          disabled={sending || !value.trim()}
           class={`shrink-0 rounded-xl px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${sendBtnClass}`}
           data-testid="send-btn"
         >

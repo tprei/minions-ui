@@ -8,6 +8,8 @@ import { ConnectionsDrawer } from './connections/ConnectionsDrawer'
 import { ConversationView } from './chat/ConversationView'
 import { MessageInput } from './chat/MessageInput'
 import { QuickActionsBar } from './chat/QuickActionsBar'
+import { SlashCommandMenu, type SlashCommand } from './chat/SlashCommandMenu'
+import { confirm } from './hooks/useConfirm'
 import { ConfirmRoot } from './hooks/useConfirm'
 import { InstallPrompt } from './pwa/InstallPrompt'
 import { useOnlineStatus } from './pwa/useOnlineStatus'
@@ -164,20 +166,39 @@ function ChatPane({
   session: ApiSession
   onSend: (text: string, sessionId: string) => Promise<void>
 }) {
-  const handleSend = (text: string) => onSend(text, session.id)
+  const [text, setText] = useState('')
+  const handleSend = (t: string) => onSend(t, session.id)
   const handleQuickAction = (action: QuickAction) => onSend(action.message, session.id)
+
+  const handleCommand = async (fullText: string, cmd: SlashCommand) => {
+    if (cmd.destructive) {
+      const ok = await confirm({
+        title: `Run ${cmd.cmd}?`,
+        message: cmd.hint,
+        destructive: true,
+        confirmLabel: cmd.cmd,
+      })
+      if (!ok) return
+    }
+    await onSend(fullText, session.id)
+    setText('')
+  }
+
   return (
     <div class="flex flex-col flex-1 min-h-0 bg-white dark:bg-slate-800">
       <header class="flex items-center gap-2 px-4 py-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
         <span class={`inline-block h-2 w-2 rounded-full ${statusDot(session.status)}`} />
         <span class="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
         <span class="text-xs text-slate-500 dark:text-slate-400">{session.status}</span>
+        <span class="ml-auto text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">
+          {session.mode}
+        </span>
         {session.prUrl && (
           <a
             href={session.prUrl}
             target="_blank"
             rel="noopener noreferrer"
-            class="ml-auto text-xs underline text-indigo-600 dark:text-indigo-400"
+            class="text-xs underline text-indigo-600 dark:text-indigo-400"
           >
             PR
           </a>
@@ -186,7 +207,8 @@ function ChatPane({
       <ConversationView messages={session.conversation} />
       <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
         <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />
-        <MessageInput session={session} onSend={handleSend} />
+        <SlashCommandMenu session={session} context={text} onCommand={handleCommand} />
+        <MessageInput session={session} value={text} onValueChange={setText} onSend={handleSend} />
       </div>
     </div>
   )

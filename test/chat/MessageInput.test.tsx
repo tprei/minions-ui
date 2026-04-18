@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/preact'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { useState } from 'preact/hooks'
 import { MessageInput } from '../../src/chat/MessageInput'
 import type { ApiSession } from '../../src/api/types'
 
@@ -31,6 +32,11 @@ const session: ApiSession = {
   conversation: [],
 }
 
+function Controlled({ onSend }: { onSend: (text: string) => Promise<void> }) {
+  const [text, setText] = useState('')
+  return <MessageInput session={session} onSend={onSend} value={text} onValueChange={setText} />
+}
+
 function getTextarea() {
   return screen.getByTestId('message-textarea') as HTMLTextAreaElement
 }
@@ -42,7 +48,7 @@ function getSendBtn() {
 describe('MessageInput', () => {
   it('calls onSend with typed text when Send button is clicked', async () => {
     const onSend = vi.fn().mockResolvedValue(undefined)
-    render(<MessageInput session={session} onSend={onSend} />)
+    render(<Controlled onSend={onSend} />)
     fireEvent.input(getTextarea(), { target: { value: 'hello world' } })
     fireEvent.click(getSendBtn())
     await waitFor(() => expect(onSend).toHaveBeenCalledWith('hello world'))
@@ -50,7 +56,7 @@ describe('MessageInput', () => {
 
   it('calls onSend when Enter is pressed (no shift)', async () => {
     const onSend = vi.fn().mockResolvedValue(undefined)
-    render(<MessageInput session={session} onSend={onSend} />)
+    render(<Controlled onSend={onSend} />)
     fireEvent.input(getTextarea(), { target: { value: 'enter test' } })
     fireEvent.keyDown(getTextarea(), { key: 'Enter', shiftKey: false })
     await waitFor(() => expect(onSend).toHaveBeenCalledWith('enter test'))
@@ -58,7 +64,7 @@ describe('MessageInput', () => {
 
   it('inserts newline on Shift+Enter without submitting', async () => {
     const onSend = vi.fn().mockResolvedValue(undefined)
-    render(<MessageInput session={session} onSend={onSend} />)
+    render(<Controlled onSend={onSend} />)
     fireEvent.input(getTextarea(), { target: { value: 'line1' } })
     fireEvent.keyDown(getTextarea(), { key: 'Enter', shiftKey: true })
     expect(onSend).not.toHaveBeenCalled()
@@ -67,7 +73,7 @@ describe('MessageInput', () => {
   it('disables input and button while onSend is pending', async () => {
     let resolve: () => void
     const onSend = vi.fn().mockReturnValue(new Promise<void>((r) => { resolve = r }))
-    render(<MessageInput session={session} onSend={onSend} />)
+    render(<Controlled onSend={onSend} />)
     fireEvent.input(getTextarea(), { target: { value: 'pending test' } })
     act(() => {
       fireEvent.click(getSendBtn())
@@ -81,7 +87,7 @@ describe('MessageInput', () => {
 
   it('shows retry banner when onSend rejects', async () => {
     const onSend = vi.fn().mockRejectedValue(new Error('network error'))
-    render(<MessageInput session={session} onSend={onSend} />)
+    render(<Controlled onSend={onSend} />)
     fireEvent.input(getTextarea(), { target: { value: 'will fail' } })
     fireEvent.click(getSendBtn())
     await waitFor(() => expect(screen.getByText(/Send failed/)).toBeTruthy())
@@ -95,7 +101,7 @@ describe('MessageInput', () => {
       if (callCount === 1) return Promise.reject(new Error('fail'))
       return Promise.resolve()
     })
-    render(<MessageInput session={session} onSend={onSend} />)
+    render(<Controlled onSend={onSend} />)
     fireEvent.input(getTextarea(), { target: { value: 'retry me' } })
     fireEvent.click(getSendBtn())
     await waitFor(() => expect(screen.getByTestId('retry-btn')).toBeTruthy())
