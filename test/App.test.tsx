@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/preact'
+import { render, screen, fireEvent, within } from '@testing-library/preact'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { installMockEventSource } from './sse-mock'
 import type { VersionInfo, ApiSession, ApiDagGraph } from '../src/api/types'
@@ -12,52 +12,6 @@ vi.mock('idb-keyval', () => ({
   set: vi.fn().mockResolvedValue(undefined),
   del: vi.fn().mockResolvedValue(undefined),
 }))
-
-vi.mock('@reactflow/core', () => ({
-  ReactFlow: vi.fn(({ nodes, nodeTypes, children }) => (
-    <div data-testid="react-flow">
-      {nodes?.map((n: { id: string; type: string; data: Record<string, unknown> }) => {
-        const Comp = nodeTypes?.[n.type]
-        return Comp ? (
-          <div key={n.id} data-testid={`flow-node-${n.id}`}>
-            <Comp data={n.data} />
-          </div>
-        ) : (
-          <div key={n.id}>{String(n.data?.label ?? n.id)}</div>
-        )
-      })}
-      {children}
-    </div>
-  )),
-  useNodesState: vi.fn((initial: unknown[]) => [initial, vi.fn(), vi.fn()]),
-  useEdgesState: vi.fn((initial: unknown[]) => [initial, vi.fn(), vi.fn()]),
-  MarkerType: { ArrowClosed: 'arrowClosed' },
-  Handle: vi.fn(() => null),
-  Position: { Top: 'top', Bottom: 'bottom' },
-}))
-
-vi.mock('@reactflow/background', () => ({ Background: vi.fn(() => null) }))
-vi.mock('@reactflow/controls', () => ({ Controls: vi.fn(() => null) }))
-vi.mock('@reactflow/minimap', () => ({ MiniMap: vi.fn(() => null) }))
-
-vi.mock('dagre', () => {
-  function MockGraph(this: {
-    setDefaultEdgeLabel: ReturnType<typeof vi.fn>
-    setGraph: ReturnType<typeof vi.fn>
-    setNode: ReturnType<typeof vi.fn>
-    setEdge: ReturnType<typeof vi.fn>
-    node: ReturnType<typeof vi.fn>
-    graph: ReturnType<typeof vi.fn>
-  }) {
-    this.setDefaultEdgeLabel = vi.fn()
-    this.setGraph = vi.fn()
-    this.setNode = vi.fn()
-    this.setEdge = vi.fn()
-    this.node = vi.fn(() => ({ x: 100, y: 100 }))
-    this.graph = vi.fn(() => ({ width: 400, height: 300 }))
-  }
-  return { default: { graphlib: { Graph: MockGraph }, layout: vi.fn() } }
-})
 
 const VERSION: VersionInfo = { apiVersion: '1', libraryVersion: '0.1.0', features: [] }
 
@@ -74,6 +28,24 @@ function stubFetch(sessions: ApiSession[] = [], dags: ApiDagGraph[] = []) {
     }
     return Promise.resolve({ ok: false, status: 404, statusText: 'NF', json: () => Promise.resolve({ data: null }) })
   }))
+}
+
+function session(over: Partial<ApiSession> = {}): ApiSession {
+  return {
+    id: 's1',
+    slug: 'brave-fox',
+    status: 'running',
+    command: '/task foo',
+    createdAt: '2024-01-01',
+    updatedAt: '2024-01-01',
+    childIds: [],
+    needsAttention: false,
+    attentionReasons: [],
+    quickActions: [],
+    mode: 'task',
+    conversation: [],
+    ...over,
+  }
 }
 
 describe('App', () => {
@@ -99,7 +71,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Add connection' })).toBeTruthy()
   })
 
-  it('renders header with connection label and sessions list when connection exists', async () => {
+  it('renders header and session list when connection exists', async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
       connections: [
@@ -107,33 +79,14 @@ describe('App', () => {
       ],
       activeId: 'c1',
     }))
-
-    const sessions: ApiSession[] = [
-      {
-        id: 's1',
-        slug: 'brave-fox',
-        status: 'running',
-        command: '/task foo',
-        createdAt: '2024-01-01',
-        updatedAt: '2024-01-01',
-        childIds: [],
-        needsAttention: false,
-        attentionReasons: [],
-        quickActions: [],
-        mode: 'task',
-        conversation: [],
-      },
-    ]
-    stubFetch(sessions)
-
+    stubFetch([session()])
     const App = (await import('../src/App')).default
     render(<App />)
-
     expect(screen.getByText('My Minion')).toBeTruthy()
     await screen.findByText('brave-fox')
   })
 
-  it('clicking node opens NodeDetailPopup, then Open Chat opens ChatPanel', async () => {
+  it('clicking a session in the sidebar opens its conversation inline', async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
       connections: [
@@ -141,43 +94,18 @@ describe('App', () => {
       ],
       activeId: 'c1',
     }))
-
-    const sessions: ApiSession[] = [
-      {
-        id: 's1',
-        slug: 'brave-fox',
-        status: 'running',
-        command: '/task foo',
-        createdAt: '2024-01-01',
-        updatedAt: '2024-01-01',
-        childIds: [],
-        needsAttention: false,
-        attentionReasons: [],
-        quickActions: [],
-        mode: 'task',
-        conversation: [{ role: 'user', text: 'hello' }],
-      },
-    ]
-    stubFetch(sessions)
-
+    stubFetch([session({ conversation: [{ role: 'user', text: 'hello' }] })])
     const App = (await import('../src/App')).default
     render(<App />)
 
-    await screen.findByText('brave-fox')
+    const item = await screen.findByTestId('session-item-s1')
+    fireEvent.click(item)
 
-    const node = screen.getByTestId('universe-node-s1')
-    node.click()
-
-    await screen.findByRole('button', { name: 'Open Chat' })
-
-    const openChatBtn = screen.getByRole('button', { name: 'Open Chat' })
-    openChatBtn.click()
-
-    await screen.findByTestId('conversation-view')
-    expect(screen.getByText('hello')).toBeTruthy()
+    const conv = await screen.findByTestId('conversation-view')
+    expect(within(conv).getByText('hello')).toBeTruthy()
   })
 
-  it('ChatPanel close button removes the panel', async () => {
+  it('switching sessions swaps the conversation pane', async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
       connections: [
@@ -185,44 +113,19 @@ describe('App', () => {
       ],
       activeId: 'c1',
     }))
-
-    const sessions: ApiSession[] = [
-      {
-        id: 's1',
-        slug: 'swift-cat',
-        status: 'running',
-        command: '/task bar',
-        createdAt: '2024-01-01',
-        updatedAt: '2024-01-01',
-        childIds: [],
-        needsAttention: false,
-        attentionReasons: [],
-        quickActions: [],
-        mode: 'task',
-        conversation: [],
-      },
-    ]
-    stubFetch(sessions)
-
+    stubFetch([
+      session({ id: 's1', slug: 'brave-fox', conversation: [{ role: 'user', text: 'first' }] }),
+      session({ id: 's2', slug: 'swift-cat', conversation: [{ role: 'user', text: 'second' }] }),
+    ])
     const App = (await import('../src/App')).default
     render(<App />)
 
-    await screen.findByText('swift-cat')
+    fireEvent.click(await screen.findByTestId('session-item-s1'))
+    const conv1 = await screen.findByTestId('conversation-view')
+    expect(within(conv1).getByText('first')).toBeTruthy()
 
-    const node = screen.getByTestId('universe-node-s1')
-    node.click()
-
-    await screen.findByRole('button', { name: 'Open Chat' })
-
-    const openChatBtn = screen.getByRole('button', { name: 'Open Chat' })
-    openChatBtn.click()
-
-    await screen.findByTestId('chat-close-btn')
-
-    const closeBtn = screen.getByTestId('chat-close-btn')
-    closeBtn.click()
-
-    await new Promise((r) => setTimeout(r, 50))
-    expect(screen.queryByTestId('chat-close-btn')).toBeNull()
+    fireEvent.click(screen.getByTestId('session-item-s2'))
+    const conv2 = await screen.findByTestId('conversation-view')
+    await within(conv2).findByText('second')
   })
 })
