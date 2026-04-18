@@ -1,12 +1,12 @@
 # minions-ui
 
-Standalone PWA that replaces the Telegram Mini App frontend for [`@tprei/telegram-minions`](https://github.com/prei/telegram-minions). Built with Preact, Vite, and Tailwind v4. Works as a regular browser app — no Telegram client required.
+Standalone PWA that replaces the Telegram Mini App frontend for [`@tprei/telegram-minions`](https://github.com/tprei/telegram-minions). Built with Preact, Vite, and Tailwind v4. Works as a regular browser app — no Telegram client required. Connects to N minion deployments via bearer-token auth.
 
 ## Commands
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start the dev server at http://localhost:3000 |
+| `npm run dev` | Start the dev server at http://localhost:5173 |
 | `npm run build` | Type-check and produce a production build in `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm run typecheck` | Run `tsc --noEmit` |
@@ -21,28 +21,16 @@ In development, requests to `/api/*` are proxied to `http://localhost:8080` — 
 
 ## Architecture
 
-```
-src/
-  main.tsx      — entry point, renders <App /> into #app
-  App.tsx       — root component
-  index.css     — Tailwind base + global resets
-test/
-  setup.ts      — @testing-library/preact cleanup
-  App.test.tsx  — smoke tests
-public/
-  favicon.svg
-  icons/        — see icons/README.md (populated in M6)
-```
+See [`CLAUDE.md`](./CLAUDE.md) for the full directory map and working rules, [`AGENTS.md`](./AGENTS.md) for agent routing, and [`docs/two-repo-prs.md`](./docs/two-repo-prs.md) for cross-repo workflows with `telegram-minions`.
 
 ## Milestones
 
-See `docs/` for milestone plans. M0 is this scaffold. Subsequent milestones add:
-
-- **M1** — API client (`/api` fetch wrapper, SSE stream)
-- **M2** — Connection manager UI (add/remove minion endpoints)
-- **M3** — Session list and status display
-- **M4** — DAG visualization (ReactFlow + dagre)
-- **M5** — Chat panel and reply UI
-- **M6** — PWA assets, manifest, service worker
-- **M7** — Playwright e2e tests
-- **M8** — Docs, CLAUDE.md, AGENTS.md
+- **M0** — Scaffold (Vite + Preact + Tailwind v4, vitest, ESLint, husky, CI).
+- **M1** — Library-side contract in [`@tprei/telegram-minions`](https://github.com/tprei/telegram-minions): bearer auth, CORS allowlist, `POST /api/messages`, `GET /api/version`, `Dispatcher.handleIncomingText`.
+- **M2** — API client, SSE stream with full-jitter backoff, per-connection store, connection settings form.
+- **M3** — Port DAG canvas (UniverseCanvas + dagre layout + node popup + context menu + confirm dialog) — Telegram SDK stripped.
+- **M4** — Chat panel (bottom sheet on mobile, side panel on desktop) with conversation view, message input, quick actions bar.
+- **M5** — Multi-connection UX: picker dropdown, drawer, color accents, staggered initial SSE.
+- **M6** — PWA: `vite-plugin-pwa` (Workbox injectManifest), manifest, icons, offline last-snapshot render.
+- **M7** — Playwright E2E against a mock-SSE fixture, matrix `mobile-chromium` / `desktop-chromium` / `desktop-firefox`.
+- **M8** — `meta-minion` registration + this repo's `CLAUDE.md`, `AGENTS.md`, `docs/two-repo-prs.md`.
