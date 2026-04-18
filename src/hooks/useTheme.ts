@@ -26,7 +26,11 @@ function resolveAndApply(pref: ThemePref): void {
   applyTheme(resolved)
 }
 
-let currentPref: ThemePref = (localStorage.getItem(STORAGE_KEY) as ThemePref | null) ?? 'system'
+function parseThemePref(raw: string | null): ThemePref {
+  return raw === 'light' || raw === 'dark' || raw === 'system' ? raw : 'system'
+}
+
+let currentPref: ThemePref = parseThemePref(localStorage.getItem(STORAGE_KEY))
 resolveAndApply(currentPref)
 
 const mq = window.matchMedia('(prefers-color-scheme: dark)')
