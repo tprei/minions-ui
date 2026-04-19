@@ -23,10 +23,12 @@ Standalone PWA that replaces the Telegram Mini App frontend for [`@tprei/telegra
 | `npm run lint` | ESLint across `src/` and `test/`. |
 | `npm run test` | Unit + component tests (vitest). |
 | `npm run test:watch` | Same, watch mode. |
-| `npm run test:e2e` | Playwright E2E suite. |
+| `npm run test:e2e` | Playwright E2E suite. **Do not run locally unless the user explicitly asks** — prefer pushing and letting CI cover it. |
 | `npm run format` | Prettier. |
 
 Always run `npm run typecheck && npm run lint && npm run test` before committing.
+
+**Do not run `npm run test:e2e` / `npx playwright test` locally as part of routine validation.** Playwright runs are slow, flaky against sandboxed environments, and already covered by the `e2e` matrix in `.github/workflows/ci.yml` on every push and PR. Push the branch and rely on CI; only run Playwright locally when the user explicitly asks or when iterating on an E2E-specific failure they've pointed to.
 
 ## Directory map
 
