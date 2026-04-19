@@ -1,4 +1,4 @@
-import { signal, useSignal } from '@preact/signals'
+import { signal } from '@preact/signals'
 import { useState, useEffect, useCallback } from 'preact/hooks'
 import { useRegisterSW } from 'virtual:pwa-register/preact'
 import { connections, activeId, getActiveStore } from './connections/store'
@@ -7,16 +7,26 @@ import { ConnectionPicker } from './connections/ConnectionPicker'
 import { ConnectionsDrawer } from './connections/ConnectionsDrawer'
 import { ConversationView } from './chat/ConversationView'
 import { MessageInput } from './chat/MessageInput'
+import { NewTaskBar } from './chat/NewTaskBar'
 import { QuickActionsBar } from './chat/QuickActionsBar'
 import { SlashCommandMenu, type SlashCommand } from './chat/SlashCommandMenu'
+import { SessionTabs, type SessionTabId } from './chat/SessionTabs'
+import { DiffTab } from './chat/DiffTab'
+import { ScreenshotsTab } from './chat/ScreenshotsTab'
+import { PrPreviewCard } from './components/PrPreviewCard'
 import { SessionList } from './components/SessionList'
 import { UniverseCanvas } from './components/UniverseCanvas'
+import { WorktreeHeader } from './components/WorktreeHeader'
+import { hasFeature } from './api/features'
+import type { ConnectionStore } from './state/types'
 import { confirm } from './hooks/useConfirm'
 import { ConfirmRoot } from './hooks/useConfirm'
 import { InstallPrompt } from './pwa/InstallPrompt'
 import { useOnlineStatus } from './pwa/useOnlineStatus'
 import { useMediaQuery } from './hooks/useMediaQuery'
-import type { ApiSession, MinionCommand, QuickAction, RepoEntry } from './api/types'
+import { currentRoute } from './routing/current'
+import { VariantGroupView } from './groups/VariantGroupView'
+import type { ApiSession, MinionCommand, QuickAction } from './api/types'
 
 export type ViewMode = 'list' | 'canvas'
 
@@ -85,139 +95,20 @@ function statusDot(status: ApiSession['status']): string {
   return 'bg-slate-400'
 }
 
-const TASK_LIKE_COMMANDS = ['/task', '/plan', '/think', '/dag', '/split', '/stack', '/ship', '/doctor']
-
-function injectRepo(text: string, repo: string): string {
-  const trimmed = text.trimStart()
-  const spaceIdx = trimmed.indexOf(' ')
-  if (spaceIdx === -1) return text
-  const head = trimmed.slice(0, spaceIdx)
-  const rest = trimmed.slice(spaceIdx + 1)
-  if (!TASK_LIKE_COMMANDS.includes(head)) return text
-  const restTrimmed = rest.trimStart()
-  const firstToken = restTrimmed.split(' ', 1)[0] ?? ''
-  if (firstToken === repo) return `${head} ${restTrimmed}`
-  return `${head} ${repo} ${restTrimmed}`
-}
-
-function NewTaskBar({
-  repos,
-  onSend,
-}: {
-  repos: RepoEntry[]
-  onSend: (text: string) => Promise<void>
-}) {
-  const text = useSignal('')
-  const sending = useSignal(false)
-  const error = useSignal<string | null>(null)
-  const selectedRepo = useSignal<string>(repos.length > 0 ? repos[0].alias : '')
-  const userPickedRepo = useSignal(false)
-
-  useEffect(() => {
-    if (userPickedRepo.value) return
-    if (repos.length === 0) return
-    if (!repos.some((r) => r.alias === selectedRepo.value)) {
-      selectedRepo.value = repos[0].alias
-    }
-  }, [repos, selectedRepo, userPickedRepo])
-
-  const submit = async () => {
-    const raw = text.value.trim()
-    if (!raw || sending.value) return
-    const value = selectedRepo.value ? injectRepo(raw, selectedRepo.value) : raw
-    sending.value = true
-    error.value = null
-    try {
-      await onSend(value)
-      text.value = ''
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Send failed'
-    } finally {
-      sending.value = false
-    }
-  }
-
-  const chipClass = (active: boolean) =>
-    `px-2.5 py-1 rounded-full text-xs font-medium border transition-colors whitespace-nowrap ${
-      active
-        ? 'border-indigo-500 bg-indigo-600 text-white'
-        : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-    } disabled:opacity-50 disabled:cursor-not-allowed`
-
-  return (
-    <div class="flex flex-col gap-1 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-      {repos.length > 0 && (
-        <div
-          class="flex items-center gap-1.5 overflow-x-auto scrollbar-none"
-          role="radiogroup"
-          aria-label="Repo for new task"
-          data-testid="new-task-repo-chips"
-        >
-          {repos.map((r) => {
-            const active = selectedRepo.value === r.alias
-            return (
-              <button
-                type="button"
-                key={r.alias}
-                role="radio"
-                aria-checked={active}
-                disabled={sending.value}
-                onClick={() => { selectedRepo.value = r.alias; userPickedRepo.value = true }}
-                class={chipClass(active)}
-                data-testid={`new-task-repo-chip-${r.alias}`}
-              >
-                {r.alias}
-              </button>
-            )
-          })}
-          <button
-            type="button"
-            role="radio"
-            aria-checked={selectedRepo.value === ''}
-            disabled={sending.value}
-            onClick={() => { selectedRepo.value = ''; userPickedRepo.value = true }}
-            class={chipClass(selectedRepo.value === '')}
-            data-testid="new-task-repo-chip-none"
-            title="Run the command without auto-inserting a repo"
-          >
-            (no repo)
-          </button>
-        </div>
-      )}
-      <div class="flex items-center gap-2">
-        <input
-          type="text"
-          value={text.value}
-          onInput={(e) => { text.value = (e.currentTarget as HTMLInputElement).value }}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit() } }}
-          disabled={sending.value}
-          placeholder="New task: /task <prompt>, /plan, /think, /dag, /split, /stack, /doctor, /ship"
-          class="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 disabled:opacity-50"
-        />
-        <button
-          onClick={() => void submit()}
-          disabled={sending.value || !text.value.trim()}
-          class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {sending.value ? '…' : 'Send'}
-        </button>
-      </div>
-      {error.value && <div class="text-xs text-red-600 dark:text-red-400">{error.value}</div>}
-    </div>
-  )
-}
-
 function ChatPane({
   session,
+  store,
   onSend,
   onCommand,
 }: {
   session: ApiSession
+  store: ConnectionStore
   onSend: (text: string, sessionId: string) => Promise<void>
   onCommand: (cmd: MinionCommand) => Promise<void>
 }) {
   const [text, setText] = useState('')
   const [pending, setPending] = useState<'stop' | 'close' | null>(null)
+  const [activeTab, setActiveTab] = useState<SessionTabId>('chat')
   const handleSend = (t: string) => onSend(t, session.id)
   const handleQuickAction = (action: QuickAction) => onSend(action.message, session.id)
 
@@ -312,12 +203,48 @@ function ChatPane({
           </button>
         </div>
       </header>
-      <ConversationView messages={session.conversation} />
-      <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
-        <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />
-        <SlashCommandMenu session={session} context={text} onCommand={handleSlashCommand} />
-        <MessageInput session={session} value={text} onValueChange={setText} onSend={handleSend} />
-      </div>
+      <WorktreeHeader session={session} store={store} />
+      <SessionTabs
+        tabs={[
+          { id: 'chat', label: 'Chat', available: true },
+          { id: 'diff', label: 'Diff', available: hasFeature(store, 'diff-viewer') },
+          { id: 'screenshots', label: 'Screenshots', available: hasFeature(store, 'screenshots-http') },
+        ]}
+        active={activeTab}
+        onChange={setActiveTab}
+      >
+        {activeTab === 'chat' && (
+          <>
+            {session.prUrl && hasFeature(store, 'pr-preview') && (
+              <PrPreviewCard
+                sessionId={session.id}
+                prUrl={session.prUrl}
+                client={store.client}
+              />
+            )}
+            <ConversationView messages={session.conversation} />
+            <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
+              <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />
+              <SlashCommandMenu session={session} context={text} onCommand={handleSlashCommand} />
+              <MessageInput session={session} value={text} onValueChange={setText} onSend={handleSend} />
+            </div>
+          </>
+        )}
+        {activeTab === 'diff' && (
+          <DiffTab
+            sessionId={session.id}
+            sessionUpdatedAt={session.updatedAt}
+            client={store.client}
+          />
+        )}
+        {activeTab === 'screenshots' && (
+          <ScreenshotsTab
+            sessionId={session.id}
+            sessionUpdatedAt={session.updatedAt}
+            client={store.client}
+          />
+        )}
+      </SessionTabs>
     </div>
   )
 }
@@ -341,35 +268,18 @@ function ActiveView() {
   const isOnline = useOnlineStatus()
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const mode = viewMode.value
+  const route = currentRoute.value
 
   useEffect(() => {
     const color = conn?.color ?? '#3b82f6'
     document.documentElement.style.setProperty('--accent', color)
   }, [conn?.color])
 
-  const handleSendMessage = useCallback(
-    async (text: string, sid: string) => {
-      if (!store) return
-      await store.client.sendMessage(text, sid)
-    },
-    [store]
-  )
-
-  const handleCommand = useCallback(
-    async (cmd: MinionCommand) => {
-      if (!store) return
-      await store.sendCommand(cmd)
-    },
-    [store]
-  )
-
-  const handleNewTask = useCallback(
-    async (text: string) => {
-      if (!store) return
-      await store.client.sendMessage(text)
-    },
-    [store]
-  )
+  useEffect(() => {
+    if (route.name !== 'session') return
+    const match = store?.sessions.value.find((s) => s.slug === route.sessionSlug)
+    if (match && match.id !== sessionId) setSessionId(match.id)
+  }, [route, store, sessionId])
 
   const handleCanvasSendReply = useCallback(
     async (sid: string, message: string) => {
@@ -420,8 +330,17 @@ function ActiveView() {
   const sessions = store.sessions.value
   const dags = store.dags.value
   const selected = sessionId ? sessions.find((s) => s.id === sessionId) ?? null : null
+  const isGroupRoute = route.name === 'group'
 
   const attentionCount = sessions.reduce((n, s) => (s.needsAttention ? n + 1 : n), 0)
+
+  const handleSendMessage = async (text: string, sid: string) => {
+    await store.client.sendMessage(text, sid)
+  }
+
+  const handleCommand = async (cmd: MinionCommand) => {
+    await store.sendCommand(cmd)
+  }
 
   const showOfflineBanner = !isOnline.value && store.stale.value
 
@@ -469,8 +388,10 @@ function ActiveView() {
           <button onClick={() => void store.refresh()} class="text-xs font-medium underline">Retry</button>
         </div>
       )}
-      <NewTaskBar repos={store.version.value?.repos ?? []} onSend={handleNewTask} />
-      {isDesktop.value ? (
+      <NewTaskBar store={store} />
+      {isGroupRoute ? (
+        <VariantGroupView store={store} groupId={route.groupId} />
+      ) : isDesktop.value ? (
         mode === 'canvas' ? (
           <div class="flex flex-1 min-h-0" data-testid="canvas-pane">
             <UniverseCanvas {...canvasProps} />
@@ -480,13 +401,13 @@ function ActiveView() {
             <aside class="w-72 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-y-auto shrink-0">
               <SessionList
                 sessions={sessions}
-                dags={store.dags.value}
+                dags={dags}
                 activeSessionId={sessionId}
                 onSelect={setSessionId}
               />
             </aside>
             {selected ? (
-              <ChatPane session={selected} onSend={handleSendMessage} onCommand={handleCommand} />
+              <ChatPane session={selected} store={store} onSend={handleSendMessage} onCommand={handleCommand} />
             ) : (
               <EmptyPane />
             )}
@@ -497,19 +418,19 @@ function ActiveView() {
           <div class="max-h-[45vh] overflow-y-auto border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 shrink-0">
             <SessionList
               sessions={sessions}
-              dags={store.dags.value}
+              dags={dags}
               activeSessionId={sessionId}
               onSelect={setSessionId}
             />
           </div>
           {selected ? (
-            <ChatPane session={selected} onSend={handleSendMessage} onCommand={handleCommand} />
+            <ChatPane session={selected} store={store} onSend={handleSendMessage} onCommand={handleCommand} />
           ) : (
             <EmptyPane />
           )}
         </div>
       )}
-      {!isDesktop.value && mode === 'canvas' && (
+      {!isDesktop.value && mode === 'canvas' && !isGroupRoute && (
         <div
           class="fixed inset-0 z-40 bg-slate-50 dark:bg-slate-900 flex flex-col"
           data-testid="canvas-mobile-modal"

@@ -1,0 +1,237 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { createApiClient, ApiError } from '../../src/api/client'
+import type {
+  ApiSession,
+  CreateSessionRequest,
+  CreateSessionVariantsRequest,
+  CreateSessionVariantsResult,
+  PrPreview,
+  PushSubscriptionJSON,
+  ScreenshotList,
+  VapidPublicKey,
+  WorkspaceDiff,
+} from '../../src/api/types'
+
+const BASE_URL = 'https://example.com'
+const TOKEN = 'test-token'
+
+function jsonResponse(data: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 401 ? 'Unauthorized' : 'OK',
+    json: () => Promise.resolve(data),
+    blob: () => Promise.reject(new Error('not a blob response')),
+  }
+}
+
+function blobResponse(body: Blob, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: 'OK',
+    blob: () => Promise.resolve(body),
+    json: () => Promise.reject(new Error('not a json response')),
+  }
+}
+
+const SAMPLE_SESSION: ApiSession = {
+  id: 's-1',
+  slug: 'quick-fox',
+  status: 'pending',
+  command: '/task implement feature x',
+  createdAt: '2026-04-19T00:00:00Z',
+  updatedAt: '2026-04-19T00:00:00Z',
+  childIds: [],
+  needsAttention: false,
+  attentionReasons: [],
+  quickActions: [],
+  mode: 'task',
+  conversation: [],
+}
+
+describe('ApiClient — createSession', () => {
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: SAMPLE_SESSION }))
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('POSTs structured payload to /api/sessions', async () => {
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const req: CreateSessionRequest = { prompt: 'do the thing', mode: 'task', repo: 'foo' }
+    const out = await client.createSession(req)
+
+    expect(out).toEqual(SAMPLE_SESSION)
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE_URL}/api/sessions`)
+    expect(init.method).toBe('POST')
+    expect((init.headers as Record<string, string>)['Authorization']).toBe(`Bearer ${TOKEN}`)
+    const body = JSON.parse(init.body as string) as CreateSessionRequest
+    expect(body).toEqual(req)
+  })
+})
+
+describe('ApiClient — createSessionVariants', () => {
+  it('POSTs to /api/sessions/variants and unwraps group result', async () => {
+    const result: CreateSessionVariantsResult = {
+      groupId: 'group-1',
+      sessions: [SAMPLE_SESSION, { ...SAMPLE_SESSION, id: 's-2' }],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: result }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const req: CreateSessionVariantsRequest = { prompt: 'parallel', mode: 'task', count: 2 }
+    const out = await client.createSessionVariants(req)
+
+    expect(out).toEqual(result)
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(`${BASE_URL}/api/sessions/variants`)
+
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('ApiClient — getPr / getDiff / listScreenshots', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('getPr hits /api/sessions/:id/pr with encoded id', async () => {
+    const pr: PrPreview = {
+      number: 42,
+      url: 'https://github.com/o/r/pull/42',
+      title: 'Feature',
+      body: 'body',
+      state: 'open',
+      draft: false,
+      mergeable: true,
+      branch: 'feature',
+      baseBranch: 'main',
+      author: 'me',
+      updatedAt: '2026-04-19T00:00:00Z',
+      checks: [],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: pr }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const out = await client.getPr('weird id/with/slashes')
+    expect(out).toEqual(pr)
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(`${BASE_URL}/api/sessions/${encodeURIComponent('weird id/with/slashes')}/pr`)
+  })
+
+  it('getDiff returns workspace diff', async () => {
+    const diff: WorkspaceDiff = {
+      sessionId: 's-1',
+      branch: 'feature',
+      baseBranch: 'main',
+      patch: '--- a\n+++ b\n',
+      truncated: false,
+      stats: { filesChanged: 1, insertions: 3, deletions: 1 },
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: diff }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const out = await client.getDiff('s-1')
+    expect(out).toEqual(diff)
+  })
+
+  it('listScreenshots returns list shape', async () => {
+    const list: ScreenshotList = {
+      sessionId: 's-1',
+      screenshots: [
+        { file: 'a.png', url: '/api/screenshots/a.png', capturedAt: '2026-04-19T00:00:00Z', size: 100 },
+      ],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: list }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const out = await client.listScreenshots('s-1')
+    expect(out).toEqual(list)
+  })
+})
+
+describe('ApiClient — fetchScreenshotBlob', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('returns a Blob and attaches Authorization header', async () => {
+    const body = new Blob(['fake-png'], { type: 'image/png' })
+    const fetchMock = vi.fn().mockResolvedValue(blobResponse(body))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const out = await client.fetchScreenshotBlob('sub/dir/file.png')
+    expect(out).toBe(body)
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE_URL}/api/screenshots/${encodeURIComponent('sub/dir/file.png')}`)
+    expect((init.headers as Record<string, string>)['Authorization']).toBe(`Bearer ${TOKEN}`)
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined()
+  })
+
+  it('throws ApiError on non-2xx', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found', blob: () => Promise.resolve(new Blob()) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await expect(client.fetchScreenshotBlob('missing.png')).rejects.toThrow(ApiError)
+  })
+})
+
+describe('ApiClient — push', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('getVapidKey unwraps data', async () => {
+    const key: VapidPublicKey = { key: 'BXYZ' }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: key }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const out = await client.getVapidKey()
+    expect(out).toEqual(key)
+  })
+
+  it('subscribePush POSTs the subscription', async () => {
+    const sub: PushSubscriptionJSON = {
+      endpoint: 'https://push.example.com/abc',
+      expirationTime: null,
+      keys: { p256dh: 'pk', auth: 'ak' },
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { ok: true, id: 'sub-1' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const out = await client.subscribePush(sub)
+    expect(out).toEqual({ ok: true, id: 'sub-1' })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE_URL}/api/push-subscribe`)
+    expect(init.method).toBe('POST')
+    const body = JSON.parse(init.body as string) as PushSubscriptionJSON
+    expect(body).toEqual(sub)
+  })
+
+  it('unsubscribePush DELETEs with endpoint body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { ok: true } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const out = await client.unsubscribePush('https://push.example.com/abc')
+    expect(out).toEqual({ ok: true })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE_URL}/api/push-subscribe`)
+    expect(init.method).toBe('DELETE')
+    const body = JSON.parse(init.body as string) as { endpoint: string }
+    expect(body.endpoint).toBe('https://push.example.com/abc')
+  })
+})

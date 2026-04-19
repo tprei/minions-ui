@@ -1,8 +1,11 @@
+import { useMemo, useEffect } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
 import { createApiClient, ApiError } from '../api/client'
 import { addConnection, updateConnection, setActive } from './store'
 import type { Connection } from './types'
 import { CONNECTION_PALETTE } from '../theme/colors'
+import { EnableNotifications } from '../pwa/EnableNotifications'
+import { isPushFlagEnabled } from '../pwa/push'
 
 interface Props {
   onClose: () => void
@@ -21,6 +24,38 @@ export function ConnectionSettings({ onClose, existing, embedded }: Props) {
   const err = useSignal<string | null>(null)
   const loading = useSignal(false)
   const features = useSignal<string[]>([])
+
+  const showPushPanel = Boolean(existing) && isPushFlagEnabled()
+  const editClient = useMemo(
+    () =>
+      showPushPanel && existing
+        ? createApiClient({ baseUrl: existing.baseUrl, token: existing.token })
+        : null,
+    [showPushPanel, existing?.id, existing?.baseUrl, existing?.token],
+  )
+  const editFeatures = useSignal<string[] | null>(null)
+  const editFeaturesError = useSignal<string | null>(null)
+
+  useEffect(() => {
+    if (!editClient) return
+    let cancelled = false
+    editFeatures.value = null
+    editFeaturesError.value = null
+    void editClient
+      .getVersion()
+      .then((info) => {
+        if (cancelled) return
+        editFeatures.value = info.features
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        editFeatures.value = []
+        editFeaturesError.value = e instanceof Error ? e.message : 'Could not fetch features'
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [editClient])
 
   async function submit(e: Event) {
     e.preventDefault()
@@ -164,6 +199,23 @@ export function ConnectionSettings({ onClose, existing, embedded }: Props) {
                 {f}
               </span>
             ))}
+          </div>
+        )}
+        {showPushPanel && editClient && (
+          <div class="flex flex-col gap-2 border-t border-slate-200 dark:border-slate-700 pt-3" data-testid="push-section">
+            <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Notifications</span>
+            {editFeatures.value === null ? (
+              <p class="text-xs text-slate-500 dark:text-slate-400">Checking server features…</p>
+            ) : editFeaturesError.value ? (
+              <p class="text-xs text-red-600 dark:text-red-400" data-testid="push-features-error">
+                {editFeaturesError.value}
+              </p>
+            ) : (
+              <EnableNotifications
+                client={editClient}
+                hasFeature={editFeatures.value.includes('web-push')}
+              />
+            )}
           </div>
         )}
         <div class="flex gap-2 mt-1">

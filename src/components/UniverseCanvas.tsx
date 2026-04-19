@@ -264,7 +264,7 @@ export function UniverseCanvas({
           <div class="text-4xl mb-3 opacity-40">~</div>
           <div class="text-lg font-medium">No active sessions</div>
           <div class="text-sm mt-1 opacity-70">
-            Send a /task command to get started
+            Launch a task from the bar above to get started
           </div>
         </div>
       </div>

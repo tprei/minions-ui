@@ -143,7 +143,7 @@ describe('UniverseCanvas', () => {
   it('shows empty state when no sessions or DAGs', () => {
     render(<UniverseCanvas {...defaultProps} />)
     expect(document.body.innerHTML).toContain('No active sessions')
-    expect(document.body.innerHTML).toContain('/task')
+    expect(document.body.innerHTML).toContain('Launch a task')
   })
 
   it('shows loading state', () => {
