@@ -41,7 +41,7 @@ test.describe('bad token', () => {
 
       await expect(page.getByTestId('connection-picker-trigger')).toContainText('Bad Token Minion')
 
-      await expect(page.getByTestId('universe-node-correct-session')).toBeVisible({ timeout: 8_000 })
+      await expect(page.getByTestId('session-item-correct-session')).toBeVisible({ timeout: 8_000 })
     } finally {
       await mock.close()
     }
