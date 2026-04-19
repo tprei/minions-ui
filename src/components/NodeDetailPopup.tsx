@@ -1,13 +1,16 @@
-import { useEffect, useRef } from 'preact/hooks'
-import type { ApiSession } from '../api/types'
+import { useEffect, useMemo, useRef } from 'preact/hooks'
+import type { ApiDagGraph, ApiDagNode, ApiSession } from '../api/types'
 import { useTheme } from '../hooks/useTheme'
 import { StatusBadge, AttentionBadge, formatRelativeTime } from './shared'
 import { PrLink } from './PrLink'
 
 interface NodeDetailPopupProps {
   session: ApiSession
+  sessions?: ApiSession[]
+  dags?: ApiDagGraph[]
   onClose: () => void
   onOpenChat?: (sessionId: string) => void
+  onNavigate?: (sessionId: string) => void
 }
 
 function MetaRow({ label, children, isDark }: { label: string; children: preact.ComponentChildren; isDark: boolean }) {
@@ -23,7 +26,38 @@ function MetaRow({ label, children, isDark }: { label: string; children: preact.
   )
 }
 
-export function NodeDetailPopup({ session, onClose, onOpenChat }: NodeDetailPopupProps) {
+interface SessionLinkProps {
+  id: string
+  label: string
+  onNavigate?: (sessionId: string) => void
+  isDark: boolean
+}
+
+function SessionLink({ id, label, onNavigate, isDark }: SessionLinkProps) {
+  if (!onNavigate) {
+    return <span class="font-mono text-[11px] truncate">{label}</span>
+  }
+  const linkColor = isDark ? 'text-indigo-300 hover:text-indigo-200' : 'text-indigo-600 hover:text-indigo-700'
+  return (
+    <button
+      type="button"
+      onClick={() => onNavigate(id)}
+      class={`font-mono text-[11px] truncate underline ${linkColor}`}
+      data-testid={`node-detail-link-${id}`}
+    >
+      {label}
+    </button>
+  )
+}
+
+export function NodeDetailPopup({
+  session,
+  sessions,
+  dags,
+  onClose,
+  onOpenChat,
+  onNavigate,
+}: NodeDetailPopupProps) {
   const theme = useTheme()
   const isDark = theme.value === 'dark'
   const popupRef = useRef<HTMLDivElement>(null)
@@ -35,6 +69,29 @@ export function NodeDetailPopup({ session, onClose, onOpenChat }: NodeDetailPopu
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
+
+  const sessionById = useMemo(() => {
+    const map = new Map<string, ApiSession>()
+    for (const s of sessions ?? []) map.set(s.id, s)
+    return map
+  }, [sessions])
+
+  const parent = session.parentId ? sessionById.get(session.parentId) ?? null : null
+  const children: Array<{ id: string; session: ApiSession | null }> = useMemo(
+    () => session.childIds.map((id) => ({ id, session: sessionById.get(id) ?? null })),
+    [session.childIds, sessionById],
+  )
+
+  const dagMembership = useMemo<{ dag: ApiDagGraph; node: ApiDagNode } | null>(() => {
+    for (const dag of dags ?? []) {
+      for (const node of Object.values(dag.nodes)) {
+        if (node.session?.id === session.id) {
+          return { dag, node }
+        }
+      }
+    }
+    return null
+  }, [dags, session.id])
 
   const overlayBg = isDark ? 'bg-black/70' : 'bg-black/50'
   const dialogBg = isDark ? 'bg-gray-800' : 'bg-white'
@@ -48,6 +105,7 @@ export function NodeDetailPopup({ session, onClose, onOpenChat }: NodeDetailPopu
     : session.command
 
   const hasChatAction = Boolean(onOpenChat)
+  const hasHierarchy = Boolean(session.parentId) || children.length > 0 || dagMembership !== null
 
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center">
@@ -122,6 +180,55 @@ export function NodeDetailPopup({ session, onClose, onOpenChat }: NodeDetailPopu
             {formatRelativeTime(session.updatedAt)}
           </MetaRow>
         </div>
+
+        {hasHierarchy && (
+          <div class={`px-4 py-3 border-b ${borderColor} flex flex-col gap-2`} data-testid="node-detail-hierarchy">
+            {parent && (
+              <MetaRow label="Parent" isDark={isDark}>
+                <SessionLink
+                  id={parent.id}
+                  label={parent.slug}
+                  onNavigate={onNavigate}
+                  isDark={isDark}
+                />
+              </MetaRow>
+            )}
+            {!parent && session.parentId && (
+              <MetaRow label="Parent" isDark={isDark}>
+                <span class="font-mono text-[11px] truncate" style={{ color: isDark ? '#9ca3af' : '#9ca3af' }}>
+                  {session.parentId}
+                </span>
+              </MetaRow>
+            )}
+            {children.length > 0 && (
+              <MetaRow label={children.length === 1 ? 'Child' : `Children (${children.length})`} isDark={isDark}>
+                <div class="flex flex-col gap-1">
+                  {children.map((child) => (
+                    <SessionLink
+                      key={child.id}
+                      id={child.id}
+                      label={child.session?.slug ?? child.id}
+                      onNavigate={child.session ? onNavigate : undefined}
+                      isDark={isDark}
+                    />
+                  ))}
+                </div>
+              </MetaRow>
+            )}
+            {dagMembership && (
+              <>
+                <MetaRow label="DAG" isDark={isDark}>
+                  <span class="font-mono text-[11px] truncate block">{dagMembership.dag.id}</span>
+                </MetaRow>
+                <MetaRow label="DAG node" isDark={isDark}>
+                  <div class="flex items-center gap-2 min-w-0">
+                    <StatusBadge status={dagMembership.node.status} />
+                  </div>
+                </MetaRow>
+              </>
+            )}
+          </div>
+        )}
 
         <div class="px-4 py-3 flex gap-2">
           {hasChatAction && (

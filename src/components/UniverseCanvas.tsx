@@ -327,8 +327,14 @@ export function UniverseCanvas({
       {detailSession && (
         <NodeDetailPopup
           session={detailSession}
+          sessions={sessions}
+          dags={dags}
           onClose={() => setDetailSession(null)}
           onOpenChat={onOpenChat}
+          onNavigate={(sid) => {
+            const next = sessions.find((s) => s.id === sid)
+            if (next) setDetailSession(next)
+          }}
         />
       )}
     </div>
