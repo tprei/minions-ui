@@ -1,5 +1,12 @@
 import type { ApiDagGraph, ApiSession } from '../api/types'
 
+const SHIP_MODE_PREFIX = 'ship-'
+const SHIP_MODE_EXACT = 'ship'
+
+export function isShipMode(mode: string): boolean {
+  return mode === SHIP_MODE_EXACT || mode.startsWith(SHIP_MODE_PREFIX)
+}
+
 export type SessionGroup =
   | { kind: 'dag'; dag: ApiDagGraph; parent: ApiSession | null; children: ApiSession[] }
   | { kind: 'parent-child'; parent: ApiSession; children: ApiSession[] }
@@ -25,7 +32,6 @@ export function buildSessionGroups(sessions: ApiSession[], dags: ApiDagGraph[]):
   const consumed = new Set<string>()
   const groups: SessionGroup[] = []
 
-  // 1. DAGs first. rootTaskId is the parent's threadId as a string.
   for (const dag of dags) {
     const parent = byThreadId.get(dag.rootTaskId) ?? null
     const childIds = Object.values(dag.nodes)
@@ -39,7 +45,6 @@ export function buildSessionGroups(sessions: ApiSession[], dags: ApiDagGraph[]):
     groups.push({ kind: 'dag', dag, parent, children: sortByUpdatedAt(children) })
   }
 
-  // 2. Non-DAG parent/child trees.
   for (const s of sessions) {
     if (consumed.has(s.id)) continue
     if (s.childIds.length === 0 || s.parentId) continue
@@ -55,7 +60,6 @@ export function buildSessionGroups(sessions: ApiSession[], dags: ApiDagGraph[]):
     groups.push({ kind: 'parent-child', parent: s, children: sortByUpdatedAt(children) })
   }
 
-  // 3. Variant groups.
   const variantBuckets = new Map<string, ApiSession[]>()
   for (const s of sessions) {
     if (consumed.has(s.id)) continue
@@ -70,7 +74,6 @@ export function buildSessionGroups(sessions: ApiSession[], dags: ApiDagGraph[]):
     groups.push({ kind: 'variant', groupId, sessions: sortByUpdatedAt(members) })
   }
 
-  // 4. Standalone.
   const standalone: ApiSession[] = []
   for (const s of sessions) {
     if (consumed.has(s.id)) continue
@@ -100,12 +103,14 @@ export function collectChildren(
   session: ApiSession,
   sessionById: Map<string, ApiSession>,
   collected: Set<string>,
+  excluded?: Set<string>,
 ): void {
   for (const childId of session.childIds) {
     if (collected.has(childId)) continue
+    if (excluded?.has(childId)) continue
     collected.add(childId)
     const child = sessionById.get(childId)
-    if (child) collectChildren(child, sessionById, collected)
+    if (child) collectChildren(child, sessionById, collected, excluded)
   }
 }
 
@@ -130,8 +135,45 @@ export function findTreeRoot(
   return root
 }
 
+export function findShipRoot(
+  session: ApiSession,
+  sessionById: Map<string, ApiSession>,
+  excluded: Set<string> = new Set(),
+): ApiSession {
+  let root = session
+  while (root.parentId && sessionById.has(root.parentId) && !excluded.has(root.parentId)) {
+    const parent = sessionById.get(root.parentId)!
+    if (!isShipMode(parent.mode)) break
+    root = parent
+  }
+  return root
+}
+
+export function collectShipDescendants(
+  session: ApiSession,
+  sessionById: Map<string, ApiSession>,
+  excluded: Set<string> = new Set(),
+): Set<string> {
+  const result = new Set<string>()
+  function walk(s: ApiSession): void {
+    for (const childId of s.childIds) {
+      if (result.has(childId)) continue
+      if (excluded.has(childId)) continue
+      const child = sessionById.get(childId)
+      if (!child) continue
+      if (!isShipMode(child.mode)) continue
+      result.add(childId)
+      walk(child)
+    }
+  }
+  walk(session)
+  return result
+}
+
 export interface SessionClassification {
   dagOwned: Set<string>
+  shipRoots: ApiSession[]
+  shipMembers: Set<string>
   parentChildRoots: ApiSession[]
   parentChildMembers: Set<string>
   standalone: ApiSession[]
@@ -151,39 +193,67 @@ export function classifySessions(
 
   const sessionById = buildSessionIndex(sessions)
 
+  const shipMembers = new Set<string>()
+  const shipRoots: ApiSession[] = []
+
+  for (const s of sessions) {
+    if (dagOwned.has(s.id)) continue
+    if (shipMembers.has(s.id)) continue
+    if (!isShipMode(s.mode)) continue
+
+    const root = findShipRoot(s, sessionById, dagOwned)
+    if (dagOwned.has(root.id)) continue
+    if (shipMembers.has(root.id)) continue
+
+    shipRoots.push(root)
+    shipMembers.add(root.id)
+    for (const id of collectShipDescendants(root, sessionById, dagOwned)) {
+      shipMembers.add(id)
+    }
+  }
+
+  const excluded = new Set<string>([...dagOwned, ...shipMembers])
+
   const parentChildMembers = new Set<string>()
   const parentChildRoots: ApiSession[] = []
 
   for (const s of sessions) {
-    if (dagOwned.has(s.id)) continue
+    if (excluded.has(s.id)) continue
     if (parentChildMembers.has(s.id)) continue
 
     if (s.childIds.length > 0 && !s.parentId) {
       parentChildRoots.push(s)
       parentChildMembers.add(s.id)
-      collectChildren(s, sessionById, parentChildMembers)
+      collectChildren(s, sessionById, parentChildMembers, excluded)
     }
   }
 
   const standalone: ApiSession[] = []
   for (const s of sessions) {
-    if (dagOwned.has(s.id) || parentChildMembers.has(s.id)) continue
+    if (excluded.has(s.id) || parentChildMembers.has(s.id)) continue
 
     if (s.parentId && sessionById.has(s.parentId)) {
       const parent = sessionById.get(s.parentId)!
-      if (parent.childIds.includes(s.id) && !dagOwned.has(parent.id)) {
-        const root = findTreeRoot(parent, sessionById, dagOwned)
-        if (!parentChildMembers.has(root.id)) {
+      if (parent.childIds.includes(s.id) && !excluded.has(parent.id)) {
+        const root = findTreeRoot(parent, sessionById, excluded)
+        if (!parentChildMembers.has(root.id) && !excluded.has(root.id)) {
           parentChildRoots.push(root)
           parentChildMembers.add(root.id)
-          collectChildren(root, sessionById, parentChildMembers)
+          collectChildren(root, sessionById, parentChildMembers, excluded)
         }
-        parentChildMembers.add(s.id)
-        continue
+        if (parentChildMembers.has(s.id)) continue
       }
     }
     standalone.push(s)
   }
 
-  return { dagOwned, parentChildRoots, parentChildMembers, standalone, sessionById }
+  return {
+    dagOwned,
+    shipRoots,
+    shipMembers,
+    parentChildRoots,
+    parentChildMembers,
+    standalone,
+    sessionById,
+  }
 }

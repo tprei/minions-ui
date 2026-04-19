@@ -6,7 +6,10 @@ import {
   classifySessions,
   collectChildren,
   collectDescendants,
+  collectShipDescendants,
+  findShipRoot,
   findTreeRoot,
+  isShipMode,
 } from '../../src/state/hierarchy'
 
 function mkSession(over: Partial<ApiSession> = {}): ApiSession {
@@ -364,6 +367,284 @@ describe('hierarchy', () => {
       const sessions = [makeSession({ id: 'a', slug: 'alpha' })]
       const result = classifySessions(sessions, [])
       expect(result.sessionById.get('a')?.slug).toBe('alpha')
+    })
+
+    it('returns empty ship buckets when no ship sessions exist', () => {
+      const sessions = [
+        makeSession({ id: 's1', slug: 'task1' }),
+        makeSession({ id: 's2', slug: 'task2' }),
+      ]
+      const result = classifySessions(sessions, [])
+      expect(result.shipRoots).toEqual([])
+      expect(result.shipMembers.size).toBe(0)
+    })
+
+    it('classifies a lone ship-think session as a ship root', () => {
+      const sessions = [makeSession({ id: 's1', slug: 'feature', mode: 'ship-think' })]
+      const result = classifySessions(sessions, [])
+      expect(result.shipRoots.map((s) => s.id)).toEqual(['s1'])
+      expect(result.shipMembers.has('s1')).toBe(true)
+      expect(result.standalone).toEqual([])
+      expect(result.parentChildRoots).toEqual([])
+    })
+
+    it('groups a ship-think → ship-plan → ship-verify pipeline into one root', () => {
+      const sessions = [
+        makeSession({
+          id: 'topic',
+          slug: 'feature',
+          mode: 'ship-plan',
+          childIds: ['verify'],
+        }),
+        makeSession({
+          id: 'verify',
+          slug: 'verify-pr',
+          mode: 'ship-verify',
+          parentId: 'topic',
+        }),
+      ]
+      const result = classifySessions(sessions, [])
+      expect(result.shipRoots.map((s) => s.id)).toEqual(['topic'])
+      expect(result.shipMembers.has('topic')).toBe(true)
+      expect(result.shipMembers.has('verify')).toBe(true)
+      expect(result.parentChildRoots).toEqual([])
+      expect(result.standalone).toEqual([])
+    })
+
+    it('walks up to find the topmost ship-mode ancestor when starting from a ship child', () => {
+      const sessions = [
+        makeSession({
+          id: 'verify',
+          slug: 'verify',
+          mode: 'ship-verify',
+          parentId: 'topic',
+        }),
+        makeSession({
+          id: 'topic',
+          slug: 'topic',
+          mode: 'ship-plan',
+          childIds: ['verify'],
+        }),
+      ]
+      const result = classifySessions(sessions, [])
+      expect(result.shipRoots.map((s) => s.id)).toEqual(['topic'])
+      expect(result.shipMembers.size).toBe(2)
+    })
+
+    it('does not promote a non-ship parent into the ship bucket', () => {
+      const sessions = [
+        makeSession({
+          id: 'task-parent',
+          slug: 'parent',
+          mode: 'task',
+          childIds: ['ship-child'],
+        }),
+        makeSession({
+          id: 'ship-child',
+          slug: 'ship-child',
+          mode: 'ship-think',
+          parentId: 'task-parent',
+        }),
+      ]
+      const result = classifySessions(sessions, [])
+      expect(result.shipRoots.map((s) => s.id)).toEqual(['ship-child'])
+      expect(result.shipMembers.has('task-parent')).toBe(false)
+      expect(result.parentChildRoots.map((s) => s.id)).toEqual(['task-parent'])
+      expect(result.parentChildMembers.has('ship-child')).toBe(false)
+    })
+
+    it('does not pull non-ship descendants into the ship bucket', () => {
+      const sessions = [
+        makeSession({
+          id: 'topic',
+          slug: 'topic',
+          mode: 'ship-plan',
+          childIds: ['ship-child', 'task-child'],
+        }),
+        makeSession({
+          id: 'ship-child',
+          slug: 'ship-child',
+          mode: 'ship-verify',
+          parentId: 'topic',
+        }),
+        makeSession({
+          id: 'task-child',
+          slug: 'task-child',
+          mode: 'task',
+          parentId: 'topic',
+        }),
+      ]
+      const result = classifySessions(sessions, [])
+      expect(result.shipMembers.has('topic')).toBe(true)
+      expect(result.shipMembers.has('ship-child')).toBe(true)
+      expect(result.shipMembers.has('task-child')).toBe(false)
+      expect(result.standalone.map((s) => s.id)).toEqual(['task-child'])
+    })
+
+    it('excludes DAG-owned ship sessions from the ship bucket', () => {
+      const dagSession = makeSession({
+        id: 'dag-ship',
+        slug: 'dag-ship',
+        mode: 'ship-verify',
+      })
+      const standalone = makeSession({
+        id: 'topic',
+        slug: 'topic',
+        mode: 'ship-plan',
+      })
+      const dag = makeDag({
+        id: 'dag-1',
+        nodes: {
+          n1: {
+            id: 'n1',
+            slug: 'node',
+            status: 'running',
+            dependencies: [],
+            dependents: [],
+            session: dagSession,
+          },
+        },
+      })
+      const result = classifySessions([dagSession, standalone], [dag])
+      expect(result.shipRoots.map((s) => s.id)).toEqual(['topic'])
+      expect(result.shipMembers.has('dag-ship')).toBe(false)
+      expect(result.shipMembers.has('topic')).toBe(true)
+      expect(result.dagOwned.has('dag-ship')).toBe(true)
+    })
+
+    it('treats multiple sibling ship sessions as separate roots', () => {
+      const sessions = [
+        makeSession({ id: 'ship1', slug: 'one', mode: 'ship-think' }),
+        makeSession({ id: 'ship2', slug: 'two', mode: 'ship-plan' }),
+      ]
+      const result = classifySessions(sessions, [])
+      expect(result.shipRoots.map((s) => s.id).sort()).toEqual(['ship1', 'ship2'])
+      expect(result.shipMembers.size).toBe(2)
+    })
+
+    it('recognizes the bare "ship" mode as a ship session', () => {
+      const sessions = [makeSession({ id: 's1', slug: 'feat', mode: 'ship' })]
+      const result = classifySessions(sessions, [])
+      expect(result.shipRoots.map((s) => s.id)).toEqual(['s1'])
+    })
+  })
+
+  describe('isShipMode', () => {
+    it('returns true for known ship modes', () => {
+      expect(isShipMode('ship')).toBe(true)
+      expect(isShipMode('ship-think')).toBe(true)
+      expect(isShipMode('ship-plan')).toBe(true)
+      expect(isShipMode('ship-verify')).toBe(true)
+    })
+
+    it('returns true for any future ship-prefixed mode', () => {
+      expect(isShipMode('ship-future')).toBe(true)
+    })
+
+    it('returns false for non-ship modes', () => {
+      expect(isShipMode('task')).toBe(false)
+      expect(isShipMode('plan')).toBe(false)
+      expect(isShipMode('think')).toBe(false)
+      expect(isShipMode('ci-fix')).toBe(false)
+      expect(isShipMode('shipper')).toBe(false)
+      expect(isShipMode('')).toBe(false)
+    })
+  })
+
+  describe('findShipRoot', () => {
+    it('walks up through ship-mode ancestors', () => {
+      const sessions = [
+        makeSession({ id: 'a', slug: 'a', mode: 'ship-think', childIds: ['b'] }),
+        makeSession({ id: 'b', slug: 'b', mode: 'ship-plan', parentId: 'a', childIds: ['c'] }),
+        makeSession({ id: 'c', slug: 'c', mode: 'ship-verify', parentId: 'b' }),
+      ]
+      const index = buildSessionIndex(sessions)
+      expect(findShipRoot(sessions[2], index).id).toBe('a')
+    })
+
+    it('stops at the first non-ship ancestor', () => {
+      const sessions = [
+        makeSession({ id: 'task', slug: 'task', mode: 'task', childIds: ['ship'] }),
+        makeSession({ id: 'ship', slug: 'ship', mode: 'ship-think', parentId: 'task' }),
+      ]
+      const index = buildSessionIndex(sessions)
+      expect(findShipRoot(sessions[1], index).id).toBe('ship')
+    })
+
+    it('respects the excluded set', () => {
+      const sessions = [
+        makeSession({ id: 'top', slug: 'top', mode: 'ship-plan', childIds: ['mid'] }),
+        makeSession({
+          id: 'mid',
+          slug: 'mid',
+          mode: 'ship-verify',
+          parentId: 'top',
+          childIds: ['bot'],
+        }),
+        makeSession({ id: 'bot', slug: 'bot', mode: 'ship-verify', parentId: 'mid' }),
+      ]
+      const index = buildSessionIndex(sessions)
+      expect(findShipRoot(sessions[2], index, new Set(['top'])).id).toBe('mid')
+    })
+  })
+
+  describe('collectShipDescendants', () => {
+    it('collects only ship-mode descendants', () => {
+      const sessions = [
+        makeSession({
+          id: 'root',
+          slug: 'root',
+          mode: 'ship-plan',
+          childIds: ['ship-child', 'task-child'],
+        }),
+        makeSession({
+          id: 'ship-child',
+          slug: 'ship-child',
+          mode: 'ship-verify',
+          parentId: 'root',
+        }),
+        makeSession({ id: 'task-child', slug: 'task-child', mode: 'task', parentId: 'root' }),
+      ]
+      const index = buildSessionIndex(sessions)
+      const result = collectShipDescendants(sessions[0], index)
+      expect([...result].sort()).toEqual(['ship-child'])
+    })
+
+    it('honors the excluded set', () => {
+      const sessions = [
+        makeSession({
+          id: 'root',
+          slug: 'root',
+          mode: 'ship-plan',
+          childIds: ['skip', 'keep'],
+        }),
+        makeSession({ id: 'skip', slug: 'skip', mode: 'ship-verify', parentId: 'root' }),
+        makeSession({ id: 'keep', slug: 'keep', mode: 'ship-verify', parentId: 'root' }),
+      ]
+      const index = buildSessionIndex(sessions)
+      const result = collectShipDescendants(sessions[0], index, new Set(['skip']))
+      expect([...result].sort()).toEqual(['keep'])
+    })
+
+    it('returns empty set for a leaf', () => {
+      const leaf = makeSession({ id: 'leaf', slug: 'leaf', mode: 'ship-think' })
+      const index = buildSessionIndex([leaf])
+      expect(collectShipDescendants(leaf, index).size).toBe(0)
+    })
+  })
+
+  describe('collectChildren with excluded set', () => {
+    it('skips children present in the excluded set', () => {
+      const sessions = [
+        makeSession({ id: 'root', slug: 'root', childIds: ['a', 'b'] }),
+        makeSession({ id: 'a', slug: 'a', parentId: 'root', childIds: ['c'] }),
+        makeSession({ id: 'b', slug: 'b', parentId: 'root' }),
+        makeSession({ id: 'c', slug: 'c', parentId: 'a' }),
+      ]
+      const index = buildSessionIndex(sessions)
+      const collected = new Set<string>()
+      collectChildren(sessions[0], index, collected, new Set(['a']))
+      expect([...collected].sort()).toEqual(['b'])
     })
   })
 })

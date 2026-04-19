@@ -404,6 +404,83 @@ describe('universe-layout', () => {
     expect(NODE_HEIGHT).toBe(100)
   })
 
+  it('renders ship-mode sessions as a dedicated ship group with LR-rank edges', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const sessions = [
+      makeSession({
+        id: 'topic',
+        slug: 'feature',
+        mode: 'ship-plan',
+        childIds: ['verify'],
+      }),
+      makeSession({
+        id: 'verify',
+        slug: 'verify-pr',
+        mode: 'ship-verify',
+        parentId: 'topic',
+      }),
+    ]
+
+    const result = layoutUniverse(sessions, [], false)
+
+    const shipNodes = result.nodes.filter((n) => n.data.nodeType === 'ship')
+    expect(shipNodes).toHaveLength(2)
+    expect(shipNodes.map((n) => n.data.label).sort()).toEqual(['feature', 'verify-pr'])
+    expect(shipNodes.every((n) => n.data.groupId === 'ship-topic')).toBe(true)
+
+    const shipEdges = result.edges.filter((e) => e.data?.relationship === 'ship')
+    expect(shipEdges).toHaveLength(1)
+    expect(shipEdges[0].source).toBe('topic')
+    expect(shipEdges[0].target).toBe('verify')
+    expect(shipEdges[0].animated).toBe(true)
+  })
+
+  it('keeps a lone ship-think session in the ship bucket, not standalone', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const sessions = [makeSession({ id: 's1', slug: 'feat', mode: 'ship-think' })]
+
+    const result = layoutUniverse(sessions, [], false)
+
+    expect(result.nodes).toHaveLength(1)
+    expect(result.nodes[0].data.nodeType).toBe('ship')
+    expect(result.nodes[0].data.groupId).toBe('ship-s1')
+  })
+
+  it('uses purple ship-edge stroke that flips with dark mode', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const sessions = [
+      makeSession({ id: 'p', slug: 'p', mode: 'ship-plan', childIds: ['c'] }),
+      makeSession({ id: 'c', slug: 'c', mode: 'ship-verify', parentId: 'p' }),
+    ]
+
+    const lightResult = layoutUniverse(sessions, [], false)
+    const darkResult = layoutUniverse(sessions, [], true)
+
+    expect(lightResult.edges[0].style?.stroke).toBe('#7c3aed')
+    expect(darkResult.edges[0].style?.stroke).toBe('#a78bfa')
+  })
+
+  it('does not pull non-ship descendants into the ship group', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const sessions = [
+      makeSession({
+        id: 'topic',
+        slug: 'topic',
+        mode: 'ship-plan',
+        childIds: ['ship-c', 'task-c'],
+      }),
+      makeSession({ id: 'ship-c', slug: 'ship-c', mode: 'ship-verify', parentId: 'topic' }),
+      makeSession({ id: 'task-c', slug: 'task-c', mode: 'task', parentId: 'topic' }),
+    ]
+
+    const result = layoutUniverse(sessions, [], false)
+
+    const shipNodes = result.nodes.filter((n) => n.data.nodeType === 'ship')
+    const standaloneNodes = result.nodes.filter((n) => n.data.nodeType === 'standalone')
+    expect(shipNodes.map((n) => n.data.label).sort()).toEqual(['ship-c', 'topic'])
+    expect(standaloneNodes.map((n) => n.data.label)).toEqual(['task-c'])
+  })
+
   it('handles child session whose parent is a standalone (auto-discovers tree)', async () => {
     const { layoutUniverse } = await import('../../src/components/universe-layout')
     const sessions = [

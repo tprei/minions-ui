@@ -11,7 +11,7 @@ const GRID_COLUMNS = 3
 const GRID_NODE_GAP_X = NODE_WIDTH + 40
 const GRID_NODE_GAP_Y = NODE_HEIGHT + 40
 
-export type EdgeRelationship = 'dag-dependency' | 'parent-child' | 'ci-fix'
+export type EdgeRelationship = 'dag-dependency' | 'parent-child' | 'ci-fix' | 'ship'
 
 export type UniverseNode = Node<{
   session?: ApiSession
@@ -19,7 +19,7 @@ export type UniverseNode = Node<{
   label: string
   status: string
   groupId: string
-  nodeType: 'dag' | 'parent-child' | 'standalone'
+  nodeType: 'dag' | 'parent-child' | 'standalone' | 'ship'
 }>
 
 export type UniverseEdge = Edge<{
@@ -174,6 +174,74 @@ function layoutParentChildGroup(
   return { id: `pc-${root.id}`, nodes, edges, width, height }
 }
 
+function layoutShipGroup(
+  root: ApiSession,
+  sessionById: Map<string, ApiSession>,
+  shipMembers: Set<string>,
+  isDark: boolean,
+): LayoutGroup {
+  const g = new dagre.graphlib.Graph()
+  g.setDefaultEdgeLabel(() => ({}))
+  g.setGraph({ rankdir: 'LR', nodesep: 60, ranksep: 100 })
+
+  const visited = new Set<string>()
+  const groupSessions: ApiSession[] = []
+  const edges: Edge[] = []
+  const stroke = isDark ? '#a78bfa' : '#7c3aed'
+
+  function walk(session: ApiSession): void {
+    if (visited.has(session.id)) return
+    visited.add(session.id)
+    groupSessions.push(session)
+    g.setNode(session.id, { width: NODE_WIDTH, height: NODE_HEIGHT })
+
+    for (const childId of session.childIds) {
+      if (!shipMembers.has(childId)) continue
+      const child = sessionById.get(childId)
+      if (!child) continue
+
+      edges.push({
+        id: `ship-${session.id}-${childId}`,
+        source: session.id,
+        target: childId,
+        type: 'smoothstep',
+        animated: child.status === 'running',
+        style: { stroke, strokeDasharray: '6 3' },
+        markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
+        data: { relationship: 'ship' as EdgeRelationship },
+      })
+
+      g.setEdge(session.id, childId)
+      walk(child)
+    }
+  }
+
+  walk(root)
+  dagre.layout(g)
+
+  const nodes: Node[] = groupSessions.map((s) => {
+    const pos = g.node(s.id)
+    return {
+      id: s.id,
+      type: 'universeNode',
+      position: { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 },
+      data: {
+        session: s,
+        label: s.slug,
+        status: s.status,
+        groupId: `ship-${root.id}`,
+        nodeType: 'ship' as const,
+      },
+    }
+  })
+
+  const graphInfo = g.graph()
+  const width = (graphInfo?.width ?? NODE_WIDTH) as number
+  const height = (graphInfo?.height ?? NODE_HEIGHT) as number
+
+  return { id: `ship-${root.id}`, nodes, edges, width, height }
+}
+
 function layoutStandaloneGroup(sessions: ApiSession[]): LayoutGroup {
   if (sessions.length === 0) {
     return { id: 'standalone', nodes: [], edges: [], width: 0, height: 0 }
@@ -300,7 +368,10 @@ export function layoutUniverse(
     return { nodes: [], edges: [] }
   }
 
-  const { parentChildRoots, standalone, sessionById } = classifySessions(sessions, dags)
+  const { parentChildRoots, shipRoots, shipMembers, standalone, sessionById } = classifySessions(
+    sessions,
+    dags,
+  )
 
   const groups: LayoutGroup[] = []
 
@@ -308,6 +379,10 @@ export function layoutUniverse(
     if (Object.keys(dag.nodes).length > 0) {
       groups.push(layoutDagGroup(dag, isDark))
     }
+  }
+
+  for (const root of shipRoots) {
+    groups.push(layoutShipGroup(root, sessionById, shipMembers, isDark))
   }
 
   for (const root of parentChildRoots) {
