@@ -2,6 +2,7 @@ import { signal, useSignal } from '@preact/signals'
 import { useState, useEffect, useMemo } from 'preact/hooks'
 import { useRegisterSW } from 'virtual:pwa-register/preact'
 import { connections, activeId, getActiveStore } from './connections/store'
+import { route, navigate } from './routing/route'
 import { ConnectionSettings } from './connections/ConnectionSettings'
 import { ConnectionPicker } from './connections/ConnectionPicker'
 import { ConnectionsDrawer } from './connections/ConnectionsDrawer'
@@ -336,7 +337,9 @@ function ActiveView() {
   const id = activeId.value
   const store = id ? getActiveStore() : null
   const conn = connections.value.find((c) => c.id === id)
-  const [sessionId, setSessionId] = useState<string | null>(null)
+  const currentRoute = route.value
+  const sessionId = currentRoute.name === 'session' ? currentRoute.sessionId : null
+  const selectSession = (id: string) => navigate({ name: 'session', sessionId: id })
   const isOnline = useOnlineStatus()
   const isDesktop = useMediaQuery('(min-width: 768px)')
 
@@ -397,7 +400,7 @@ function ActiveView() {
             <SessionList
               sessions={sessions}
               activeSessionId={sessionId}
-              onSelect={setSessionId}
+              onSelect={selectSession}
               orientation="vertical"
             />
           </aside>
@@ -412,7 +415,7 @@ function ActiveView() {
           <SessionList
             sessions={sessions}
             activeSessionId={sessionId}
-            onSelect={setSessionId}
+            onSelect={selectSession}
             orientation="horizontal"
           />
           {selected ? (
