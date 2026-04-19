@@ -1,7 +1,31 @@
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { highlight, resolveLanguage } from './highlight'
 
 marked.setOptions({ gfm: true, breaks: true })
+
+marked.use({
+  renderer: {
+    code({ text, lang }) {
+      const rawLang = (lang ?? '').trim().split(/\s+/)[0]
+      if (rawLang === 'mermaid') {
+        const escaped = text
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+        return `<pre><code class="language-mermaid">${escaped}\n</code></pre>\n`
+      }
+      const resolved = resolveLanguage(rawLang)
+      const className = resolved
+        ? `hljs language-${resolved}`
+        : rawLang
+          ? `hljs language-${rawLang}`
+          : 'hljs'
+      const body = highlight(text, rawLang)
+      return `<pre><code class="${className}">${body}\n</code></pre>\n`
+    },
+  },
+})
 
 const ALLOWED_TAGS = [
   'p', 'br', 'strong', 'em', 'code', 'pre', 'blockquote',
