@@ -1,21 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { ConversationMessage } from '../api/types'
-import { renderMarkdown } from '../components/markdown'
+import { MarkdownView } from '../components/MarkdownView'
+import { isOrchestratorStatus } from './orchestrator-filter'
 
 interface ConversationViewProps {
   messages: ConversationMessage[]
 }
 
 function AssistantMessage({ text }: { text: string }) {
-  const html = useMemo(() => renderMarkdown(text), [text])
   return (
     <div class="group flex gap-3 justify-start" data-testid="message-assistant">
       <div class="shrink-0 mt-1 w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
         M
       </div>
-      <div
+      <MarkdownView
+        source={text}
         class="flex-1 min-w-0 prose prose-sm dark:prose-invert max-w-none prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-pre:rounded-lg prose-pre:px-3 prose-pre:py-2 prose-pre:text-xs prose-code:before:content-none prose-code:after:content-none prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded text-slate-800 dark:text-slate-200"
-        dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>
   )
@@ -35,8 +35,13 @@ const NEAR_BOTTOM_PX = 120
 
 export function ConversationView({ messages }: ConversationViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const prevLengthRef = useRef(messages.length)
   const [following, setFollowing] = useState(true)
+
+  const visible = useMemo(
+    () => messages.filter((m) => !(m.role === 'assistant' && isOrchestratorStatus(m.text))),
+    [messages],
+  )
+  const prevLengthRef = useRef(visible.length)
 
   useEffect(() => {
     const el = scrollRef.current
@@ -48,10 +53,10 @@ export function ConversationView({ messages }: ConversationViewProps) {
     const el = scrollRef.current
     if (!el) return
     const prevLen = prevLengthRef.current
-    prevLengthRef.current = messages.length
-    if (messages.length <= prevLen) return
+    prevLengthRef.current = visible.length
+    if (visible.length <= prevLen) return
     if (following) el.scrollTop = el.scrollHeight
-  }, [messages.length, following])
+  }, [visible.length, following])
 
   function handleScroll() {
     const el = scrollRef.current
@@ -75,12 +80,12 @@ export function ConversationView({ messages }: ConversationViewProps) {
         class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 bg-slate-50 dark:bg-slate-900"
         data-testid="conversation-view"
       >
-        {messages.length === 0 && (
+        {visible.length === 0 && (
           <div class="text-xs text-slate-500 dark:text-slate-400 italic text-center py-8">
             No messages yet.
           </div>
         )}
-        {messages.map((msg, idx) =>
+        {visible.map((msg, idx) =>
           msg.role === 'assistant' ? (
             <AssistantMessage key={idx} text={msg.text} />
           ) : (
@@ -88,7 +93,7 @@ export function ConversationView({ messages }: ConversationViewProps) {
           )
         )}
       </div>
-      {!following && messages.length > 0 && (
+      {!following && visible.length > 0 && (
         <button
           type="button"
           onClick={jumpToLatest}

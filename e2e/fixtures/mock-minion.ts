@@ -9,7 +9,7 @@ import type {
   CreateSessionRequest,
   CreateSessionVariantsRequest,
   PrPreview,
-  WorkspaceDiff,
+  WireWorkspaceDiff,
   ScreenshotList,
   ScreenshotEntry,
   VapidPublicKey,
@@ -25,7 +25,7 @@ export type {
   CreateSessionRequest,
   CreateSessionVariantsRequest,
   PrPreview,
-  WorkspaceDiff,
+  WireWorkspaceDiff,
   ScreenshotList,
   ScreenshotEntry,
   VapidPublicKey,
@@ -40,7 +40,7 @@ export interface MockMinion {
   setDags(dags: ApiDagGraph[]): void
   setVersion(v: Partial<VersionInfo>): void
   setPr(sessionId: string, pr: PrPreview | null): void
-  setDiff(sessionId: string, diff: WorkspaceDiff | null): void
+  setDiff(sessionId: string, diff: WireWorkspaceDiff | null): void
   setScreenshots(sessionId: string, screenshots: ScreenshotEntry[]): void
   setScreenshotBlob(file: string, body: Buffer, contentType?: string): void
   setVapidKey(key: string): void
@@ -112,7 +112,7 @@ export async function createMockMinion(opts?: {
   }
 
   const prBySession = new Map<string, PrPreview>()
-  const diffBySession = new Map<string, WorkspaceDiff>()
+  const diffBySession = new Map<string, WireWorkspaceDiff>()
   const screenshotsBySession = new Map<string, ScreenshotEntry[]>()
   const screenshotBlobs = new Map<string, { body: Buffer; contentType: string }>()
   let vapidKey = 'BMOCK_VAPID_PUBLIC_KEY_00000000000000000000000000000000000000000000000000000000000000000000000000000000'
@@ -357,7 +357,7 @@ export async function createMockMinion(opts?: {
       else prBySession.delete(sessionId)
     },
 
-    setDiff(sessionId: string, diff: WorkspaceDiff | null) {
+    setDiff(sessionId: string, diff: WireWorkspaceDiff | null) {
       if (diff) diffBySession.set(sessionId, diff)
       else diffBySession.delete(sessionId)
     },

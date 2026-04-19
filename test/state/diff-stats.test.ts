@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createApiClient } from '../../src/api/client'
 import { installMockEventSource, MockEventSource } from '../sse-mock'
-import type { ApiSession, ApiDagGraph, VersionInfo, WorkspaceDiff } from '../../src/api/types'
+import type { ApiSession, ApiDagGraph, VersionInfo } from '../../src/api/types'
+
+// Wire-shape patch snippets. The client derives {filesChanged, insertions,
+// deletions} from the raw patch, so the fixtures must encode the intent
+// (2 files / 5 insertions / 1 deletion for V1; 3 / 10 / 2 for V2).
+interface WireDiff { base: string; head: string; patch: string; truncated: boolean }
 
 const BASE_URL = 'https://example.com'
 const TOKEN = 'tok'
@@ -25,18 +30,54 @@ const SESSION: ApiSession = {
 const VERSION: VersionInfo = { apiVersion: '1', libraryVersion: '0.1.0', features: ['diff-viewer'] }
 const DAGS: ApiDagGraph[] = []
 
-const DIFF_V1: WorkspaceDiff = {
-  sessionId: 's1',
-  branch: 'feature/x',
-  baseBranch: 'main',
-  patch: '',
-  truncated: false,
-  stats: { filesChanged: 2, insertions: 5, deletions: 1 },
-}
-const DIFF_V2: WorkspaceDiff = {
-  ...DIFF_V1,
-  stats: { filesChanged: 3, insertions: 10, deletions: 2 },
-}
+const PATCH_V1 = [
+  'diff --git a/x b/x',
+  '--- a/x',
+  '+++ b/x',
+  '@@ -1,1 +1,4 @@',
+  '-old',
+  '+a',
+  '+b',
+  '+c',
+  '+d',
+  'diff --git a/y b/y',
+  '--- a/y',
+  '+++ b/y',
+  '@@ -0,0 +1,1 @@',
+  '+e',
+  '',
+].join('\n')
+
+const PATCH_V2 = [
+  'diff --git a/x b/x',
+  '--- a/x',
+  '+++ b/x',
+  '@@ -1,2 +1,6 @@',
+  '-old1',
+  '-old2',
+  '+a',
+  '+b',
+  '+c',
+  '+d',
+  '+e',
+  '+f',
+  'diff --git a/y b/y',
+  '--- a/y',
+  '+++ b/y',
+  '@@ -0,0 +1,3 @@',
+  '+g',
+  '+h',
+  '+i',
+  'diff --git a/z b/z',
+  '--- a/z',
+  '+++ b/z',
+  '@@ -0,0 +1,1 @@',
+  '+j',
+  '',
+].join('\n')
+
+const DIFF_V1: WireDiff = { base: 'main', head: 'feature/x', patch: PATCH_V1, truncated: false }
+const DIFF_V2: WireDiff = { base: 'main', head: 'feature/x', patch: PATCH_V2, truncated: false }
 
 vi.mock('../../src/state/persist', () => ({
   loadSnapshot: vi.fn().mockResolvedValue(null),
@@ -44,7 +85,7 @@ vi.mock('../../src/state/persist', () => ({
   clearSnapshot: vi.fn().mockResolvedValue(undefined),
 }))
 
-function stubFetch(diffStack: WorkspaceDiff[]) {
+function stubFetch(diffStack: WireDiff[]) {
   return vi.fn().mockImplementation((url: string) => {
     if (url.includes('/api/version')) {
       return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ data: VERSION }) })

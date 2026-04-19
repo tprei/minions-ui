@@ -5,6 +5,18 @@ import { hasFeature } from '../api/features'
 import { formatRoute } from '../routing/route'
 import { recordVariantGroup } from '../groups/store'
 
+const COLLAPSE_KEY = 'minions-ui:newtaskbar-collapsed'
+
+function readCollapsed(): boolean {
+  if (typeof localStorage === 'undefined') return false
+  return localStorage.getItem(COLLAPSE_KEY) === 'true'
+}
+
+function writeCollapsed(v: boolean): void {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem(COLLAPSE_KEY, String(v))
+}
+
 export interface ModeOption {
   value: CreateSessionMode
   label: string
@@ -48,6 +60,16 @@ export function NewTaskBar({ store, navigate = defaultNavigate }: NewTaskBarProp
   const canCreate = hasFeature(store, 'sessions-create')
   const canVariants = hasFeature(store, 'sessions-variants')
   const wantVariants = useComputed(() => variantCount.value > 1)
+
+  // Collapsed state is user-controlled via the − button, persisted in
+  // localStorage. Defaults to expanded; tests rely on the expanded render.
+  const collapsed = useSignal(readCollapsed())
+
+  function toggleCollapsed() {
+    const next = !collapsed.value
+    collapsed.value = next
+    writeCollapsed(next)
+  }
 
   if (!canCreate) {
     return (
@@ -112,6 +134,27 @@ export function NewTaskBar({ store, navigate = defaultNavigate }: NewTaskBarProp
       ? `Launch ×${variantCount.value}`
       : 'Launch'
 
+  if (collapsed.value) {
+    return (
+      <div
+        class="flex items-center gap-2 px-3 py-1.5 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+        data-testid="new-task-bar"
+        data-collapsed="true"
+      >
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          class="flex-1 flex items-center gap-2 rounded-md border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40"
+          data-testid="new-task-expand"
+        >
+          <span aria-hidden="true">+</span>
+          <span>New task</span>
+          <span class="ml-auto text-[10px] text-indigo-400 dark:text-indigo-500">expand</span>
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div
       class="flex flex-col gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
@@ -159,12 +202,17 @@ export function NewTaskBar({ store, navigate = defaultNavigate }: NewTaskBarProp
         )}
 
         <div
-          class="flex items-center gap-1 ml-auto"
+          class="flex items-center gap-1.5 ml-auto"
           role="group"
           aria-label="Variant count"
           data-testid="variant-count"
         >
-          <span class="text-xs text-slate-500 dark:text-slate-400">×</span>
+          <span
+            class={`text-xs ${canVariants ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}
+            title={canVariants ? 'How many parallel variants to spawn' : 'Parallel variants need library ≥ 1.111'}
+          >
+            Variants
+          </span>
           {VARIANT_COUNTS.map((n) => {
             const active = variantCount.value === n
             const gated = n > 1 && !canVariants
@@ -182,7 +230,7 @@ export function NewTaskBar({ store, navigate = defaultNavigate }: NewTaskBarProp
                 aria-pressed={active}
                 class={`h-7 min-w-7 rounded-full border px-2 text-xs font-medium transition-colors disabled:opacity-40 ${btnClass}`}
               >
-                {n}
+                ×{n}
               </button>
             )
           })}
@@ -213,6 +261,16 @@ export function NewTaskBar({ store, navigate = defaultNavigate }: NewTaskBarProp
           data-testid="new-task-send"
         >
           {launchLabel}
+        </button>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-2 py-2 text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+          title="Collapse the task bar"
+          aria-label="Collapse task bar"
+          data-testid="new-task-collapse"
+        >
+          −
         </button>
       </div>
 

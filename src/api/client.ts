@@ -13,10 +13,12 @@ import type {
   ScreenshotList,
   VapidPublicKey,
   VersionInfo,
+  WireWorkspaceDiff,
   WorkspaceDiff,
 } from './types'
 import { openEventStream } from './sse'
 import type { SseHandlers, EventStreamHandle } from './sse'
+import { computeDiffStats } from './diff-stats'
 
 export class ApiError extends Error {
   constructor(
@@ -133,8 +135,15 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
       return get<PrPreview>(`/api/sessions/${encodeURIComponent(sessionId)}/pr`)
     },
 
-    getDiff(sessionId: string) {
-      return get<WorkspaceDiff>(`/api/sessions/${encodeURIComponent(sessionId)}/diff`)
+    async getDiff(sessionId: string): Promise<WorkspaceDiff> {
+      const raw = await get<WireWorkspaceDiff>(`/api/sessions/${encodeURIComponent(sessionId)}/diff`)
+      return {
+        branch: raw.head,
+        baseBranch: raw.base,
+        patch: raw.patch,
+        truncated: raw.truncated,
+        stats: computeDiffStats(raw.patch),
+      }
     },
 
     listScreenshots(sessionId: string) {
