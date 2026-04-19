@@ -16,6 +16,14 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'scripts/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'scripts/**',
+      'playwright.config.js',
+      'playwright.config.d.ts',
+      'vite.config.js',
+      'vite.config.d.ts',
+    ],
   },
 )

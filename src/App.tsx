@@ -740,7 +740,7 @@ function ActiveView() {
   const showOfflineBanner = !isOnline.value && store.stale.value
 
   return (
-    <div class="flex flex-col h-screen bg-slate-50 dark:bg-slate-900">
+    <div class="flex flex-col h-[100dvh] bg-slate-50 dark:bg-slate-900">
       {showOfflineBanner && (
         <div class="flex items-center justify-center px-4 py-1.5 bg-amber-500 text-amber-950 text-xs font-medium shrink-0" data-testid="offline-banner">
           Offline — showing last snapshot
