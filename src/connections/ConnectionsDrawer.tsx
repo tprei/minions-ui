@@ -151,7 +151,7 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
 
   if (isDesktop.value) {
     return (
-      <div class="fixed inset-0 z-50 flex">
+      <div class="fixed inset-x-0 top-0 z-50 flex h-[100dvh]">
         <div
           class="absolute inset-0 bg-black/50"
           data-testid="drawer-backdrop"
@@ -165,15 +165,14 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
   }
 
   return (
-    <div class="fixed inset-0 z-50">
+    <div class="fixed inset-x-0 top-0 z-50 h-[100dvh]">
       <div
         class="absolute inset-0 bg-black/50"
         data-testid="drawer-backdrop"
         onClick={handleClose}
       />
       <div
-        class={`absolute bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl flex flex-col border-t ${borderColor} ${panelBg}`}
-        style={{ maxHeight: '85vh' }}
+        class={`absolute bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl flex flex-col border-t max-h-[85dvh] ${borderColor} ${panelBg}`}
       >
         <div class="flex justify-center pt-2 pb-1 shrink-0">
           <div class={`w-10 h-1 rounded-full ${isDark ? 'bg-gray-600' : 'bg-gray-300'}`} />
