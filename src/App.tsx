@@ -24,6 +24,8 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { WorktreeHeader } from './components/WorktreeHeader'
 import { DagStatusPanel } from './chat/DagStatusPanel'
 import { ThemeToggle } from './chat/ThemeToggle'
+import { ResizeHandle } from './chat/ResizeHandle'
+import { useResizable } from './hooks/useResizable'
 import { buildSessionGroups, type SessionGroup } from './state/hierarchy'
 import type { ApiDagGraph } from './api/types'
 import { currentRoute } from './routing/current'
@@ -88,29 +90,39 @@ function useFlashOnChange(session: ApiSession): 'success' | 'fail' | 'update' | 
   return flash
 }
 
+type SessionItemKind = 'parent' | 'child' | 'variant' | undefined
+
 function SessionItem({
   session,
   active,
   onSelect,
   indent = 0,
+  kind,
 }: {
   session: ApiSession
   active: boolean
   onSelect: () => void
   indent?: number
+  kind?: SessionItemKind
 }) {
   const preview = session.conversation.length > 0
     ? session.conversation[session.conversation.length - 1].text.slice(0, 60)
     : session.command.slice(0, 60)
   const baseClasses = 'w-full text-left px-3 py-2 rounded-md border transition-colors flex flex-col gap-1'
   const active_ = active
-    ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700'
+    ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 ring-2 ring-indigo-400/60 dark:ring-indigo-500/50'
     : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'
   const marginLeft = indent > 0 ? `${indent * 16}px` : undefined
   const borderLeft = indent > 0 ? { borderLeft: '2px solid rgb(148 163 184 / 0.35)' } : undefined
   const flash = useFlashOnChange(session)
+  const combinedFlash = flash ?? (active ? 'focus' : undefined)
   return (
-    <div style={{ marginLeft, ...borderLeft }} data-flash={flash ?? undefined} data-testid={`session-row-${session.id}`}>
+    <div
+      style={{ marginLeft, ...borderLeft }}
+      data-flash={combinedFlash ?? undefined}
+      data-session-id={session.id}
+      data-testid={`session-row-${session.id}`}
+    >
       <button
         class={`${baseClasses} ${active_}`}
         onClick={onSelect}
@@ -118,6 +130,7 @@ function SessionItem({
       >
         <div class="flex items-center gap-2">
           <span class={`inline-block h-2 w-2 rounded-full shrink-0 ${statusDot(session.status)}`} />
+          {kind && <KindBadge kind={kind} />}
           <span class="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
           {session.repo && (
             <span class="text-[10px] font-mono rounded bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 text-slate-600 dark:text-slate-300 truncate">
@@ -129,6 +142,24 @@ function SessionItem({
         <div class="text-xs text-slate-600 dark:text-slate-400 truncate">{preview || '—'}</div>
       </button>
     </div>
+  )
+}
+
+function KindBadge({ kind }: { kind: NonNullable<SessionItemKind> }) {
+  const cfg = {
+    parent: { label: 'P', tone: 'bg-indigo-600 text-white dark:bg-indigo-500', title: 'DAG / split parent' },
+    child: { label: 'C', tone: 'bg-sky-500 text-white dark:bg-sky-400 dark:text-slate-900', title: 'Child of a DAG / split parent' },
+    variant: { label: 'V', tone: 'bg-fuchsia-500 text-white dark:bg-fuchsia-400 dark:text-slate-900', title: 'Variant session' },
+  }[kind]
+  return (
+    <span
+      class={`shrink-0 inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold ${cfg.tone}`}
+      title={cfg.title}
+      aria-label={cfg.title}
+      data-testid={`kind-badge-${kind}`}
+    >
+      {cfg.label}
+    </span>
   )
 }
 
@@ -248,6 +279,7 @@ function GroupView({
               session={group.parent}
               active={activeSessionId === group.parent.id}
               onSelect={() => onSelect(group.parent!.id)}
+              kind="parent"
             />
           )}
           {group.children.map((s) => (
@@ -257,6 +289,7 @@ function GroupView({
               active={activeSessionId === s.id}
               onSelect={() => onSelect(s.id)}
               indent={1}
+              kind="child"
             />
           ))}
         </div>
@@ -272,6 +305,7 @@ function GroupView({
             session={group.parent}
             active={activeSessionId === group.parent.id}
             onSelect={() => onSelect(group.parent.id)}
+            kind="parent"
           />
           {group.children.map((s) => (
             <SessionItem
@@ -280,6 +314,7 @@ function GroupView({
               active={activeSessionId === s.id}
               onSelect={() => onSelect(s.id)}
               indent={1}
+              kind="child"
             />
           ))}
         </div>
@@ -298,6 +333,7 @@ function GroupView({
               active={activeSessionId === s.id}
               onSelect={() => onSelect(s.id)}
               indent={1}
+              kind="variant"
             />
           ))}
         </div>
@@ -320,11 +356,13 @@ function ChatPane({
   store,
   onSend,
   onCommand,
+  onNavigate,
 }: {
   session: ApiSession
   store: ConnectionStore
   onSend: (text: string, sessionId: string) => Promise<void>
   onCommand: (cmd: MinionCommand) => Promise<void>
+  onNavigate?: (sessionId: string) => void
 }) {
   const [text, setText] = useState('')
   const [pending, setPending] = useState<'stop' | 'close' | null>(null)
@@ -424,7 +462,7 @@ function ChatPane({
         </div>
       </header>
       <WorktreeHeader session={session} store={store} />
-      <DagStatusPanel session={session} store={store} />
+      <DagStatusPanel session={session} store={store} onSelect={onNavigate} />
       <SessionTabs
         tabs={[
           { id: 'chat', label: 'Chat', available: true },
@@ -476,6 +514,151 @@ function EmptyPane() {
       <div class="text-center text-sm text-slate-500 dark:text-slate-400">
         Select a session on the left, or start a new one with the task bar above.
       </div>
+    </div>
+  )
+}
+
+function DesktopBody({
+  sessions,
+  dags,
+  sessionId,
+  setSessionId,
+  selected,
+  store,
+  onSend,
+  onCommand,
+}: {
+  sessions: ApiSession[]
+  dags: ApiDagGraph[]
+  sessionId: string | null
+  setSessionId: (id: string) => void
+  selected: ApiSession | null
+  store: ConnectionStore
+  onSend: (text: string, sid: string) => Promise<void>
+  onCommand: (cmd: MinionCommand) => Promise<void>
+}) {
+  const { width, onHandleDown, reset } = useResizable({
+    storageKey: 'minions-ui:sidebar-width',
+    defaultWidth: 288,
+    min: 200,
+    max: 520,
+  })
+  const asideRef = useRef<HTMLDivElement>(null)
+
+  // Scroll the active session row into view when it changes. Combined with the
+  // focus-pulse animation on the active item, this makes cross-navigation
+  // (e.g. clicking a child in DagStatusPanel) visually obvious.
+  useEffect(() => {
+    if (!sessionId) return
+    const aside = asideRef.current
+    if (!aside) return
+    const row = aside.querySelector<HTMLElement>(`[data-session-id="${sessionId}"]`)
+    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [sessionId])
+
+  return (
+    <div class="flex flex-1 min-h-0">
+      <aside
+        ref={asideRef}
+        class="border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-y-auto shrink-0"
+        style={{ width: `${width}px` }}
+        data-testid="desktop-sidebar"
+      >
+        <SessionList
+          sessions={sessions}
+          dags={dags}
+          activeSessionId={sessionId}
+          onSelect={setSessionId}
+          orientation="vertical"
+        />
+      </aside>
+      <ResizeHandle onMouseDown={onHandleDown} onDoubleClick={reset} />
+      {selected ? (
+        <ChatPane
+          key={selected.id}
+          session={selected}
+          store={store}
+          onSend={onSend}
+          onCommand={onCommand}
+          onNavigate={setSessionId}
+        />
+      ) : (
+        <EmptyPane />
+      )}
+    </div>
+  )
+}
+
+function MobileSessionStrip({
+  sessions,
+  dags,
+  activeSessionId,
+  onSelect,
+}: {
+  sessions: ApiSession[]
+  dags: ApiDagGraph[]
+  activeSessionId: string | null
+  onSelect: (id: string) => void
+}) {
+  const [collapsed, setCollapsed] = useState<boolean>(() =>
+    typeof localStorage !== 'undefined' && localStorage.getItem('minions-ui:mobile-strip-collapsed') === 'true',
+  )
+
+  function toggle() {
+    const next = !collapsed
+    setCollapsed(next)
+    try { localStorage.setItem('minions-ui:mobile-strip-collapsed', String(next)) } catch { /* ignore */ }
+  }
+
+  if (sessions.length === 0) {
+    return (
+      <div class="text-xs text-slate-500 dark:text-slate-400 p-3 italic">
+        No sessions yet.
+      </div>
+    )
+  }
+
+  if (collapsed) {
+    const activeSlug = sessions.find((s) => s.id === activeSessionId)?.slug
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        class="w-full flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-left"
+        data-testid="mobile-strip-expand"
+      >
+        <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">Sessions</span>
+        <span class="text-xs font-mono text-slate-600 dark:text-slate-300">{sessions.length}</span>
+        {activeSlug && (
+          <>
+            <span class="text-slate-400 dark:text-slate-500">·</span>
+            <span class="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{activeSlug}</span>
+          </>
+        )}
+        <span class="ml-auto text-[10px] text-slate-500 dark:text-slate-400">expand ▾</span>
+      </button>
+    )
+  }
+
+  return (
+    <div class="relative">
+      <SessionList
+        sessions={sessions}
+        dags={dags}
+        activeSessionId={activeSessionId}
+        onSelect={onSelect}
+        orientation="horizontal"
+      />
+      <button
+        type="button"
+        onClick={toggle}
+        class="absolute right-1.5 top-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-1.5 text-[10px] font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+        title="Collapse the session strip"
+        aria-label="Collapse session strip"
+        data-testid="mobile-strip-collapse"
+      >
+        ▴
+      </button>
     </div>
   )
 }
@@ -549,33 +732,32 @@ function ActiveView() {
       {isGroupRoute ? (
         <VariantGroupView store={store} groupId={route.groupId} />
       ) : isDesktop.value ? (
-        <div class="flex flex-1 min-h-0">
-          <aside class="w-72 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-y-auto shrink-0">
-            <SessionList
-              sessions={sessions}
-              dags={store.dags.value}
-              activeSessionId={sessionId}
-              onSelect={setSessionId}
-              orientation="vertical"
-            />
-          </aside>
-          {selected ? (
-            <ChatPane session={selected} store={store} onSend={handleSendMessage} onCommand={handleCommand} />
-          ) : (
-            <EmptyPane />
-          )}
-        </div>
+        <DesktopBody
+          sessions={sessions}
+          dags={store.dags.value}
+          sessionId={sessionId}
+          setSessionId={setSessionId}
+          selected={selected}
+          store={store}
+          onSend={handleSendMessage}
+          onCommand={handleCommand}
+        />
       ) : (
         <div class="flex flex-col flex-1 min-h-0">
-          <SessionList
+          <MobileSessionStrip
             sessions={sessions}
             dags={store.dags.value}
             activeSessionId={sessionId}
             onSelect={setSessionId}
-            orientation="horizontal"
           />
           {selected ? (
-            <ChatPane session={selected} store={store} onSend={handleSendMessage} onCommand={handleCommand} />
+            <ChatPane
+              key={selected.id}
+              session={selected}
+              store={store}
+              onSend={handleSendMessage}
+              onCommand={handleCommand}
+            />
           ) : (
             <EmptyPane />
           )}

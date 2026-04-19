@@ -6,11 +6,12 @@ import type { ConnectionStore } from '../state/types'
 interface DagStatusPanelProps {
   session: ApiSession
   store: ConnectionStore
+  onSelect?: (sessionId: string) => void
 }
 
-// Finds the DAG for an active session. Parent sessions own the DAG; the server
-// keys `ApiDagGraph.rootTaskId` by the parent session's threadId as a string,
-// and each child node embeds its own `ApiSession` via `node.session`.
+// Finds the DAG for an active session. Either the active session IS the DAG
+// parent (match via threadId → `ApiDagGraph.rootTaskId`) or one of the DAG's
+// child nodes wraps this session (match via `node.session.id`).
 function findDagForSession(dags: ApiDagGraph[], session: ApiSession): ApiDagGraph | null {
   if (session.threadId !== undefined) {
     const tidStr = String(session.threadId)
@@ -48,7 +49,7 @@ const DAG_NODE_LABELS: Record<ApiDagNode['status'], string> = {
   skipped: 'skipped',
 }
 
-export function DagStatusPanel({ session, store }: DagStatusPanelProps) {
+export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps) {
   const collapsed = useSignal(false)
 
   const dag = useComputed(() => findDagForSession(store.dags.value, session))
@@ -112,7 +113,12 @@ export function DagStatusPanel({ session, store }: DagStatusPanelProps) {
       {!collapsed.value && (
         <ul class="px-4 pb-3 pt-1 flex flex-col gap-1.5" data-testid="dag-status-node-list">
           {nodes.map((node) => (
-            <DagNodeRow key={node.id} node={node} />
+            <DagNodeRow
+              key={node.id}
+              node={node}
+              isActive={!!node.session && node.session.id === session.id}
+              onSelect={onSelect}
+            />
           ))}
         </ul>
       )}
@@ -120,7 +126,15 @@ export function DagStatusPanel({ session, store }: DagStatusPanelProps) {
   )
 }
 
-function DagNodeRow({ node }: { node: ApiDagNode }) {
+function DagNodeRow({
+  node,
+  isActive,
+  onSelect,
+}: {
+  node: ApiDagNode
+  isActive: boolean
+  onSelect?: (sessionId: string) => void
+}) {
   const dot = DAG_NODE_COLORS[node.status]
   const label = DAG_NODE_LABELS[node.status]
   const sess = node.session
@@ -135,11 +149,32 @@ function DagNodeRow({ node }: { node: ApiDagNode }) {
           ? 'bg-blue-50/40 dark:bg-blue-950/20'
           : 'bg-slate-50 dark:bg-slate-900/40'
 
+  const clickable = !!sess && !!onSelect
+  const handleClick = () => {
+    if (!clickable) return
+    onSelect!(sess!.id)
+  }
+
+  const activeRing = isActive ? 'ring-2 ring-indigo-400/60 dark:ring-indigo-500/50' : 'border border-slate-200 dark:border-slate-700'
+  const clickableClass = clickable
+    ? 'cursor-pointer hover:bg-white dark:hover:bg-slate-800/80 active:scale-[.99]'
+    : ''
+
   return (
     <li
-      class={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-xs transition-colors ${tone}`}
+      class={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all ${tone} ${activeRing} ${clickableClass}`}
       data-testid={`dag-status-node-${node.id}`}
       data-status={node.status}
+      data-active={isActive ? 'true' : undefined}
+      onClick={handleClick}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          handleClick()
+        }
+      } : undefined}
     >
       <span class={`inline-block h-2 w-2 rounded-full shrink-0 ${dot}`} aria-hidden="true" />
       <span class="font-mono font-medium text-slate-900 dark:text-slate-100 truncate">

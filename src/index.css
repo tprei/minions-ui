@@ -45,3 +45,13 @@ body {
 [data-flash="update"] {
   animation: minions-flash-update 500ms ease-out;
 }
+
+@keyframes minions-focus-pulse {
+  0% { box-shadow: 0 0 0 0 rgb(99 102 241 / 0.55); }
+  70% { box-shadow: 0 0 0 8px rgb(99 102 241 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(99 102 241 / 0); }
+}
+[data-flash="focus"] {
+  animation: minions-focus-pulse 650ms ease-out;
+  border-radius: 0.375rem;
+}
