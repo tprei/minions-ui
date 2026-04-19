@@ -19,6 +19,7 @@ export default tseslint.config(
     ignores: [
       'dist/**',
       'node_modules/**',
+      '.home/**',
       'scripts/**',
       'playwright.config.js',
       'playwright.config.d.ts',

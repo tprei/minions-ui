@@ -11,6 +11,7 @@ import type {
   PushSubscribeAck,
   PushSubscriptionJSON,
   ScreenshotList,
+  TranscriptSnapshot,
   VapidPublicKey,
   VersionInfo,
   WireWorkspaceDiff,
@@ -40,6 +41,7 @@ export interface ApiClient {
   createSessionVariants(req: CreateSessionVariantsRequest): Promise<CreateSessionVariantsResult>
   getPr(sessionId: string): Promise<PrPreview>
   getDiff(sessionId: string): Promise<WorkspaceDiff>
+  getTranscript(slug: string, afterSeq?: number): Promise<TranscriptSnapshot>
   listScreenshots(sessionId: string): Promise<ScreenshotList>
   fetchScreenshotBlob(file: string): Promise<Blob>
   getVapidKey(): Promise<VapidPublicKey>
@@ -148,6 +150,11 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
 
     listScreenshots(sessionId: string) {
       return get<ScreenshotList>(`/api/sessions/${encodeURIComponent(sessionId)}/screenshots`)
+    },
+
+    getTranscript(slug: string, afterSeq?: number) {
+      const query = afterSeq !== undefined ? `?after=${encodeURIComponent(String(afterSeq))}` : ''
+      return get<TranscriptSnapshot>(`/api/sessions/${encodeURIComponent(slug)}/transcript${query}`)
     },
 
     async fetchScreenshotBlob(file: string): Promise<Blob> {

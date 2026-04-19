@@ -2,6 +2,7 @@ import type { ReadonlySignal } from '@preact/signals'
 import type { ApiDagGraph, ApiSession, CommandResult, MinionCommand, VersionInfo } from '../api/types'
 import type { SseStatus } from '../api/sse'
 import type { ApiClient } from '../api/client'
+import type { TranscriptStore } from './transcript'
 
 export type { ReadonlySignal }
 
@@ -25,5 +26,6 @@ export interface ConnectionStore {
   loadDiffStats(sessionId: string): Promise<void>
   refresh(): Promise<void>
   sendCommand(cmd: MinionCommand): Promise<CommandResult>
+  getTranscript(sessionId: string): TranscriptStore | null
   dispose(): void
 }

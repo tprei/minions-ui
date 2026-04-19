@@ -82,6 +82,7 @@ function makeStore(opts: {
     loadDiffStats: vi.fn(async () => {}),
     refresh: vi.fn(async () => {}),
     sendCommand: vi.fn(async () => ({ success: true })),
+    getTranscript: vi.fn(() => null),
     dispose: vi.fn(),
   }
   return { store, client }

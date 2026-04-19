@@ -26,6 +26,7 @@ export interface ApiSession {
   mode: string
   conversation: ConversationMessage[]
   variantGroupId?: string
+  transcriptUrl?: string
 }
 
 export interface ApiDagNode {
@@ -56,6 +57,7 @@ export type SseEvent =
   | { type: 'dag_created'; dag: ApiDagGraph }
   | { type: 'dag_updated'; dag: ApiDagGraph }
   | { type: 'dag_deleted'; dagId: string }
+  | { type: 'transcript_event'; sessionId: string; event: TranscriptEvent }
 
 export type MinionCommand =
   | { action: 'reply'; sessionId: string; message: string }
@@ -183,4 +185,157 @@ export interface PushSubscriptionJSON {
 export interface PushSubscribeAck {
   ok: true
   id: string
+}
+
+// Transcript types — mirror of telegram-minions src/transcript/types.ts.
+// The library emits these via `GET /api/sessions/:slug/transcript` and the
+// SSE `transcript_event` variant. Keep in sync with the engine.
+
+export type ToolKind =
+  | 'read'
+  | 'write'
+  | 'edit'
+  | 'bash'
+  | 'search'
+  | 'glob'
+  | 'web_fetch'
+  | 'web_search'
+  | 'browser'
+  | 'task'
+  | 'todo'
+  | 'notebook'
+  | 'mcp'
+  | 'other'
+
+export type ToolResultStatus = 'ok' | 'error' | 'pending'
+
+export type ToolResultFormat = 'text' | 'markdown' | 'diff' | 'json' | 'image'
+
+export type StatusSeverity = 'info' | 'warn' | 'error'
+
+export type TurnTrigger =
+  | 'user_message'
+  | 'agent_continuation'
+  | 'command'
+  | 'reply_injected'
+  | 'resume'
+
+export interface ToolCallSummary {
+  toolUseId: string
+  name: string
+  kind: ToolKind
+  title: string
+  subtitle?: string
+  input: Record<string, unknown>
+  parentToolUseId?: string
+}
+
+export interface ToolResultPayload {
+  status: ToolResultStatus
+  text?: string
+  truncated?: boolean
+  originalBytes?: number
+  format?: ToolResultFormat
+  meta?: Record<string, unknown>
+  error?: string
+  images?: string[]
+}
+
+export interface TranscriptEventBase {
+  seq: number
+  id: string
+  sessionId: string
+  turn: number
+  timestamp: number
+}
+
+export interface UserMessageEvent extends TranscriptEventBase {
+  type: 'user_message'
+  text: string
+  images?: string[]
+}
+
+export interface TurnStartedEvent extends TranscriptEventBase {
+  type: 'turn_started'
+  trigger: TurnTrigger
+}
+
+export interface TurnCompletedEvent extends TranscriptEventBase {
+  type: 'turn_completed'
+  totalTokens?: number
+  totalCostUsd?: number
+  durationMs?: number
+  errored?: boolean
+}
+
+export interface AssistantTextEvent extends TranscriptEventBase {
+  type: 'assistant_text'
+  blockId: string
+  text: string
+  final: boolean
+}
+
+export interface ThinkingEvent extends TranscriptEventBase {
+  type: 'thinking'
+  blockId: string
+  text: string
+  final: boolean
+  signature?: string
+}
+
+export interface ToolCallEvent extends TranscriptEventBase {
+  type: 'tool_call'
+  call: ToolCallSummary
+}
+
+export interface ToolResultEvent extends TranscriptEventBase {
+  type: 'tool_result'
+  toolUseId: string
+  result: ToolResultPayload
+}
+
+export interface StatusEvent extends TranscriptEventBase {
+  type: 'status'
+  severity: StatusSeverity
+  kind: string
+  message: string
+  data?: Record<string, unknown>
+}
+
+export type TranscriptEvent =
+  | UserMessageEvent
+  | TurnStartedEvent
+  | TurnCompletedEvent
+  | AssistantTextEvent
+  | ThinkingEvent
+  | ToolCallEvent
+  | ToolResultEvent
+  | StatusEvent
+
+export type TranscriptEventType = TranscriptEvent['type']
+
+export interface TranscriptSessionInfo {
+  sessionId: string
+  topicName?: string
+  repo?: string
+  mode?: string
+  startedAt: number
+  totalTokens?: number
+  totalCostUsd?: number
+  numTurns?: number
+  active?: boolean
+  transcriptUrl?: string
+}
+
+export interface TranscriptSnapshot {
+  session: TranscriptSessionInfo
+  events: TranscriptEvent[]
+  highWaterMark: number
+}
+
+export function isTranscriptEventOfType<T extends TranscriptEventType>(
+  event: TranscriptEvent,
+  type: T,
+): event is Extract<TranscriptEvent, { type: T }> {
+  return event.type === type
 }
