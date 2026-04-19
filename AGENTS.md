@@ -72,6 +72,7 @@ Always `/prepare` before entering plan mode unless the user provided a repomix b
 - Read the files you intend to change. Build context with `rg`, `git ls-files`, and file reads before writing.
 - Run existing tests before and after your change.
 - `npm run typecheck && npm run lint && npm run test` is the baseline gate.
+- **Skip Playwright locally.** Do not run `npm run test:e2e` / `npx playwright test` as part of routine validation — the CI `e2e` matrix (`.github/workflows/ci.yml`) runs it on every push and PR. Push the branch and let CI cover it. Only run Playwright locally when the user explicitly asks, or when debugging a specific E2E failure they've flagged.
 - Type-check or lint failures are blockers — never bypass with `eslint-disable` / `@ts-ignore`.
 
 ## Finish implementations
