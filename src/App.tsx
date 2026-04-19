@@ -1,5 +1,5 @@
 import { signal, useSignal } from '@preact/signals'
-import { useState, useEffect, useMemo } from 'preact/hooks'
+import { useState, useEffect } from 'preact/hooks'
 import { useRegisterSW } from 'virtual:pwa-register/preact'
 import { connections, activeId, getActiveStore } from './connections/store'
 import { ConnectionSettings } from './connections/ConnectionSettings'
@@ -9,6 +9,7 @@ import { ConversationView } from './chat/ConversationView'
 import { MessageInput } from './chat/MessageInput'
 import { QuickActionsBar } from './chat/QuickActionsBar'
 import { SlashCommandMenu, type SlashCommand } from './chat/SlashCommandMenu'
+import { SessionList } from './components/SessionList'
 import { confirm } from './hooks/useConfirm'
 import { ConfirmRoot } from './hooks/useConfirm'
 import { InstallPrompt } from './pwa/InstallPrompt'
@@ -122,87 +123,6 @@ function NewTaskBar({
         </button>
       </div>
       {error.value && <div class="text-xs text-red-600 dark:text-red-400">{error.value}</div>}
-    </div>
-  )
-}
-
-function SessionItem({ session, active, onSelect }: { session: ApiSession; active: boolean; onSelect: () => void }) {
-  const preview = session.conversation.length > 0
-    ? session.conversation[session.conversation.length - 1].text.slice(0, 60)
-    : session.command.slice(0, 60)
-  const baseClasses = 'w-full text-left px-3 py-2 rounded-md border transition-colors flex flex-col gap-1'
-  const active_ = active
-    ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700'
-    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'
-  return (
-    <button class={`${baseClasses} ${active_}`} onClick={onSelect} data-testid={`session-item-${session.id}`}>
-      <div class="flex items-center gap-2">
-        <span class={`inline-block h-2 w-2 rounded-full shrink-0 ${statusDot(session.status)}`} />
-        <span class="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
-        {session.repo && (
-          <span class="text-[10px] font-mono rounded bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 text-slate-600 dark:text-slate-300 truncate">
-            {shortRepo(session.repo)}
-          </span>
-        )}
-        <span class="ml-auto text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{session.status}</span>
-      </div>
-      <div class="text-xs text-slate-600 dark:text-slate-400 truncate">{preview || '—'}</div>
-    </button>
-  )
-}
-
-function shortRepo(repoUrl: string): string {
-  const match = repoUrl.match(/[/:]([^/]+\/[^/]+?)(?:\.git)?$/)
-  return match ? match[1] : repoUrl
-}
-
-function SessionList({
-  sessions,
-  activeSessionId,
-  onSelect,
-  orientation,
-}: {
-  sessions: ApiSession[]
-  activeSessionId: string | null
-  onSelect: (id: string) => void
-  orientation: 'vertical' | 'horizontal'
-}) {
-  const sorted = useMemo(
-    () => [...sessions].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
-    [sessions]
-  )
-  if (sorted.length === 0) {
-    return (
-      <div class="text-xs text-slate-500 dark:text-slate-400 p-3 italic">
-        No sessions yet. Send a /task above.
-      </div>
-    )
-  }
-  if (orientation === 'horizontal') {
-    return (
-      <div class="flex gap-2 overflow-x-auto px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-        {sorted.map((s) => (
-          <div key={s.id} class="min-w-[180px]">
-            <SessionItem
-              session={s}
-              active={activeSessionId === s.id}
-              onSelect={() => onSelect(s.id)}
-            />
-          </div>
-        ))}
-      </div>
-    )
-  }
-  return (
-    <div class="flex flex-col gap-1 p-2 overflow-y-auto">
-      {sorted.map((s) => (
-        <SessionItem
-          key={s.id}
-          session={s}
-          active={activeSessionId === s.id}
-          onSelect={() => onSelect(s.id)}
-        />
-      ))}
     </div>
   )
 }
@@ -396,9 +316,9 @@ function ActiveView() {
           <aside class="w-72 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-y-auto shrink-0">
             <SessionList
               sessions={sessions}
+              dags={store.dags.value}
               activeSessionId={sessionId}
               onSelect={setSessionId}
-              orientation="vertical"
             />
           </aside>
           {selected ? (
@@ -409,12 +329,14 @@ function ActiveView() {
         </div>
       ) : (
         <div class="flex flex-col flex-1 min-h-0">
-          <SessionList
-            sessions={sessions}
-            activeSessionId={sessionId}
-            onSelect={setSessionId}
-            orientation="horizontal"
-          />
+          <div class="max-h-[45vh] overflow-y-auto border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 shrink-0">
+            <SessionList
+              sessions={sessions}
+              dags={store.dags.value}
+              activeSessionId={sessionId}
+              onSelect={setSessionId}
+            />
+          </div>
           {selected ? (
             <ChatPane session={selected} onSend={handleSendMessage} onCommand={handleCommand} />
           ) : (
