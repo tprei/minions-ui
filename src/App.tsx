@@ -14,6 +14,7 @@ import { SessionTabs, type SessionTabId } from './chat/SessionTabs'
 import { DiffTab } from './chat/DiffTab'
 import { ScreenshotsTab } from './chat/ScreenshotsTab'
 import { PrPreviewCard } from './components/PrPreviewCard'
+import { AttentionBar, filterSessionsByReason } from './components/AttentionBar'
 import { hasFeature } from './api/features'
 import type { ConnectionStore } from './state/types'
 import { confirm } from './hooks/useConfirm'
@@ -30,7 +31,7 @@ import { buildSessionGroups, type SessionGroup } from './state/hierarchy'
 import type { ApiDagGraph } from './api/types'
 import { currentRoute } from './routing/current'
 import { VariantGroupView } from './groups/VariantGroupView'
-import type { ApiSession, MinionCommand, QuickAction } from './api/types'
+import type { ApiSession, AttentionReason, MinionCommand, QuickAction } from './api/types'
 
 const showSettings = signal(false)
 const showDrawer = signal(false)
@@ -548,6 +549,7 @@ function EmptyPane() {
 
 function DesktopBody({
   sessions,
+  visibleSessions,
   dags,
   sessionId,
   setSessionId,
@@ -555,8 +557,11 @@ function DesktopBody({
   store,
   onSend,
   onCommand,
+  attentionFilter,
+  onAttentionSelect,
 }: {
   sessions: ApiSession[]
+  visibleSessions: ApiSession[]
   dags: ApiDagGraph[]
   sessionId: string | null
   setSessionId: (id: string) => void
@@ -564,6 +569,8 @@ function DesktopBody({
   store: ConnectionStore
   onSend: (text: string, sid: string) => Promise<void>
   onCommand: (cmd: MinionCommand) => Promise<void>
+  attentionFilter: AttentionReason | null
+  onAttentionSelect: (reason: AttentionReason | null, firstMatchId: string | null) => void
 }) {
   const { width, onHandleDown, reset } = useResizable({
     storageKey: 'minions-ui:sidebar-width',
@@ -594,8 +601,13 @@ function DesktopBody({
         style={{ width: `${width}px` }}
         data-testid="desktop-sidebar"
       >
-        <SessionList
+        <AttentionBar
           sessions={sessions}
+          filter={attentionFilter}
+          onSelect={onAttentionSelect}
+        />
+        <SessionList
+          sessions={visibleSessions}
           dags={dags}
           activeSessionId={sessionId}
           onSelect={setSessionId}
@@ -708,6 +720,7 @@ function ActiveView() {
   const store = id ? getActiveStore() : null
   const conn = connections.value.find((c) => c.id === id)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [attentionFilter, setAttentionFilter] = useState<AttentionReason | null>(null)
   const isOnline = useOnlineStatus()
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const route = currentRoute.value
@@ -723,11 +736,28 @@ function ActiveView() {
     if (match && match.id !== sessionId) setSessionId(match.id)
   }, [route, store, sessionId])
 
+  useEffect(() => {
+    setAttentionFilter(null)
+  }, [id])
+
+  const sessions = store?.sessions.value ?? []
+  const visibleSessions = useMemo(
+    () => filterSessionsByReason(sessions, attentionFilter),
+    [sessions, attentionFilter],
+  )
+
   if (!store || !conn) return null
 
-  const sessions = store.sessions.value
   const selected = sessionId ? sessions.find((s) => s.id === sessionId) ?? null : null
   const isGroupRoute = route.name === 'group'
+
+  const handleAttentionSelect = (
+    reason: AttentionReason | null,
+    firstMatchId: string | null,
+  ) => {
+    setAttentionFilter(reason)
+    if (firstMatchId !== null) setSessionId(firstMatchId)
+  }
 
   const handleSendMessage = async (text: string, sid: string) => {
     await store.client.sendMessage(text, sid)
@@ -774,6 +804,7 @@ function ActiveView() {
       ) : isDesktop.value ? (
         <DesktopBody
           sessions={sessions}
+          visibleSessions={visibleSessions}
           dags={store.dags.value}
           sessionId={sessionId}
           setSessionId={setSessionId}
@@ -781,11 +812,18 @@ function ActiveView() {
           store={store}
           onSend={handleSendMessage}
           onCommand={handleCommand}
+          attentionFilter={attentionFilter}
+          onAttentionSelect={handleAttentionSelect}
         />
       ) : (
         <div class="flex flex-col flex-1 min-h-0">
-          <MobileSessionStrip
+          <AttentionBar
             sessions={sessions}
+            filter={attentionFilter}
+            onSelect={handleAttentionSelect}
+          />
+          <MobileSessionStrip
+            sessions={visibleSessions}
             dags={store.dags.value}
             activeSessionId={sessionId}
             onSelect={setSessionId}

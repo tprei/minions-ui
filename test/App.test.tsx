@@ -160,6 +160,48 @@ describe('App', () => {
     }
   })
 
+  it('renders attention pills and filters the session list when a pill is clicked', async () => {
+    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
+      version: 1,
+      connections: [
+        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+      ],
+      activeId: 'c1',
+    }))
+    stubFetch([
+      session({
+        id: 's1',
+        slug: 'brave-fox',
+        status: 'failed',
+        needsAttention: true,
+        attentionReasons: ['failed'],
+      }),
+      session({
+        id: 's2',
+        slug: 'swift-cat',
+        needsAttention: true,
+        attentionReasons: ['waiting_for_feedback'],
+      }),
+      session({ id: 's3', slug: 'calm-owl' }),
+    ])
+    const App = (await import('../src/App')).default
+    render(<App />)
+
+    await screen.findByTestId('attention-bar')
+    expect(screen.getByTestId('attention-pill-failed').textContent).toContain('1')
+    expect(screen.getByTestId('attention-pill-waiting_for_feedback').textContent).toContain('1')
+
+    expect(await screen.findByTestId('session-item-s3')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('attention-pill-failed'))
+
+    expect(screen.getByTestId('session-item-s1')).toBeTruthy()
+    expect(screen.queryByTestId('session-item-s2')).toBeNull()
+    expect(screen.queryByTestId('session-item-s3')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('attention-clear'))
+    expect(screen.getByTestId('session-item-s3')).toBeTruthy()
+  })
+
   it('switching sessions swaps the conversation pane', async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
