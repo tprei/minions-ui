@@ -89,7 +89,7 @@ function ResultText({ text, format }: { text: string; format?: ToolResultEvent['
         class="px-3 py-2 max-h-96 overflow-auto whitespace-pre font-mono text-[11px] text-slate-700 dark:text-slate-300 leading-snug"
         data-testid="transcript-tool-result-diff"
       >
-        {colorizeDiff(text)}
+        {renderDiffLines(text)}
       </pre>
     )
   }
@@ -130,9 +130,31 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-function colorizeDiff(text: string): string {
-  // Plain text rendering; the <pre> styling is enough for clarity.
-  return text
+function renderDiffLines(text: string) {
+  const lines = text.split('\n')
+  return lines.map((line, idx) => {
+    const nl = idx < lines.length - 1 ? '\n' : ''
+    let cls = ''
+    if (line.startsWith('+++') || line.startsWith('---')) {
+      cls = 'text-slate-500 dark:text-slate-400 font-semibold'
+    } else if (line.startsWith('@@')) {
+      cls = 'text-sky-700 dark:text-sky-300'
+    } else if (line.startsWith('+')) {
+      cls = 'text-green-700 dark:text-green-400'
+    } else if (line.startsWith('-')) {
+      cls = 'text-red-700 dark:text-red-400'
+    } else if (line.startsWith('diff --git')) {
+      cls = 'text-slate-500 dark:text-slate-400 font-semibold'
+    }
+    if (!cls) {
+      return <span key={idx}>{line + nl}</span>
+    }
+    return (
+      <span key={idx} class={cls}>
+        {line + nl}
+      </span>
+    )
+  })
 }
 
 function prettyJson(text: string): string {

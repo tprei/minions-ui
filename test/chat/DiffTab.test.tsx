@@ -123,6 +123,36 @@ describe('DiffTab', () => {
     await waitFor(() => expect(screen.queryByTestId('diff-line-add')).toBeNull())
   })
 
+  it('syntax-highlights code tokens for known languages', async () => {
+    const tsDiff: WorkspaceDiff = {
+      branch: 'feature',
+      baseBranch: 'main',
+      patch: [
+        'diff --git a/foo.ts b/foo.ts',
+        '--- a/foo.ts',
+        '+++ b/foo.ts',
+        '@@ -1,1 +1,2 @@',
+        ' const x = 1',
+        '+const y = "hello"',
+      ].join('\n'),
+      truncated: false,
+      stats: { filesChanged: 1, insertions: 1, deletions: 0 },
+    }
+    const getDiff = vi.fn().mockResolvedValue(tsDiff)
+    const client = makeClient({ getDiff })
+    render(<DiffTab sessionId="s-1" sessionUpdatedAt="t1" client={client} />)
+    await waitFor(() => expect(screen.getByTestId('diff-tab')).toBeTruthy())
+    const addLine = screen.getByTestId('diff-line-add')
+    const kwSpan = Array.from(addLine.querySelectorAll('span')).find(
+      (s) => s.textContent === 'const' && s.className.includes('violet'),
+    )
+    expect(kwSpan).toBeTruthy()
+    const strSpan = Array.from(addLine.querySelectorAll('span')).find(
+      (s) => s.textContent === '"hello"' && s.className.includes('amber'),
+    )
+    expect(strSpan).toBeTruthy()
+  })
+
   it('shows empty state when no files changed', async () => {
     const getDiff = vi.fn().mockResolvedValue({
       ...SAMPLE_DIFF,

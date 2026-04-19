@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { ApiClient } from '../api/client'
 import type { WorkspaceDiff } from '../api/types'
 import { parseUnifiedDiff, type DiffFile, countChanges, fileDisplayPath } from './diff-parse'
+import { detectLanguage, highlightLine, tokenClass } from './syntax-highlight'
 
 interface DiffTabProps {
   sessionId: string
@@ -124,6 +125,7 @@ export function DiffTab({ sessionId, sessionUpdatedAt, client }: DiffTabProps) {
 function DiffFileView({ file }: { file: DiffFile }) {
   const [collapsed, setCollapsed] = useState(false)
   const path = fileDisplayPath(file)
+  const lang = detectLanguage(path)
   const { insertions, deletions } = countChanges(file)
   const tag = file.isNew
     ? 'NEW'
@@ -195,7 +197,7 @@ function DiffFileView({ file }: { file: DiffFile }) {
                     </span>
                     <span class={`${signColor} w-3 shrink-0 select-none`}>{sign}</span>
                     <span class="flex-1 min-w-0 whitespace-pre-wrap break-all text-slate-800 dark:text-slate-200">
-                      {line.text || ' '}
+                      <HighlightedCode text={line.text} lang={lang} />
                     </span>
                   </div>
                 )
@@ -205,5 +207,24 @@ function DiffFileView({ file }: { file: DiffFile }) {
         </div>
       )}
     </div>
+  )
+}
+
+function HighlightedCode({ text, lang }: { text: string; lang: string | null }) {
+  if (!text) return <>{' '}</>
+  if (!lang) return <>{text}</>
+  const tokens = highlightLine(text, lang)
+  return (
+    <>
+      {tokens.map((tok, idx) => {
+        const cls = tokenClass(tok.type)
+        if (!cls) return <span key={idx}>{tok.text}</span>
+        return (
+          <span key={idx} class={cls}>
+            {tok.text}
+          </span>
+        )
+      })}
+    </>
   )
 }
