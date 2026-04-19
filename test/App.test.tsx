@@ -1,7 +1,10 @@
-import { render, screen, fireEvent, within } from '@testing-library/preact'
+import { render, screen, fireEvent, within, cleanup } from '@testing-library/preact'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { installMockEventSource } from './sse-mock'
 import type { VersionInfo, ApiSession, ApiDagGraph } from '../src/api/types'
+import { connections, activeId, disposeAll } from '../src/connections/store'
+import App, { viewMode } from '../src/App'
+import { recordVariantGroup, resetVariantGroupsForTests } from '../src/groups/store'
 
 vi.mock('virtual:pwa-register/preact', () => ({
   useRegisterSW: vi.fn().mockReturnValue({}),
@@ -48,16 +51,29 @@ function session(over: Partial<ApiSession> = {}): ApiSession {
   }
 }
 
+function seedConnection() {
+  connections.value = [
+    { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+  ]
+  activeId.value = 'c1'
+}
+
 describe('App', () => {
   let mock: ReturnType<typeof installMockEventSource>
 
   beforeEach(() => {
     localStorage.clear()
     mock = installMockEventSource()
-    vi.resetModules()
+    viewMode.value = 'list'
   })
 
   afterEach(() => {
+    cleanup()
+    disposeAll()
+    connections.value = []
+    activeId.value = null
+    viewMode.value = 'list'
+    resetVariantGroupsForTests()
     mock.restore()
     vi.unstubAllGlobals()
     localStorage.clear()
@@ -65,37 +81,22 @@ describe('App', () => {
 
   it('renders empty state "Connect a minion" when no connections', async () => {
     stubFetch()
-    const App = (await import('../src/App')).default
     render(<App />)
     expect(screen.getByText('Connect a minion')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Add connection' })).toBeTruthy()
   })
 
   it('renders header and session list when connection exists', async () => {
-    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
-      version: 1,
-      connections: [
-        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
-      ],
-      activeId: 'c1',
-    }))
     stubFetch([session()])
-    const App = (await import('../src/App')).default
+    seedConnection()
     render(<App />)
     expect(screen.getByText('My Minion')).toBeTruthy()
     await screen.findByText('brave-fox')
   })
 
   it('clicking a session in the sidebar opens its conversation inline', async () => {
-    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
-      version: 1,
-      connections: [
-        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
-      ],
-      activeId: 'c1',
-    }))
     stubFetch([session({ conversation: [{ role: 'user', text: 'hello' }] })])
-    const App = (await import('../src/App')).default
+    seedConnection()
     render(<App />)
 
     const item = await screen.findByTestId('session-item-s1')
@@ -106,28 +107,6 @@ describe('App', () => {
   })
 
   it('renders the variant group view when the hash is #/g/:groupId', async () => {
-    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
-      version: 1,
-      connections: [
-        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
-      ],
-      activeId: 'c1',
-    }))
-    localStorage.setItem(
-      'minions-ui:variant-groups:v1',
-      JSON.stringify({
-        version: 1,
-        byConnection: {
-          c1: [{
-            groupId: 'g-route',
-            prompt: 'routed prompt',
-            mode: 'task',
-            variantSessionIds: ['s1', 's2'],
-            createdAt: '2026-04-19T00:00:00Z',
-          }],
-        },
-      })
-    )
     const versionWithVariants: VersionInfo = {
       apiVersion: '1',
       libraryVersion: '1.111.0',
@@ -148,26 +127,28 @@ describe('App', () => {
       }
       return Promise.resolve({ ok: false, status: 404, statusText: 'NF', json: () => Promise.resolve({ data: null }) })
     }))
+    seedConnection()
+    recordVariantGroup('c1', {
+      groupId: 'g-route',
+      prompt: 'routed prompt',
+      mode: 'task',
+      variantSessionIds: ['s1', 's2'],
+      createdAt: '2026-04-19T00:00:00Z',
+    })
     window.location.hash = '#/g/g-route'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
     try {
-      const App = (await import('../src/App')).default
       render(<App />)
       const view = await screen.findByTestId('variant-group-view')
       expect(view).toBeTruthy()
       expect(screen.getByTestId('variant-group-prompt').textContent).toBe('routed prompt')
     } finally {
       window.location.hash = ''
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
     }
   })
 
   it('renders attention pills and filters the session list when a pill is clicked', async () => {
-    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
-      version: 1,
-      connections: [
-        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
-      ],
-      activeId: 'c1',
-    }))
     stubFetch([
       session({
         id: 's1',
@@ -184,7 +165,7 @@ describe('App', () => {
       }),
       session({ id: 's3', slug: 'calm-owl' }),
     ])
-    const App = (await import('../src/App')).default
+    seedConnection()
     render(<App />)
 
     await screen.findByTestId('attention-bar')
@@ -203,18 +184,11 @@ describe('App', () => {
   })
 
   it('switching sessions swaps the conversation pane', async () => {
-    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
-      version: 1,
-      connections: [
-        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
-      ],
-      activeId: 'c1',
-    }))
     stubFetch([
       session({ id: 's1', slug: 'brave-fox', conversation: [{ role: 'user', text: 'first' }] }),
       session({ id: 's2', slug: 'swift-cat', conversation: [{ role: 'user', text: 'second' }] }),
     ])
-    const App = (await import('../src/App')).default
+    seedConnection()
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('session-item-s1'))

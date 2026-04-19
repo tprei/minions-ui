@@ -64,7 +64,7 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
 
   const inner = (
     <div
-      class={`flex flex-col h-full ${panelBg}`}
+      class={`flex flex-col flex-1 min-h-0 ${panelBg}`}
       data-testid="connections-drawer"
     >
       <header class={`flex items-center gap-2 px-4 py-3 border-b shrink-0 ${borderColor}`}>
