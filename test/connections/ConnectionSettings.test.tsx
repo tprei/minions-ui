@@ -25,6 +25,10 @@ vi.mock('../../src/api/client', () => ({
   },
 }))
 
+vi.mock('../../src/pwa/EnableNotifications', () => ({
+  EnableNotifications: () => <div data-testid="push-controls" />,
+}))
+
 function setInputValue(input: HTMLInputElement, value: string) {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
   fireEvent.input(input)
@@ -129,5 +133,31 @@ describe('ConnectionSettings', () => {
     setInputValue(hexInput, 'notahex')
     const firstSwatch = screen.getByTestId('swatch-#3b82f6')
     expect(firstSwatch.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('hides push panel when VITE_ENABLE_PUSH is off', async () => {
+    vi.stubEnv('VITE_ENABLE_PUSH', '')
+    await renderSettings({
+      existing: { id: 'e1', label: 'Old', baseUrl: 'https://old.example.com', token: 'tok', color: '#10b981' },
+    })
+    expect(screen.queryByTestId('push-section')).toBeNull()
+    vi.unstubAllEnvs()
+  })
+
+  it('shows push panel for existing connection when VITE_ENABLE_PUSH is on', async () => {
+    vi.stubEnv('VITE_ENABLE_PUSH', '1')
+    await renderSettings({
+      existing: { id: 'e1', label: 'Old', baseUrl: 'https://old.example.com', token: 'tok', color: '#10b981' },
+    })
+    expect(screen.getByTestId('push-section')).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId('push-controls')).toBeTruthy())
+    vi.unstubAllEnvs()
+  })
+
+  it('hides push panel for new (unsaved) connection even when flag is on', async () => {
+    vi.stubEnv('VITE_ENABLE_PUSH', '1')
+    await renderSettings()
+    expect(screen.queryByTestId('push-section')).toBeNull()
+    vi.unstubAllEnvs()
   })
 })
