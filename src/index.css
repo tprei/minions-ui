@@ -3,12 +3,18 @@
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
+html,
 body {
   margin: 0;
+  height: 100%;
+}
+
+body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
     'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: none;
 }
 
 * {
@@ -16,7 +22,8 @@ body {
 }
 
 #app {
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
 }
 
 /* Flash animations used by SessionItem + DagStatusPanel rows when a session
