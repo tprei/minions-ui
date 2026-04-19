@@ -111,6 +111,15 @@ function NewTaskBar({
   const sending = useSignal(false)
   const error = useSignal<string | null>(null)
   const selectedRepo = useSignal<string>(repos.length > 0 ? repos[0].alias : '')
+  const userPickedRepo = useSignal(false)
+
+  useEffect(() => {
+    if (userPickedRepo.value) return
+    if (repos.length === 0) return
+    if (!repos.some((r) => r.alias === selectedRepo.value)) {
+      selectedRepo.value = repos[0].alias
+    }
+  }, [repos, selectedRepo, userPickedRepo])
 
   const submit = async () => {
     const raw = text.value.trim()
@@ -128,24 +137,54 @@ function NewTaskBar({
     }
   }
 
+  const chipClass = (active: boolean) =>
+    `px-2.5 py-1 rounded-full text-xs font-medium border transition-colors whitespace-nowrap ${
+      active
+        ? 'border-indigo-500 bg-indigo-600 text-white'
+        : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+    } disabled:opacity-50 disabled:cursor-not-allowed`
+
   return (
     <div class="flex flex-col gap-1 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-      <div class="flex items-center gap-2">
-        {repos.length > 0 && (
-          <select
-            value={selectedRepo.value}
-            onChange={(e) => { selectedRepo.value = (e.currentTarget as HTMLSelectElement).value }}
+      {repos.length > 0 && (
+        <div
+          class="flex items-center gap-1.5 overflow-x-auto scrollbar-none"
+          role="radiogroup"
+          aria-label="Repo for new task"
+          data-testid="new-task-repo-chips"
+        >
+          {repos.map((r) => {
+            const active = selectedRepo.value === r.alias
+            return (
+              <button
+                type="button"
+                key={r.alias}
+                role="radio"
+                aria-checked={active}
+                disabled={sending.value}
+                onClick={() => { selectedRepo.value = r.alias; userPickedRepo.value = true }}
+                class={chipClass(active)}
+                data-testid={`new-task-repo-chip-${r.alias}`}
+              >
+                {r.alias}
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={selectedRepo.value === ''}
             disabled={sending.value}
-            title="Repo to run the task against (auto-inserted after the slash command)"
-            class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-2 text-sm text-slate-900 dark:text-slate-100 disabled:opacity-50"
-            data-testid="new-task-repo-select"
+            onClick={() => { selectedRepo.value = ''; userPickedRepo.value = true }}
+            class={chipClass(selectedRepo.value === '')}
+            data-testid="new-task-repo-chip-none"
+            title="Run the command without auto-inserting a repo"
           >
-            {repos.map((r) => (
-              <option key={r.alias} value={r.alias}>{r.alias}</option>
-            ))}
-            <option value="">(no repo)</option>
-          </select>
-        )}
+            (no repo)
+          </button>
+        </div>
+      )}
+      <div class="flex items-center gap-2">
         <input
           type="text"
           value={text.value}
@@ -382,6 +421,8 @@ function ActiveView() {
   const dags = store.dags.value
   const selected = sessionId ? sessions.find((s) => s.id === sessionId) ?? null : null
 
+  const attentionCount = sessions.reduce((n, s) => (s.needsAttention ? n + 1 : n), 0)
+
   const showOfflineBanner = !isOnline.value && store.stale.value
 
   const canvasProps = {
@@ -404,7 +445,10 @@ function ActiveView() {
         </div>
       )}
       <header class="flex items-center gap-3 px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
-        <ConnectionPicker onManage={() => { showDrawer.value = true }} />
+        <ConnectionPicker
+          onManage={() => { showDrawer.value = true }}
+          activeCounts={{ sessions: sessions.length, attention: attentionCount }}
+        />
         <ConnectionStatusBadge status={store.status.value} />
         <div class="ml-auto flex items-center gap-2">
           <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />

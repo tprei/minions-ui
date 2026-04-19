@@ -1,4 +1,4 @@
-import { useMemo } from 'preact/hooks'
+import { useEffect, useMemo } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
 import type { ApiSession, ApiDagGraph, ApiDagNode } from '../api/types'
 import { classifySessions } from '../state/hierarchy'
@@ -241,33 +241,131 @@ function GroupSectionHeader({
   )
 }
 
-function DagSubheader({ group }: { group: DagGroupData }) {
+function DagSummaryPill({
+  label,
+  count,
+  tone,
+  testid,
+}: {
+  label: string
+  count: number
+  tone: 'blue' | 'red' | 'emerald' | 'amber' | 'orange' | 'slate'
+  testid?: string
+}) {
+  const toneClass: Record<typeof tone, string> = {
+    blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+    red: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+    orange: 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300',
+    slate: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
+  }
+  return (
+    <span
+      data-testid={testid}
+      class={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${toneClass[tone]}`}
+    >
+      <span>{label}</span>
+      <span>{count}</span>
+    </span>
+  )
+}
+
+function DagSummaryCard({ group }: { group: DagGroupData }) {
   const { dag, landed, total, counts } = group
+  const pct = total > 0 ? Math.round((landed / total) * 100) : 0
   const running = counts.running + counts['ci-pending']
   const failed = counts.failed + counts['ci-failed']
+  const pending = counts.pending
+  const skipped = counts.skipped
+
   return (
     <div
-      class="px-2 py-1 text-[10px] font-mono text-slate-500 dark:text-slate-400 flex items-center gap-2 border-l-2 border-indigo-300 dark:border-indigo-700"
+      class="rounded-md border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/30 px-2 py-1.5 flex flex-col gap-1"
       data-testid={`dag-subheader-${dag.id}`}
     >
-      <span class="truncate font-semibold text-slate-700 dark:text-slate-300">
-        {dag.id.slice(0, 8)}
-      </span>
-      <span>·</span>
-      <span>
-        {landed}/{total} landed
-      </span>
-      {running > 0 && (
-        <span class="text-blue-600 dark:text-blue-400">· {running} running</span>
-      )}
-      {failed > 0 && (
-        <span class="text-red-600 dark:text-red-400">· {failed} failed</span>
-      )}
+      <div class="flex items-center gap-2 text-[11px]">
+        <span
+          class="font-mono font-semibold text-indigo-900 dark:text-indigo-200 truncate"
+          title={dag.id}
+        >
+          {dag.id.slice(0, 8)}
+        </span>
+        <span class="text-slate-500 dark:text-slate-400 tabular-nums">
+          {landed}/{total} landed
+        </span>
+        <span class="ml-auto font-medium text-indigo-700 dark:text-indigo-300 tabular-nums">
+          {pct}%
+        </span>
+      </div>
+      <div
+        class="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        data-testid={`dag-progress-${dag.id}`}
+      >
+        <div
+          class="h-full bg-emerald-500 dark:bg-emerald-400 transition-[width]"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div class="flex flex-wrap items-center gap-1">
+        {running > 0 && <DagSummaryPill label="▶" count={running} tone="blue" testid={`dag-pill-running-${dag.id}`} />}
+        {failed > 0 && <DagSummaryPill label="✕" count={failed} tone="red" testid={`dag-pill-failed-${dag.id}`} />}
+        {landed > 0 && <DagSummaryPill label="✓" count={landed} tone="emerald" testid={`dag-pill-landed-${dag.id}`} />}
+        {pending > 0 && <DagSummaryPill label="◌" count={pending} tone="slate" />}
+        {skipped > 0 && <DagSummaryPill label="⏭" count={skipped} tone="slate" />}
+      </div>
     </div>
   )
 }
 
 type ExpandedState = { dag: boolean; tree: boolean; standalone: boolean }
+
+export function getSiblingIds(
+  activeId: string,
+  dagGroups: DagGroupData[],
+  treeRoots: ApiSession[],
+  sessionById: Map<string, ApiSession>,
+  standalone: ApiSession[],
+): string[] {
+  for (const group of dagGroups) {
+    if (group.sessions.some((s) => s.id === activeId)) {
+      return group.sessions.map((s) => s.id)
+    }
+  }
+  for (const root of treeRoots) {
+    const rows = flattenTree(root, sessionById)
+    const active = rows.find((r) => r.session.id === activeId)
+    if (!active) continue
+    const parentId = active.session.parentId
+    if (!parentId) {
+      return treeRoots.map((r) => r.id)
+    }
+    return rows
+      .filter((r) => r.session.parentId === parentId)
+      .map((r) => r.session.id)
+  }
+  if (standalone.some((s) => s.id === activeId)) {
+    return standalone.map((s) => s.id)
+  }
+  return []
+}
+
+export function getSiblingTarget(
+  activeId: string | null,
+  siblings: string[],
+  direction: 1 | -1,
+): string | null {
+  if (!activeId || siblings.length === 0) return null
+  const idx = siblings.indexOf(activeId)
+  if (idx === -1) return null
+  const len = siblings.length
+  const next = (idx + direction + len) % len
+  return siblings[next]
+}
 
 export function SessionList({
   sessions,
@@ -321,6 +419,41 @@ export function SessionList({
     expanded.value = { ...expanded.value, [k]: !expanded.value[k] }
   }
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== '[' && e.key !== ']') return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target as HTMLElement | null
+      if (target) {
+        const tag = target.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+        if (target.isContentEditable) return
+      }
+      if (!activeSessionId) return
+      const siblings = getSiblingIds(
+        activeSessionId,
+        dagGroups,
+        sortedRoots,
+        classification.sessionById,
+        sortedStandalone,
+      )
+      const next = getSiblingTarget(activeSessionId, siblings, e.key === ']' ? 1 : -1)
+      if (next && next !== activeSessionId) {
+        e.preventDefault()
+        onSelect(next)
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [
+    activeSessionId,
+    dagGroups,
+    sortedRoots,
+    sortedStandalone,
+    classification.sessionById,
+    onSelect,
+  ])
+
   if (sessions.length === 0) {
     return (
       <div class="text-xs text-slate-500 dark:text-slate-400 p-3 italic">
@@ -346,7 +479,7 @@ export function SessionList({
           {expanded.value.dag &&
             dagGroups.map((group) => (
               <div key={group.dag.id} class="flex flex-col gap-1">
-                <DagSubheader group={group} />
+                <DagSummaryCard group={group} />
                 <div class="flex flex-col gap-1">
                   {group.sessions.map((s) => (
                     <SessionRow

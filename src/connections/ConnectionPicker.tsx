@@ -2,11 +2,41 @@ import { useSignal } from '@preact/signals'
 import { useEffect, useRef, useCallback } from 'preact/hooks'
 import { connections, activeId, setActive } from './store'
 
-interface ConnectionPickerProps {
-  onManage: () => void
+export interface ConnectionBadgeCounts {
+  sessions: number
+  attention: number
 }
 
-export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
+interface ConnectionPickerProps {
+  onManage: () => void
+  activeCounts?: ConnectionBadgeCounts
+}
+
+function CountBadges({ counts, compact = false }: { counts: ConnectionBadgeCounts; compact?: boolean }) {
+  const size = compact ? 'text-[10px] px-1.5 py-0' : 'text-[10px] px-1.5 py-0.5'
+  return (
+    <span class="flex items-center gap-1 shrink-0" data-testid="connection-badges">
+      <span
+        title={`${counts.sessions} sessions`}
+        data-testid="connection-badge-sessions"
+        class={`inline-flex items-center rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium tabular-nums ${size}`}
+      >
+        {counts.sessions}
+      </span>
+      {counts.attention > 0 && (
+        <span
+          title={`${counts.attention} needing attention`}
+          data-testid="connection-badge-attention"
+          class={`inline-flex items-center rounded-full bg-amber-500 text-white font-medium tabular-nums ${size}`}
+        >
+          !{counts.attention}
+        </span>
+      )}
+    </span>
+  )
+}
+
+export function ConnectionPicker({ onManage, activeCounts }: ConnectionPickerProps) {
   const open = useSignal(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
@@ -81,6 +111,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
               data-testid="picker-active-dot"
             />
             <span class="max-w-[140px] truncate">{activeConn.label}</span>
+            {activeCounts && <CountBadges counts={activeCounts} compact />}
           </>
         ) : (
           <span class="text-slate-500">No connection</span>
@@ -113,7 +144,10 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
                     class="h-2.5 w-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: conn.color }}
                   />
-                  <span class="truncate">{conn.label}</span>
+                  <span class="truncate flex-1">{conn.label}</span>
+                  {conn.id === activeId.value && activeCounts && (
+                    <CountBadges counts={activeCounts} />
+                  )}
                 </button>
               </li>
             ))}
