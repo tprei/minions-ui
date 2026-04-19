@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createApiClient, ApiError } from '../src/api/client'
 import { installMockEventSource } from './sse-mock'
-import type { ApiSession, VersionInfo, ApiDagGraph } from '../src/api/types'
+import type {
+  ApiSession,
+  VersionInfo,
+  ApiDagGraph,
+  TranscriptEvent,
+  TranscriptSnapshot,
+} from '../src/api/types'
 
 const BASE_URL = 'https://example.com'
 const TOKEN = 'test-token-123'
@@ -96,6 +102,82 @@ describe('ApiClient', () => {
 
     const url = mock.constructedUrls[0]
     expect(url).toContain(`token=${encodeURIComponent(TOKEN)}`)
+    handle.close()
+  })
+
+  it('getTranscript fetches transcript snapshot for a session slug', async () => {
+    const snapshot: TranscriptSnapshot = {
+      session: {
+        sessionId: 'sess-1',
+        topicName: 'fix bug',
+        startedAt: 1700000000,
+        active: true,
+      },
+      events: [
+        {
+          seq: 1,
+          id: 'e1',
+          sessionId: 'sess-1',
+          turn: 1,
+          timestamp: 1700000001,
+          type: 'user_message',
+          text: 'hello',
+        },
+      ],
+      highWaterMark: 1,
+    }
+    const fetchMock = mockFetch({ data: snapshot })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const result = await client.getTranscript('brave-lion')
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(`${BASE_URL}/api/sessions/brave-lion/transcript`)
+    expect(result).toEqual(snapshot)
+  })
+
+  it('getTranscript passes afterSeq query param', async () => {
+    const snapshot: TranscriptSnapshot = {
+      session: { sessionId: 's1', startedAt: 0 },
+      events: [],
+      highWaterMark: 5,
+    }
+    const fetchMock = mockFetch({ data: snapshot })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.getTranscript('brave-lion', 5)
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toContain('/transcript?after=5')
+  })
+
+  it('openEventStream delivers transcript_event via onEvent', () => {
+    vi.stubGlobal('fetch', mockFetch({ data: [] }))
+
+    const events: Array<{ type: string }> = []
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const handle = client.openEventStream({ onEvent: (e) => events.push(e) })
+
+    const instance = [...mock.instances.values()][0]
+    instance.simulateOpen()
+
+    const transcriptEvt: TranscriptEvent = {
+      seq: 1,
+      id: 'te1',
+      sessionId: 'sess-1',
+      turn: 1,
+      timestamp: 1700000001,
+      type: 'assistant_text',
+      blockId: 'b1',
+      text: 'hi',
+      final: true,
+    }
+    instance.push({ type: 'transcript_event', sessionId: 'sess-1', event: transcriptEvt })
+
+    expect(events).toHaveLength(1)
+    expect(events[0].type).toBe('transcript_event')
     handle.close()
   })
 

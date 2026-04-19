@@ -10,6 +10,7 @@ export type FeatureName =
   | 'screenshots-http'
   | 'web-push'
   | 'worktree-stats'
+  | 'transcript'
 
 export function hasFeature(
   source: ConnectionStore | VersionInfo | null | undefined,
