@@ -158,13 +158,13 @@ function DiffFileView({ file }: { file: DiffFile }) {
         </span>
       </button>
       {!collapsed && (
-        <div class="font-mono text-xs overflow-x-auto bg-white dark:bg-slate-900">
+        <div class="font-mono text-xs bg-white dark:bg-slate-900">
           {file.isBinary && (
             <div class="px-4 py-2 text-slate-500 dark:text-slate-400 italic">Binary file.</div>
           )}
           {file.hunks.map((hunk, hi) => (
             <div key={hi}>
-              <div class="px-4 py-1 bg-slate-50 dark:bg-slate-800/70 text-slate-500 dark:text-slate-400 border-y border-slate-200 dark:border-slate-700">
+              <div class="px-2 sm:px-4 py-1 bg-slate-50 dark:bg-slate-800/70 text-slate-500 dark:text-slate-400 border-y border-slate-200 dark:border-slate-700 whitespace-pre-wrap break-all">
                 {hunk.header}
               </div>
               {hunk.lines.map((line, li) => {
@@ -184,17 +184,19 @@ function DiffFileView({ file }: { file: DiffFile }) {
                 return (
                   <div
                     key={li}
-                    class={`flex gap-2 px-4 py-0.5 ${bg}`}
+                    class={`flex gap-2 px-2 sm:px-4 py-0.5 ${bg}`}
                     data-testid={`diff-line-${line.type}`}
                   >
-                    <span class="text-[10px] text-slate-400 dark:text-slate-500 w-8 text-right shrink-0 select-none">
+                    <span class="text-[10px] text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-right shrink-0 select-none">
                       {line.oldLineNo ?? ''}
                     </span>
-                    <span class="text-[10px] text-slate-400 dark:text-slate-500 w-8 text-right shrink-0 select-none">
+                    <span class="hidden sm:inline text-[10px] text-slate-400 dark:text-slate-500 w-8 text-right shrink-0 select-none">
                       {line.newLineNo ?? ''}
                     </span>
                     <span class={`${signColor} w-3 shrink-0 select-none`}>{sign}</span>
-                    <span class="whitespace-pre text-slate-800 dark:text-slate-200">{line.text || ' '}</span>
+                    <span class="flex-1 min-w-0 whitespace-pre-wrap break-all text-slate-800 dark:text-slate-200">
+                      {line.text || ' '}
+                    </span>
                   </div>
                 )
               })}
