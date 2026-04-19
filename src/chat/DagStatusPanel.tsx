@@ -115,7 +115,7 @@ export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps
           onClick={() => {
             if (parentClickable && onSelect && parent) onSelect(parent.id)
           }}
-          class={`flex-1 flex items-center gap-2 pr-4 py-2 text-left ${
+          class={`flex-1 min-w-0 flex items-center gap-2 py-2 text-left ${
             parentClickable
               ? 'hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer'
               : 'cursor-default'
@@ -162,6 +162,18 @@ export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps
             )}
           </span>
         </button>
+        {parent?.prUrl && (
+          <a
+            href={parent.prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center px-3 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
+            data-testid="dag-status-parent-pr"
+            title="Open parent PR on GitHub"
+          >
+            PR ↗
+          </a>
+        )}
       </div>
       {!collapsed.value && (
         <ul class="px-4 pb-3 pt-1 flex flex-col gap-1.5" data-testid="dag-status-node-list">
