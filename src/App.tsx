@@ -16,6 +16,7 @@ import { ScreenshotsTab } from './chat/ScreenshotsTab'
 import { PrPreviewCard } from './components/PrPreviewCard'
 import { AttentionBar, filterSessionsByReason } from './components/AttentionBar'
 import { UniverseCanvas } from './components/UniverseCanvas'
+import { ShipPipelineView } from './components/ShipPipeline'
 import { hasFeature } from './api/features'
 import type { ConnectionStore } from './state/types'
 import { confirm } from './hooks/useConfirm'
@@ -34,7 +35,7 @@ import { currentRoute } from './routing/current'
 import { VariantGroupView } from './groups/VariantGroupView'
 import type { ApiSession, AttentionReason, MinionCommand, QuickAction } from './api/types'
 
-export type ViewMode = 'list' | 'canvas'
+export type ViewMode = 'list' | 'canvas' | 'ship'
 
 const showSettings = signal(false)
 const showDrawer = signal(false)
@@ -72,6 +73,16 @@ function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode
         data-testid="view-toggle-canvas"
       >
         Canvas
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'ship'}
+        onClick={() => onChange('ship')}
+        class={`${tabClass(mode === 'ship')} border-l border-slate-300 dark:border-slate-600`}
+        data-testid="view-toggle-ship"
+      >
+        Ship
       </button>
     </div>
   )
@@ -916,6 +927,10 @@ function ActiveView() {
           <div class="flex flex-1 min-h-0" data-testid="canvas-pane">
             <UniverseCanvas {...canvasProps} />
           </div>
+        ) : mode === 'ship' ? (
+          <div class="flex flex-1 min-h-0" data-testid="ship-pane">
+            <ShipPipelineView dags={dags} onOpenChat={handleOpenChat} />
+          </div>
         ) : (
           <DesktopBody
             sessions={sessions}
@@ -977,6 +992,28 @@ function ActiveView() {
           </div>
           <div class="flex-1 min-h-0">
             <UniverseCanvas {...canvasProps} />
+          </div>
+        </div>
+      )}
+      {!isDesktop.value && mode === 'ship' && (
+        <div
+          class="fixed inset-0 z-40 bg-slate-50 dark:bg-slate-900 flex flex-col"
+          data-testid="ship-mobile-modal"
+        >
+          <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
+            <span class="text-sm font-medium text-slate-900 dark:text-slate-100">Ship</span>
+            <button
+              type="button"
+              onClick={() => { viewMode.value = 'list' }}
+              class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+              data-testid="ship-mobile-close"
+              aria-label="Close ship view"
+            >
+              Close
+            </button>
+          </div>
+          <div class="flex-1 min-h-0 flex flex-col">
+            <ShipPipelineView dags={dags} onOpenChat={handleOpenChat} />
           </div>
         </div>
       )}
