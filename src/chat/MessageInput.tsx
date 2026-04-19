@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState } from 'preact/hooks'
 import type { ApiSession } from '../api/types'
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 
 const PLACEHOLDER = 'Send instructions to the agent — Enter to send, Shift+Enter for newline'
 
@@ -15,6 +16,9 @@ export function MessageInput({ value, onValueChange, onSend }: MessageInputProps
   const [errorText, setErrorText] = useState<string | null>(null)
   const pendingRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const baseTextRef = useRef('')
+  const valueRef = useRef(value)
+  valueRef.current = value
 
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current
@@ -24,6 +28,43 @@ export function MessageInput({ value, onValueChange, onSend }: MessageInputProps
     const maxLines = 8
     el.style.height = `${Math.min(el.scrollHeight, lineHeight * maxLines)}px`
   }, [])
+
+  const handleFinal = useCallback(
+    (transcript: string) => {
+      const base = baseTextRef.current
+      const sep = base && !/\s$/.test(base) ? ' ' : ''
+      const next = `${base}${sep}${transcript.trim()}`
+      baseTextRef.current = next
+      onValueChange(next)
+      requestAnimationFrame(adjustHeight)
+    },
+    [onValueChange, adjustHeight],
+  )
+
+  const handleInterim = useCallback(
+    (interim: string) => {
+      const base = baseTextRef.current
+      const sep = base && !/\s$/.test(base) ? ' ' : ''
+      onValueChange(`${base}${sep}${interim}`)
+      requestAnimationFrame(adjustHeight)
+    },
+    [onValueChange, adjustHeight],
+  )
+
+  const handleVoiceError = useCallback((message: string) => {
+    setErrorText(message)
+  }, [])
+
+  const {
+    supported: micSupported,
+    recording,
+    start: startRecording,
+    stop: stopRecording,
+  } = useSpeechRecognition({
+    onFinal: handleFinal,
+    onInterim: handleInterim,
+    onError: handleVoiceError,
+  })
 
   const submit = useCallback(
     async (text: string) => {
@@ -60,11 +101,23 @@ export function MessageInput({ value, onValueChange, onSend }: MessageInputProps
 
   const handleInput = useCallback(
     (e: Event) => {
-      onValueChange((e.target as HTMLTextAreaElement).value)
+      const next = (e.target as HTMLTextAreaElement).value
+      onValueChange(next)
+      if (!recording) baseTextRef.current = next
       adjustHeight()
     },
-    [onValueChange, adjustHeight],
+    [onValueChange, adjustHeight, recording],
   )
+
+  const handleMicClick = useCallback(() => {
+    if (recording) {
+      stopRecording()
+      return
+    }
+    setErrorText(null)
+    baseTextRef.current = valueRef.current
+    startRecording()
+  }, [recording, startRecording, stopRecording])
 
   const handleRetry = useCallback(() => {
     const saved = pendingRef.current
@@ -86,17 +139,24 @@ export function MessageInput({ value, onValueChange, onSend }: MessageInputProps
       {errorText && (
         <div class="flex items-center gap-2 text-xs text-red-600 dark:text-red-400">
           <span>{errorText}</span>
-          <button
-            type="button"
-            onClick={handleRetry}
-            class="underline font-medium"
-            data-testid="retry-btn"
-          >
-            Retry
-          </button>
+          {pendingRef.current && (
+            <button
+              type="button"
+              onClick={handleRetry}
+              class="underline font-medium"
+              data-testid="retry-btn"
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
-      <ComposerToolbar charCount={charCount} isSlash={isSlash} sending={sending} />
+      <ComposerToolbar
+        charCount={charCount}
+        isSlash={isSlash}
+        sending={sending}
+        recording={recording}
+      />
       <div class="flex items-end gap-2">
         <textarea
           ref={textareaRef}
@@ -110,6 +170,24 @@ export function MessageInput({ value, onValueChange, onSend }: MessageInputProps
           style={{ minHeight: '40px', maxHeight: '160px' }}
           data-testid="message-textarea"
         />
+        {micSupported && (
+          <button
+            type="button"
+            onClick={handleMicClick}
+            disabled={sending}
+            aria-pressed={recording}
+            aria-label={recording ? 'Stop voice input' : 'Start voice input'}
+            title={recording ? 'Stop voice input' : 'Start voice input'}
+            class={`shrink-0 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors border shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+              recording
+                ? 'bg-red-600 hover:bg-red-700 active:bg-red-800 text-white border-red-600'
+                : 'bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600'
+            }`}
+            data-testid="mic-btn"
+          >
+            <MicIcon recording={recording} />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void submit(value)}
@@ -129,10 +207,12 @@ function ComposerToolbar({
   charCount,
   isSlash,
   sending,
+  recording,
 }: {
   charCount: number
   isSlash: boolean
   sending: boolean
+  recording: boolean
 }) {
   return (
     <div
@@ -155,6 +235,15 @@ function ComposerToolbar({
         </span>
       )}
       <span class="ml-auto flex items-center gap-1.5">
+        {recording && (
+          <span
+            class="inline-flex items-center gap-1 text-red-600 dark:text-red-400"
+            data-testid="composer-recording-indicator"
+          >
+            <span class="inline-block h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+            listening
+          </span>
+        )}
         {sending && (
           <span class="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-300">
             <span class="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
@@ -176,5 +265,15 @@ function Kbd({ children }: { children: string }) {
     <kbd class="rounded border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 px-1 py-px font-mono text-[10px] text-slate-600 dark:text-slate-300">
       {children}
     </kbd>
+  )
+}
+
+function MicIcon({ recording }: { recording: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4" aria-hidden="true">
+      <path d="M10 2a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+      <path d="M5 10a1 1 0 0 1 2 0 3 3 0 0 0 6 0 1 1 0 1 1 2 0 5 5 0 0 1-4 4.9V17h2a1 1 0 1 1 0 2H7a1 1 0 1 1 0-2h2v-2.1A5 5 0 0 1 5 10Z" />
+      {recording && <circle cx="16" cy="4" r="2" fill="#ef4444" />}
+    </svg>
   )
 }

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/preact'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useState } from 'preact/hooks'
 import { MessageInput } from '../../src/chat/MessageInput'
 import type { ApiSession } from '../../src/api/types'
@@ -137,5 +137,120 @@ describe('MessageInput', () => {
     const placeholder = getTextarea().getAttribute('placeholder') ?? ''
     expect(placeholder.toLowerCase()).not.toContain('telegram')
     expect(placeholder).toContain('agent')
+  })
+})
+
+describe('MessageInput · voice input', () => {
+  const w = window as Window & {
+    SpeechRecognition?: SpeechRecognitionConstructor
+    webkitSpeechRecognition?: SpeechRecognitionConstructor
+  }
+  const originalSR = w.SpeechRecognition
+  const originalWebkit = w.webkitSpeechRecognition
+
+  afterEach(() => {
+    w.SpeechRecognition = originalSR
+    w.webkitSpeechRecognition = originalWebkit
+  })
+
+  it('hides mic button when SpeechRecognition is unsupported', () => {
+    delete w.SpeechRecognition
+    delete w.webkitSpeechRecognition
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    expect(screen.queryByTestId('mic-btn')).toBeNull()
+  })
+
+  it('shows mic button and toggles recording state when supported', async () => {
+    class FakeRec extends EventTarget implements SpeechRecognition {
+      continuous = false
+      interimResults = false
+      lang = ''
+      maxAlternatives = 1
+      onstart: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null = null
+      onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null = null
+      onend: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      start() {
+        this.onstart?.call(this, new Event('start'))
+      }
+      stop() {
+        this.onend?.call(this, new Event('end'))
+      }
+      abort() {
+        this.onend?.call(this, new Event('end'))
+      }
+    }
+    w.SpeechRecognition = FakeRec as unknown as SpeechRecognitionConstructor
+    delete w.webkitSpeechRecognition
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    const mic = screen.getByTestId('mic-btn') as HTMLButtonElement
+    expect(mic.getAttribute('aria-pressed')).toBe('false')
+    act(() => {
+      fireEvent.click(mic)
+    })
+    await waitFor(() => expect(mic.getAttribute('aria-pressed')).toBe('true'))
+    expect(screen.getByTestId('composer-recording-indicator')).toBeTruthy()
+    act(() => {
+      fireEvent.click(mic)
+    })
+    await waitFor(() => expect(mic.getAttribute('aria-pressed')).toBe('false'))
+  })
+
+  it('appends final transcript to existing input', async () => {
+    const instances: SpeechRecognition[] = []
+    class FakeRec extends EventTarget implements SpeechRecognition {
+      continuous = false
+      interimResults = false
+      lang = ''
+      maxAlternatives = 1
+      onstart: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null = null
+      onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null = null
+      onend: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      start() {
+        this.onstart?.call(this, new Event('start'))
+      }
+      stop() {
+        this.onend?.call(this, new Event('end'))
+      }
+      abort() {
+        this.onend?.call(this, new Event('end'))
+      }
+    }
+    const Ctor = function () {
+      const rec = new FakeRec()
+      instances.push(rec)
+      return rec
+    } as unknown as SpeechRecognitionConstructor
+    w.SpeechRecognition = Ctor
+    delete w.webkitSpeechRecognition
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    fireEvent.input(getTextarea(), { target: { value: 'hello' } })
+    act(() => {
+      fireEvent.click(screen.getByTestId('mic-btn'))
+    })
+    await waitFor(() => expect(instances.length).toBe(1))
+    const rec = instances[0]
+    act(() => {
+      const result = Object.assign([{ transcript: 'world', confidence: 1 }], {
+        isFinal: true,
+        length: 1,
+        item() {
+          return { transcript: 'world', confidence: 1 }
+        },
+      })
+      const results = Object.assign([result], {
+        length: 1,
+        item() {
+          return result
+        },
+      }) as unknown as SpeechRecognitionResultList
+      const event = Object.assign(new Event('result'), {
+        resultIndex: 0,
+        results,
+      }) as unknown as SpeechRecognitionEvent
+      rec.onresult?.call(rec, event)
+    })
+    await waitFor(() => expect(getTextarea().value).toBe('hello world'))
   })
 })
