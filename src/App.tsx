@@ -1,4 +1,4 @@
-import { signal, useSignal } from '@preact/signals'
+import { signal } from '@preact/signals'
 import { useState, useEffect, useMemo } from 'preact/hooks'
 import { useRegisterSW } from 'virtual:pwa-register/preact'
 import { connections, activeId, getActiveStore } from './connections/store'
@@ -7,6 +7,7 @@ import { ConnectionPicker } from './connections/ConnectionPicker'
 import { ConnectionsDrawer } from './connections/ConnectionsDrawer'
 import { ConversationView } from './chat/ConversationView'
 import { MessageInput } from './chat/MessageInput'
+import { NewTaskBar } from './chat/NewTaskBar'
 import { QuickActionsBar } from './chat/QuickActionsBar'
 import { SlashCommandMenu, type SlashCommand } from './chat/SlashCommandMenu'
 import { confirm } from './hooks/useConfirm'
@@ -14,7 +15,7 @@ import { ConfirmRoot } from './hooks/useConfirm'
 import { InstallPrompt } from './pwa/InstallPrompt'
 import { useOnlineStatus } from './pwa/useOnlineStatus'
 import { useMediaQuery } from './hooks/useMediaQuery'
-import type { ApiSession, MinionCommand, QuickAction, RepoEntry } from './api/types'
+import type { ApiSession, MinionCommand, QuickAction } from './api/types'
 
 const showSettings = signal(false)
 const showDrawer = signal(false)
@@ -41,89 +42,6 @@ function statusDot(status: ApiSession['status']): string {
   if (status === 'completed') return 'bg-green-500'
   if (status === 'failed') return 'bg-red-500'
   return 'bg-slate-400'
-}
-
-const TASK_LIKE_COMMANDS = ['/task', '/plan', '/think', '/dag', '/split', '/stack', '/ship', '/doctor']
-
-function injectRepo(text: string, repo: string): string {
-  const trimmed = text.trimStart()
-  const spaceIdx = trimmed.indexOf(' ')
-  if (spaceIdx === -1) return text
-  const head = trimmed.slice(0, spaceIdx)
-  const rest = trimmed.slice(spaceIdx + 1)
-  if (!TASK_LIKE_COMMANDS.includes(head)) return text
-  const restTrimmed = rest.trimStart()
-  const firstToken = restTrimmed.split(' ', 1)[0] ?? ''
-  if (firstToken === repo) return `${head} ${restTrimmed}`
-  return `${head} ${repo} ${restTrimmed}`
-}
-
-function NewTaskBar({
-  repos,
-  onSend,
-}: {
-  repos: RepoEntry[]
-  onSend: (text: string) => Promise<void>
-}) {
-  const text = useSignal('')
-  const sending = useSignal(false)
-  const error = useSignal<string | null>(null)
-  const selectedRepo = useSignal<string>(repos.length > 0 ? repos[0].alias : '')
-
-  const submit = async () => {
-    const raw = text.value.trim()
-    if (!raw || sending.value) return
-    const value = selectedRepo.value ? injectRepo(raw, selectedRepo.value) : raw
-    sending.value = true
-    error.value = null
-    try {
-      await onSend(value)
-      text.value = ''
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Send failed'
-    } finally {
-      sending.value = false
-    }
-  }
-
-  return (
-    <div class="flex flex-col gap-1 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-      <div class="flex items-center gap-2">
-        {repos.length > 0 && (
-          <select
-            value={selectedRepo.value}
-            onChange={(e) => { selectedRepo.value = (e.currentTarget as HTMLSelectElement).value }}
-            disabled={sending.value}
-            title="Repo to run the task against (auto-inserted after the slash command)"
-            class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-2 text-sm text-slate-900 dark:text-slate-100 disabled:opacity-50"
-            data-testid="new-task-repo-select"
-          >
-            {repos.map((r) => (
-              <option key={r.alias} value={r.alias}>{r.alias}</option>
-            ))}
-            <option value="">(no repo)</option>
-          </select>
-        )}
-        <input
-          type="text"
-          value={text.value}
-          onInput={(e) => { text.value = (e.currentTarget as HTMLInputElement).value }}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit() } }}
-          disabled={sending.value}
-          placeholder="New task: /task <prompt>, /plan, /think, /dag, /split, /stack, /doctor, /ship"
-          class="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 disabled:opacity-50"
-        />
-        <button
-          onClick={() => void submit()}
-          disabled={sending.value || !text.value.trim()}
-          class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {sending.value ? '…' : 'Send'}
-        </button>
-      </div>
-      {error.value && <div class="text-xs text-red-600 dark:text-red-400">{error.value}</div>}
-    </div>
-  )
 }
 
 function SessionItem({ session, active, onSelect }: { session: ApiSession; active: boolean; onSelect: () => void }) {
@@ -174,7 +92,7 @@ function SessionList({
   if (sorted.length === 0) {
     return (
       <div class="text-xs text-slate-500 dark:text-slate-400 p-3 italic">
-        No sessions yet. Send a /task above.
+        No sessions yet. Launch one from the task bar above.
       </div>
     )
   }
@@ -358,10 +276,6 @@ function ActiveView() {
     await store.sendCommand(cmd)
   }
 
-  const handleNewTask = async (text: string) => {
-    await store.client.sendMessage(text)
-  }
-
   const showOfflineBanner = !isOnline.value && store.stale.value
 
   return (
@@ -390,7 +304,7 @@ function ActiveView() {
           <button onClick={() => void store.refresh()} class="text-xs font-medium underline">Retry</button>
         </div>
       )}
-      <NewTaskBar repos={store.version.value?.repos ?? []} onSend={handleNewTask} />
+      <NewTaskBar store={store} />
       {isDesktop.value ? (
         <div class="flex flex-1 min-h-0">
           <aside class="w-72 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-y-auto shrink-0">
