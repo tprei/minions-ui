@@ -46,14 +46,14 @@ function findDagContext(
         if (!depNode) return null
         return { id: depId, slug: depNode.slug, status: depNode.status }
       })
-      .filter((x): x is { id: string; slug: string; status: string } => x !== null)
+      .filter((x) => x !== null)
     const dependents = node.dependents
       .map((depId) => {
         const depNode = dag.nodes[depId]
         if (!depNode) return null
         return { id: depId, slug: depNode.slug, status: depNode.status }
       })
-      .filter((x): x is { id: string; slug: string; status: string } => x !== null)
+      .filter((x) => x !== null)
     return { dag, rootSlug, position, total, dependencies, dependents }
   }
   return null
