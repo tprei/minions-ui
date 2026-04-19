@@ -20,6 +20,7 @@ import { ConfirmRoot } from './hooks/useConfirm'
 import { InstallPrompt } from './pwa/InstallPrompt'
 import { useOnlineStatus } from './pwa/useOnlineStatus'
 import { useMediaQuery } from './hooks/useMediaQuery'
+import { WorktreeHeader } from './components/WorktreeHeader'
 import type { ApiSession, MinionCommand, QuickAction } from './api/types'
 
 const showSettings = signal(false)
@@ -238,6 +239,7 @@ function ChatPane({
           </button>
         </div>
       </header>
+      <WorktreeHeader session={session} store={store} />
       <SessionTabs
         tabs={[
           { id: 'chat', label: 'Chat', available: true },
