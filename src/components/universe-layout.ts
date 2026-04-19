@@ -2,6 +2,7 @@ import dagre from 'dagre'
 import type { Node, Edge } from '@reactflow/core'
 import { MarkerType } from '@reactflow/core'
 import type { ApiSession, ApiDagGraph, ApiDagNode } from '../api/types'
+import { classifySessions } from '../state/hierarchy'
 
 export const NODE_WIDTH = 240
 export const NODE_HEIGHT = 100
@@ -31,80 +32,6 @@ interface LayoutGroup {
   edges: Edge[]
   width: number
   height: number
-}
-
-function classifySessions(
-  sessions: ApiSession[],
-  dags: ApiDagGraph[],
-): { dagOwned: Set<string>; parentChildRoots: ApiSession[]; standalone: ApiSession[] } {
-  const dagOwned = new Set<string>()
-
-  for (const dag of dags) {
-    for (const node of Object.values(dag.nodes)) {
-      if (node.session) {
-        dagOwned.add(node.session.id)
-      }
-    }
-  }
-
-  const sessionById = new Map<string, ApiSession>()
-  for (const s of sessions) {
-    sessionById.set(s.id, s)
-  }
-
-  const inParentChildTree = new Set<string>()
-  const parentChildRoots: ApiSession[] = []
-
-  for (const s of sessions) {
-    if (dagOwned.has(s.id)) continue
-    if (inParentChildTree.has(s.id)) continue
-
-    if (s.childIds.length > 0 && !s.parentId) {
-      parentChildRoots.push(s)
-      inParentChildTree.add(s.id)
-      collectChildren(s, sessionById, inParentChildTree)
-    }
-  }
-
-  const standalone: ApiSession[] = []
-  for (const s of sessions) {
-    if (!dagOwned.has(s.id) && !inParentChildTree.has(s.id)) {
-      if (s.parentId && sessionById.has(s.parentId)) {
-        const parent = sessionById.get(s.parentId)!
-        if (parent.childIds.includes(s.id) && !dagOwned.has(parent.id)) {
-          let root = parent
-          while (root.parentId && sessionById.has(root.parentId) && !dagOwned.has(root.parentId)) {
-            root = sessionById.get(root.parentId)!
-          }
-          if (!inParentChildTree.has(root.id)) {
-            parentChildRoots.push(root)
-            inParentChildTree.add(root.id)
-            collectChildren(root, sessionById, inParentChildTree)
-          }
-          inParentChildTree.add(s.id)
-          continue
-        }
-      }
-      standalone.push(s)
-    }
-  }
-
-  return { dagOwned, parentChildRoots, standalone }
-}
-
-function collectChildren(
-  session: ApiSession,
-  sessionById: Map<string, ApiSession>,
-  collected: Set<string>,
-): void {
-  for (const childId of session.childIds) {
-    if (collected.has(childId)) continue
-    collected.add(childId)
-    const child = sessionById.get(childId)
-    if (child) {
-      collectChildren(child, sessionById, collected)
-    }
-  }
 }
 
 function layoutDagGroup(dag: ApiDagGraph, isDark: boolean): LayoutGroup {
@@ -319,12 +246,7 @@ export function layoutUniverse(
     return { nodes: [], edges: [] }
   }
 
-  const sessionById = new Map<string, ApiSession>()
-  for (const s of sessions) {
-    sessionById.set(s.id, s)
-  }
-
-  const { parentChildRoots, standalone } = classifySessions(sessions, dags)
+  const { parentChildRoots, standalone, sessionById } = classifySessions(sessions, dags)
 
   const groups: LayoutGroup[] = []
 
