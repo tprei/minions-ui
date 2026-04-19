@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/preact'
 import { signal } from '@preact/signals'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NewTaskBar } from '../../src/chat/NewTaskBar'
+import { getVariantGroup, resetVariantGroupsForTests } from '../../src/groups/store'
 import type { ConnectionStore } from '../../src/state/types'
 import type {
   ApiDagGraph,
@@ -69,6 +70,7 @@ function makeStore(opts: {
   }
 
   const store: ConnectionStore = {
+    connectionId: 'test-conn',
     client: client as unknown as ConnectionStore['client'],
     sessions: signal<ApiSession[]>([]),
     dags: signal<ApiDagGraph[]>([]),
@@ -85,6 +87,8 @@ function makeStore(opts: {
 
 describe('NewTaskBar', () => {
   beforeEach(() => {
+    localStorage.clear()
+    resetVariantGroupsForTests()
     if (!window.matchMedia) {
       Object.defineProperty(window, 'matchMedia', {
         writable: true,
@@ -216,6 +220,27 @@ describe('NewTaskBar', () => {
 
     const err = await screen.findByTestId('new-task-error')
     expect(err.textContent).toContain('bad request')
+  })
+
+  it('records the variant group client-side on successful variant creation', async () => {
+    const { store } = makeStore({
+      features: ['sessions-create', 'sessions-variants'],
+      repos: [{ alias: 'primary', url: 'https://github.com/org/primary' }],
+    })
+    const navigate = vi.fn<(hash: string) => void>()
+    render(<NewTaskBar store={store} navigate={navigate} />)
+    fireEvent.click(screen.getByTestId('variant-2'))
+    const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
+    fireEvent.input(textarea, { target: { value: 'compare approaches' } })
+    fireEvent.click(screen.getByTestId('new-task-send'))
+
+    await waitFor(() => expect(navigate).toHaveBeenCalled())
+    const recorded = getVariantGroup('test-conn', 'g-xyz')
+    expect(recorded).not.toBeNull()
+    expect(recorded?.prompt).toBe('compare approaches')
+    expect(recorded?.mode).toBe('task')
+    expect(recorded?.repo).toBe('primary')
+    expect(recorded?.variantSessionIds).toHaveLength(2)
   })
 
   it('Launch button label reflects variant count', async () => {

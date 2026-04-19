@@ -22,6 +22,8 @@ import { InstallPrompt } from './pwa/InstallPrompt'
 import { useOnlineStatus } from './pwa/useOnlineStatus'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { WorktreeHeader } from './components/WorktreeHeader'
+import { currentRoute } from './routing/current'
+import { VariantGroupView } from './groups/VariantGroupView'
 import type { ApiSession, MinionCommand, QuickAction } from './api/types'
 
 const showSettings = signal(false)
@@ -303,16 +305,24 @@ function ActiveView() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const isOnline = useOnlineStatus()
   const isDesktop = useMediaQuery('(min-width: 768px)')
+  const route = currentRoute.value
 
   useEffect(() => {
     const color = conn?.color ?? '#3b82f6'
     document.documentElement.style.setProperty('--accent', color)
   }, [conn?.color])
 
+  useEffect(() => {
+    if (route.name !== 'session') return
+    const match = store?.sessions.value.find((s) => s.slug === route.sessionSlug)
+    if (match && match.id !== sessionId) setSessionId(match.id)
+  }, [route, store, sessionId])
+
   if (!store || !conn) return null
 
   const sessions = store.sessions.value
   const selected = sessionId ? sessions.find((s) => s.id === sessionId) ?? null : null
+  const isGroupRoute = route.name === 'group'
 
   const handleSendMessage = async (text: string, sid: string) => {
     await store.client.sendMessage(text, sid)
@@ -351,7 +361,9 @@ function ActiveView() {
         </div>
       )}
       <NewTaskBar store={store} />
-      {isDesktop.value ? (
+      {isGroupRoute ? (
+        <VariantGroupView store={store} groupId={route.groupId} />
+      ) : isDesktop.value ? (
         <div class="flex flex-1 min-h-0">
           <aside class="w-72 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-y-auto shrink-0">
             <SessionList

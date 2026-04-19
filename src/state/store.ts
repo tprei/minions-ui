@@ -140,6 +140,7 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
   void refresh()
 
   return {
+    connectionId,
     client,
     sessions,
     dags,
