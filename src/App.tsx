@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals'
-import { useState, useEffect, useMemo, useRef } from 'preact/hooks'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'preact/hooks'
 import { useRegisterSW } from 'virtual:pwa-register/preact'
 import { connections, activeId, getActiveStore } from './connections/store'
 import { ConnectionSettings } from './connections/ConnectionSettings'
@@ -15,6 +15,7 @@ import { DiffTab } from './chat/DiffTab'
 import { ScreenshotsTab } from './chat/ScreenshotsTab'
 import { PrPreviewCard } from './components/PrPreviewCard'
 import { AttentionBar, filterSessionsByReason } from './components/AttentionBar'
+import { UniverseCanvas } from './components/UniverseCanvas'
 import { hasFeature } from './api/features'
 import type { ConnectionStore } from './state/types'
 import { confirm } from './hooks/useConfirm'
@@ -33,8 +34,48 @@ import { currentRoute } from './routing/current'
 import { VariantGroupView } from './groups/VariantGroupView'
 import type { ApiSession, AttentionReason, MinionCommand, QuickAction } from './api/types'
 
+export type ViewMode = 'list' | 'canvas'
+
 const showSettings = signal(false)
 const showDrawer = signal(false)
+export const viewMode = signal<ViewMode>('list')
+
+function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
+  const tabClass = (active: boolean) =>
+    `px-2.5 py-1 text-xs font-medium transition-colors ${
+      active
+        ? 'bg-indigo-600 text-white'
+        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+    }`
+  return (
+    <div
+      class="inline-flex rounded-md border border-slate-300 dark:border-slate-600 overflow-hidden"
+      role="tablist"
+      data-testid="view-toggle"
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'list'}
+        onClick={() => onChange('list')}
+        class={tabClass(mode === 'list')}
+        data-testid="view-toggle-list"
+      >
+        List
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'canvas'}
+        onClick={() => onChange('canvas')}
+        class={`${tabClass(mode === 'canvas')} border-l border-slate-300 dark:border-slate-600`}
+        data-testid="view-toggle-canvas"
+      >
+        Canvas
+      </button>
+    </div>
+  )
+}
 
 function ConnectionStatusBadge({ status }: { status: string }) {
   const color =
@@ -721,9 +762,11 @@ function ActiveView() {
   const conn = connections.value.find((c) => c.id === id)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [attentionFilter, setAttentionFilter] = useState<AttentionReason | null>(null)
+  const [isActionLoading, setIsActionLoading] = useState(false)
   const isOnline = useOnlineStatus()
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const route = currentRoute.value
+  const mode = viewMode.value
 
   useEffect(() => {
     const color = conn?.color ?? '#3b82f6'
@@ -741,10 +784,71 @@ function ActiveView() {
   }, [id])
 
   const sessions = store?.sessions.value ?? []
+  const dags = store?.dags.value ?? []
   const visibleSessions = useMemo(
     () => filterSessionsByReason(sessions, attentionFilter),
     [sessions, attentionFilter],
   )
+
+  const handleSendMessage = useCallback(
+    async (text: string, sid: string) => {
+      if (!store) return
+      await store.client.sendMessage(text, sid)
+    },
+    [store]
+  )
+
+  const handleCommand = useCallback(
+    async (cmd: MinionCommand) => {
+      if (!store) return
+      await store.sendCommand(cmd)
+    },
+    [store]
+  )
+
+  const handleCanvasSendReply = useCallback(
+    async (sid: string, message: string) => {
+      if (!store) return
+      setIsActionLoading(true)
+      try {
+        await store.client.sendMessage(message, sid)
+      } finally {
+        setIsActionLoading(false)
+      }
+    },
+    [store]
+  )
+
+  const handleCanvasStop = useCallback(
+    async (sid: string) => {
+      if (!store) return
+      setIsActionLoading(true)
+      try {
+        await store.sendCommand({ action: 'stop', sessionId: sid })
+      } finally {
+        setIsActionLoading(false)
+      }
+    },
+    [store]
+  )
+
+  const handleCanvasClose = useCallback(
+    async (sid: string) => {
+      if (!store) return
+      setIsActionLoading(true)
+      try {
+        await store.sendCommand({ action: 'close', sessionId: sid })
+      } finally {
+        setIsActionLoading(false)
+      }
+    },
+    [store]
+  )
+
+  const handleOpenChat = useCallback((sid: string) => {
+    setSessionId(sid)
+    viewMode.value = 'list'
+  }, [])
 
   if (!store || !conn) return null
 
@@ -759,15 +863,20 @@ function ActiveView() {
     if (firstMatchId !== null) setSessionId(firstMatchId)
   }
 
-  const handleSendMessage = async (text: string, sid: string) => {
-    await store.client.sendMessage(text, sid)
-  }
-
-  const handleCommand = async (cmd: MinionCommand) => {
-    await store.sendCommand(cmd)
-  }
 
   const showOfflineBanner = !isOnline.value && store.stale.value
+
+  const canvasProps = {
+    sessions,
+    dags,
+    onSendReply: handleCanvasSendReply,
+    onStopMinion: handleCanvasStop,
+    onCloseSession: handleCanvasClose,
+    onOpenThread: () => {},
+    onOpenChat: handleOpenChat,
+    isActionLoading,
+    accentColor: conn.color,
+  }
 
   return (
     <div class="flex flex-col h-[100dvh] bg-slate-50 dark:bg-slate-900">
@@ -780,6 +889,7 @@ function ActiveView() {
         <ConnectionPicker onManage={() => { showDrawer.value = true }} />
         <ConnectionStatusBadge status={store.status.value} />
         <div class="ml-auto flex items-center gap-1.5">
+          <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />
           <ThemeToggle />
           <button
             type="button"
@@ -802,19 +912,25 @@ function ActiveView() {
       {isGroupRoute ? (
         <VariantGroupView store={store} groupId={route.groupId} />
       ) : isDesktop.value ? (
-        <DesktopBody
-          sessions={sessions}
-          visibleSessions={visibleSessions}
-          dags={store.dags.value}
-          sessionId={sessionId}
-          setSessionId={setSessionId}
-          selected={selected}
-          store={store}
-          onSend={handleSendMessage}
-          onCommand={handleCommand}
-          attentionFilter={attentionFilter}
-          onAttentionSelect={handleAttentionSelect}
-        />
+        mode === 'canvas' ? (
+          <div class="flex flex-1 min-h-0" data-testid="canvas-pane">
+            <UniverseCanvas {...canvasProps} />
+          </div>
+        ) : (
+          <DesktopBody
+            sessions={sessions}
+            visibleSessions={visibleSessions}
+            dags={store.dags.value}
+            sessionId={sessionId}
+            setSessionId={setSessionId}
+            selected={selected}
+            store={store}
+            onSend={handleSendMessage}
+            onCommand={handleCommand}
+            attentionFilter={attentionFilter}
+            onAttentionSelect={handleAttentionSelect}
+          />
+        )
       ) : (
         <div class="flex flex-col flex-1 min-h-0">
           <AttentionBar
@@ -840,6 +956,28 @@ function ActiveView() {
           ) : (
             <EmptyPane />
           )}
+        </div>
+      )}
+      {!isDesktop.value && mode === 'canvas' && (
+        <div
+          class="fixed inset-0 z-40 bg-slate-50 dark:bg-slate-900 flex flex-col"
+          data-testid="canvas-mobile-modal"
+        >
+          <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
+            <span class="text-sm font-medium text-slate-900 dark:text-slate-100">Canvas</span>
+            <button
+              type="button"
+              onClick={() => { viewMode.value = 'list' }}
+              class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+              data-testid="canvas-mobile-close"
+              aria-label="Close canvas"
+            >
+              Close
+            </button>
+          </div>
+          <div class="flex-1 min-h-0">
+            <UniverseCanvas {...canvasProps} />
+          </div>
         </div>
       )}
       {showDrawer.value && (
