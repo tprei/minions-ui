@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import type { ApiClient } from '../api/client'
 import type { PrCheck, PrCheckStatus, PrPreview, PrState } from '../api/types'
-import { renderMarkdown } from './markdown'
+import { MarkdownView } from './MarkdownView'
 
 export const PR_PREVIEW_POLL_MS = 30_000
 
@@ -204,11 +204,7 @@ export function PrPreviewCard({ sessionId, prUrl, client }: PrPreviewCardProps) 
     }
   }, [sessionId, client, reloadNonce])
 
-  const bodyHtml = useMemo(() => {
-    if (state.kind !== 'ready') return ''
-    const body = state.pr.body?.trim()
-    return body ? renderMarkdown(body) : ''
-  }, [state])
+  const bodySource = state.kind === 'ready' ? state.pr.body?.trim() ?? '' : ''
 
   if (state.kind === 'loading') return <LoadingCard />
   if (state.kind === 'error') {
@@ -283,7 +279,7 @@ export function PrPreviewCard({ sessionId, prUrl, client }: PrPreviewCardProps) 
           </span>
         )}
       </div>
-      {bodyHtml && (
+      {bodySource && (
         <div class="border-t border-slate-100 dark:border-slate-700">
           <button
             type="button"
@@ -294,9 +290,9 @@ export function PrPreviewCard({ sessionId, prUrl, client }: PrPreviewCardProps) 
             {expanded ? 'Hide description' : 'Show description'}
           </button>
           {expanded && (
-            <div
-              class="px-3 pb-3 prose prose-sm dark:prose-invert max-w-none prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-pre:rounded prose-pre:px-2 prose-pre:py-1 prose-pre:text-xs prose-code:before:content-none prose-code:after:content-none prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1 prose-code:rounded text-slate-700 dark:text-slate-200"
-              dangerouslySetInnerHTML={{ __html: bodyHtml }}
+            <MarkdownView
+              source={bodySource}
+              class="px-3 pb-3 max-h-64 sm:max-h-80 overflow-y-auto overscroll-contain prose prose-sm dark:prose-invert max-w-none prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-pre:rounded prose-pre:px-2 prose-pre:py-1 prose-pre:text-xs prose-code:before:content-none prose-code:after:content-none prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1 prose-code:rounded text-slate-700 dark:text-slate-200 break-words"
               data-testid="pr-body"
             />
           )}
