@@ -25,6 +25,7 @@ export interface ApiSession {
   quickActions: QuickAction[]
   mode: string
   conversation: ConversationMessage[]
+  variantGroupId?: string
 }
 
 export interface ApiDagNode {
@@ -72,4 +73,106 @@ export interface VersionInfo {
   libraryVersion: string
   features: string[]
   repos?: RepoEntry[]
+}
+
+export type CreateSessionMode = 'task' | 'plan' | 'think' | 'dag' | 'split' | 'stack' | 'ship' | 'doctor'
+
+export interface CreateSessionRequest {
+  prompt: string
+  mode: CreateSessionMode
+  repo?: string
+}
+
+export interface CreateSessionVariantsRequest extends CreateSessionRequest {
+  count: number
+}
+
+export interface CreateSessionVariantsResult {
+  groupId: string
+  sessions: ApiSession[]
+}
+
+export type PrState = 'open' | 'closed' | 'merged'
+
+export type PrCheckStatus =
+  | 'queued'
+  | 'in_progress'
+  | 'pending'
+  | 'success'
+  | 'failure'
+  | 'neutral'
+  | 'skipped'
+  | 'cancelled'
+  | 'action_required'
+  | 'stale'
+  | 'timed_out'
+
+export interface PrCheck {
+  name: string
+  status: PrCheckStatus
+  conclusion?: string
+  url?: string
+}
+
+export interface PrPreview {
+  number: number
+  url: string
+  title: string
+  body: string
+  state: PrState
+  draft: boolean
+  mergeable: boolean | null
+  branch: string
+  baseBranch: string
+  author: string
+  updatedAt: string
+  checks: PrCheck[]
+}
+
+export interface WorkspaceDiffStats {
+  filesChanged: number
+  insertions: number
+  deletions: number
+}
+
+export interface WorkspaceDiff {
+  sessionId: string
+  branch: string
+  baseBranch: string
+  patch: string
+  truncated: boolean
+  stats: WorkspaceDiffStats
+}
+
+export interface ScreenshotEntry {
+  file: string
+  url: string
+  capturedAt: string
+  size: number
+  width?: number
+  height?: number
+  caption?: string
+}
+
+export interface ScreenshotList {
+  sessionId: string
+  screenshots: ScreenshotEntry[]
+}
+
+export interface VapidPublicKey {
+  key: string
+}
+
+export interface PushSubscriptionJSON {
+  endpoint: string
+  expirationTime: number | null
+  keys: {
+    p256dh: string
+    auth: string
+  }
+}
+
+export interface PushSubscribeAck {
+  ok: true
+  id: string
 }

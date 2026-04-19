@@ -26,13 +26,9 @@ test.describe('task lifecycle', () => {
     try {
       await connectToMinion(page, mock, 'My Minion')
 
-      await expect(page.getByTestId('universe-node-seed-1')).toBeVisible({ timeout: 8_000 })
+      await expect(page.getByTestId('session-item-seed-1')).toBeVisible({ timeout: 8_000 })
 
-      await page.getByTestId('universe-node-seed-1').dispatchEvent('click')
-
-      await expect(page.locator('[role="dialog"]')).toBeVisible()
-
-      await page.getByRole('button', { name: 'Open Chat' }).click()
+      await page.getByTestId('session-item-seed-1').click()
 
       await expect(page.getByTestId('message-textarea')).toBeVisible()
 
@@ -45,15 +41,9 @@ test.describe('task lifecycle', () => {
 
       mock.emit({ type: 'session_created', session: makeSession('new-1', 'hello-task', 'running') })
 
-      await expect(page.getByTestId('universe-node-new-1')).toBeAttached({ timeout: 5_000 })
+      await expect(page.getByTestId('session-item-new-1')).toBeVisible({ timeout: 5_000 })
 
-      await page.getByTestId('chat-close-btn').click()
-
-      await page.getByTestId('universe-node-new-1').dispatchEvent('click')
-
-      await expect(page.locator('[aria-labelledby="node-detail-title"]')).toBeVisible()
-
-      await page.getByRole('button', { name: 'Open Chat' }).click()
+      await page.getByTestId('session-item-new-1').click()
 
       await expect(page.getByTestId('message-textarea')).toBeVisible()
 
@@ -68,11 +58,7 @@ test.describe('task lifecycle', () => {
       mock.setSessions([makeSession('seed-1', 'seed-task', 'running'), completedSession])
       mock.emit({ type: 'session_updated', session: completedSession })
 
-      await page.getByTestId('universe-node-new-1').dispatchEvent('click')
-
-      await expect(
-        page.locator('[aria-labelledby="node-detail-title"]').getByText('Done')
-      ).toBeVisible({ timeout: 8_000 })
+      await expect(page.getByTestId('session-item-new-1')).toContainText('completed', { timeout: 8_000 })
     } finally {
       await mock.close()
     }

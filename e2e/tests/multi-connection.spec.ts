@@ -46,7 +46,7 @@ test.describe('multi-connection', () => {
     try {
       await connectToMinion(page, mockA, 'Minion Alpha')
 
-      await expect(page.getByTestId('universe-node-a-session')).toBeVisible({ timeout: 8_000 })
+      await expect(page.getByTestId('session-item-a-session')).toBeVisible({ timeout: 8_000 })
 
       await page.getByTestId('connection-picker-trigger').click()
       await expect(page.getByTestId('connection-picker-dropdown')).toBeVisible()
@@ -66,8 +66,8 @@ test.describe('multi-connection', () => {
 
       await expect(page.getByTestId('connection-picker-trigger')).toContainText('Minion Beta')
 
-      await expect(page.getByTestId('universe-node-b-session')).toBeVisible({ timeout: 8_000 })
-      await expect(page.getByTestId('universe-node-a-session')).not.toBeVisible()
+      await expect(page.getByTestId('session-item-b-session')).toBeVisible({ timeout: 8_000 })
+      await expect(page.getByTestId('session-item-a-session')).not.toBeVisible()
 
       await page.getByTestId('connection-picker-trigger').click()
       const dropdown = page.getByTestId('connection-picker-dropdown')
@@ -79,8 +79,8 @@ test.describe('multi-connection', () => {
 
       await expect(page.getByTestId('connection-picker-trigger')).toContainText('Minion Alpha')
 
-      await expect(page.getByTestId('universe-node-a-session')).toBeVisible({ timeout: 8_000 })
-      await expect(page.getByTestId('universe-node-b-session')).not.toBeVisible()
+      await expect(page.getByTestId('session-item-a-session')).toBeVisible({ timeout: 8_000 })
+      await expect(page.getByTestId('session-item-b-session')).not.toBeVisible()
     } finally {
       await mockA.close()
       await mockB.close()

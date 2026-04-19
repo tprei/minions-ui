@@ -1,4 +1,20 @@
-import type { ApiDagGraph, ApiResponse, ApiSession, CommandResult, MinionCommand, VersionInfo } from './types'
+import type {
+  ApiDagGraph,
+  ApiResponse,
+  ApiSession,
+  CommandResult,
+  CreateSessionRequest,
+  CreateSessionVariantsRequest,
+  CreateSessionVariantsResult,
+  MinionCommand,
+  PrPreview,
+  PushSubscribeAck,
+  PushSubscriptionJSON,
+  ScreenshotList,
+  VapidPublicKey,
+  VersionInfo,
+  WorkspaceDiff,
+} from './types'
 import { openEventStream } from './sse'
 import type { SseHandlers, EventStreamHandle } from './sse'
 
@@ -18,6 +34,15 @@ export interface ApiClient {
   getDags(): Promise<ApiDagGraph[]>
   sendCommand(cmd: MinionCommand): Promise<CommandResult>
   sendMessage(text: string, sessionId?: string): Promise<{ ok: true; sessionId: string | null }>
+  createSession(req: CreateSessionRequest): Promise<ApiSession>
+  createSessionVariants(req: CreateSessionVariantsRequest): Promise<CreateSessionVariantsResult>
+  getPr(sessionId: string): Promise<PrPreview>
+  getDiff(sessionId: string): Promise<WorkspaceDiff>
+  listScreenshots(sessionId: string): Promise<ScreenshotList>
+  fetchScreenshotBlob(file: string): Promise<Blob>
+  getVapidKey(): Promise<VapidPublicKey>
+  subscribePush(sub: PushSubscriptionJSON): Promise<PushSubscribeAck>
+  unsubscribePush(endpoint: string): Promise<{ ok: true }>
   openEventStream(handlers: SseHandlers): EventStreamHandle
   baseUrl: string
   token: string
@@ -30,6 +55,11 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
   function headers(): HeadersInit {
     if (!token) return { 'Content-Type': 'application/json' }
     return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+  }
+
+  function authHeadersOnly(): HeadersInit {
+    if (!token) return {}
+    return { Authorization: `Bearer ${token}` }
   }
 
   async function get<T>(path: string): Promise<T> {
@@ -46,6 +76,19 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
       method: 'POST',
       headers: headers(),
       body: JSON.stringify(data),
+    })
+    const body = (await res.json()) as ApiResponse<T>
+    if (!res.ok || body.error) {
+      throw new ApiError(res.status, body.error ?? res.statusText)
+    }
+    return body.data
+  }
+
+  async function del<T>(path: string, data?: unknown): Promise<T> {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: 'DELETE',
+      headers: headers(),
+      body: data !== undefined ? JSON.stringify(data) : undefined,
     })
     const body = (await res.json()) as ApiResponse<T>
     if (!res.ok || body.error) {
@@ -76,6 +119,48 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
 
     sendMessage(text: string, sessionId?: string) {
       return post<{ ok: true; sessionId: string | null }>('/api/messages', { text, sessionId })
+    },
+
+    createSession(req: CreateSessionRequest) {
+      return post<ApiSession>('/api/sessions', req)
+    },
+
+    createSessionVariants(req: CreateSessionVariantsRequest) {
+      return post<CreateSessionVariantsResult>('/api/sessions/variants', req)
+    },
+
+    getPr(sessionId: string) {
+      return get<PrPreview>(`/api/sessions/${encodeURIComponent(sessionId)}/pr`)
+    },
+
+    getDiff(sessionId: string) {
+      return get<WorkspaceDiff>(`/api/sessions/${encodeURIComponent(sessionId)}/diff`)
+    },
+
+    listScreenshots(sessionId: string) {
+      return get<ScreenshotList>(`/api/sessions/${encodeURIComponent(sessionId)}/screenshots`)
+    },
+
+    async fetchScreenshotBlob(file: string): Promise<Blob> {
+      const res = await fetch(`${baseUrl}/api/screenshots/${encodeURIComponent(file)}`, {
+        headers: authHeadersOnly(),
+      })
+      if (!res.ok) {
+        throw new ApiError(res.status, res.statusText)
+      }
+      return res.blob()
+    },
+
+    getVapidKey() {
+      return get<VapidPublicKey>('/api/push/vapid-public-key')
+    },
+
+    subscribePush(sub: PushSubscriptionJSON) {
+      return post<PushSubscribeAck>('/api/push-subscribe', sub)
+    },
+
+    unsubscribePush(endpoint: string) {
+      return del<{ ok: true }>('/api/push-subscribe', { endpoint })
     },
 
     openEventStream(handlers: SseHandlers): EventStreamHandle {
