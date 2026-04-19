@@ -3,6 +3,7 @@ import type { ConnectionStore } from '../state/types'
 import type { CreateSessionMode } from '../api/types'
 import { hasFeature } from '../api/features'
 import { formatRoute } from '../routing/route'
+import { recordVariantGroup } from '../groups/store'
 
 export interface ModeOption {
   value: CreateSessionMode
@@ -78,6 +79,14 @@ export function NewTaskBar({ store, navigate = defaultNavigate }: NewTaskBarProp
           mode: mode.value,
           repo: selectedRepo,
           count: variantCount.value,
+        })
+        recordVariantGroup(store.connectionId, {
+          groupId: out.groupId,
+          prompt: p,
+          mode: mode.value,
+          repo: selectedRepo,
+          variantSessionIds: out.sessions.map((s) => s.id),
+          createdAt: new Date().toISOString(),
         })
         prompt.value = ''
         navigate(formatRoute({ name: 'group', groupId: out.groupId }))

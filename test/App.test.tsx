@@ -105,6 +105,61 @@ describe('App', () => {
     expect(within(conv).getByText('hello')).toBeTruthy()
   })
 
+  it('renders the variant group view when the hash is #/g/:groupId', async () => {
+    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
+      version: 1,
+      connections: [
+        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+      ],
+      activeId: 'c1',
+    }))
+    localStorage.setItem(
+      'minions-ui:variant-groups:v1',
+      JSON.stringify({
+        version: 1,
+        byConnection: {
+          c1: [{
+            groupId: 'g-route',
+            prompt: 'routed prompt',
+            mode: 'task',
+            variantSessionIds: ['s1', 's2'],
+            createdAt: '2026-04-19T00:00:00Z',
+          }],
+        },
+      })
+    )
+    const versionWithVariants: VersionInfo = {
+      apiVersion: '1',
+      libraryVersion: '1.111.0',
+      features: ['sessions-create', 'sessions-variants'],
+    }
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/version')) {
+        return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ data: versionWithVariants }) })
+      }
+      if (url.includes('/api/sessions')) {
+        return Promise.resolve({
+          ok: true, status: 200, statusText: 'OK',
+          json: () => Promise.resolve({ data: [session({ id: 's1', slug: 'brave-fox' }), session({ id: 's2', slug: 'swift-cat' })] }),
+        })
+      }
+      if (url.includes('/api/dags')) {
+        return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ data: [] }) })
+      }
+      return Promise.resolve({ ok: false, status: 404, statusText: 'NF', json: () => Promise.resolve({ data: null }) })
+    }))
+    window.location.hash = '#/g/g-route'
+    try {
+      const App = (await import('../src/App')).default
+      render(<App />)
+      const view = await screen.findByTestId('variant-group-view')
+      expect(view).toBeTruthy()
+      expect(screen.getByTestId('variant-group-prompt').textContent).toBe('routed prompt')
+    } finally {
+      window.location.hash = ''
+    }
+  })
+
   it('switching sessions swaps the conversation pane', async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,

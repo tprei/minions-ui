@@ -13,6 +13,7 @@ export interface DiffStats {
 }
 
 export interface ConnectionStore {
+  connectionId: string
   client: ApiClient
   sessions: ReadonlySignal<ApiSession[]>
   dags: ReadonlySignal<ApiDagGraph[]>
