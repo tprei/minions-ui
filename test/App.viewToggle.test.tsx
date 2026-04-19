@@ -31,6 +31,12 @@ vi.mock('@reactflow/core', () => ({
       {children}
     </div>
   )),
+  ReactFlowProvider: vi.fn(({ children }) => <>{children}</>),
+  useReactFlow: vi.fn(() => ({
+    setCenter: vi.fn(),
+    fitBounds: vi.fn(),
+    fitView: vi.fn(),
+  })),
   useNodesState: vi.fn((initial: unknown[]) => [initial, vi.fn(), vi.fn()]),
   useEdgesState: vi.fn((initial: unknown[]) => [initial, vi.fn(), vi.fn()]),
   MarkerType: { ArrowClosed: 'arrowClosed' },

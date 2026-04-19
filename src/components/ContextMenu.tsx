@@ -13,7 +13,14 @@ export interface ContextMenuActions {
   onStopMinion: (sessionId: string) => Promise<void>
   onCloseSession: (sessionId: string) => Promise<void>
   onOpenThread: (session: ApiSession) => void
+  onOpenParent?: (parentId: string) => void
+  onViewInDag?: (dagId: string, sessionId: string) => void
   isActionLoading: boolean
+}
+
+export interface DagContext {
+  dagId: string
+  nodeStatus: string
 }
 
 interface ContextMenuProps {
@@ -21,6 +28,7 @@ interface ContextMenuProps {
   position: ContextMenuPosition
   actions: ContextMenuActions
   onClose: () => void
+  dagContext?: DagContext | null
 }
 
 interface MenuItemConfig {
@@ -49,7 +57,7 @@ function clampPosition(
   }
 }
 
-export function ContextMenu({ session, position, actions, onClose }: ContextMenuProps) {
+export function ContextMenu({ session, position, actions, onClose, dagContext }: ContextMenuProps) {
   const theme = useTheme()
   const isDark = theme.value === 'dark'
   const [showReplyDialog, setShowReplyDialog] = useState(false)
@@ -100,6 +108,25 @@ export function ContextMenu({ session, position, actions, onClose }: ContextMenu
     [session.id, actions, onClose]
   )
 
+  const handleOpenParent = useCallback(() => {
+    if (session.parentId && actions.onOpenParent) {
+      actions.onOpenParent(session.parentId)
+    }
+    onClose()
+  }, [session.parentId, actions, onClose])
+
+  const handleViewInDag = useCallback(() => {
+    if (dagContext && actions.onViewInDag) {
+      actions.onViewInDag(dagContext.dagId, session.id)
+    }
+    onClose()
+  }, [dagContext, actions, session.id, onClose])
+
+  const handleRetry = useCallback(() => {
+    onClose()
+    actions.onSendReply(session.id, '/retry')
+  }, [session.id, actions, onClose])
+
   const handleConfirmStop = useCallback(async () => {
     await actions.onStopMinion(session.id)
     setShowStopConfirm(false)
@@ -120,7 +147,42 @@ export function ContextMenu({ session, position, actions, onClose }: ContextMenu
 
   const items: (MenuItemConfig | 'divider')[] = []
 
+  const hasParentNav = Boolean(session.parentId && actions.onOpenParent)
+  const hasDagNav = Boolean(dagContext && actions.onViewInDag)
+  const dagNodeFailed = dagContext?.nodeStatus === 'ci-failed' || dagContext?.nodeStatus === 'failed'
+  const sessionFailed = session.status === 'failed'
+  const canRetry = dagNodeFailed || sessionFailed
+
+  if (hasParentNav) {
+    items.push({
+      label: 'Open parent',
+      emoji: '↖',
+      variant: 'default',
+      onClick: handleOpenParent,
+    })
+  }
+
+  if (hasDagNav) {
+    items.push({
+      label: 'View in DAG',
+      emoji: '◇',
+      variant: 'default',
+      onClick: handleViewInDag,
+    })
+  }
+
+  if (canRetry) {
+    items.push({
+      label: 'Retry node',
+      emoji: '🔄',
+      variant: 'default',
+      onClick: handleRetry,
+      disabled: actions.isActionLoading,
+    })
+  }
+
   if (isActive) {
+    if (items.length > 0) items.push('divider')
     items.push({
       label: 'Send Reply',
       emoji: '✉️',

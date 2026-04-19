@@ -1,8 +1,10 @@
 import { useMemo, useCallback, useRef, useEffect, useState } from 'preact/hooks'
 import {
   ReactFlow,
+  ReactFlowProvider,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   Handle,
   Position,
 } from '@reactflow/core'
@@ -18,9 +20,14 @@ import type { ApiSession, ApiDagGraph } from '../api/types'
 import { StatusBadge, AttentionIconStack, getStatusColors, getAttentionBorder, formatRelativeTime } from './shared'
 import { PrLink } from './PrLink'
 import { ContextMenu, useLongPress, useContextMenu } from './ContextMenu'
-import type { ContextMenuActions } from './ContextMenu'
-import { layoutUniverse } from './universe-layout'
+import type { ContextMenuActions, DagContext } from './ContextMenu'
+import { layoutUniverse, NODE_WIDTH, NODE_HEIGHT } from './universe-layout'
 import type { UniverseEdge } from './universe-layout'
+
+const NODE_FULL_WIDTH = NODE_WIDTH
+const NODE_FULL_HEIGHT = NODE_HEIGHT
+const NODE_WIDTH_HALF = NODE_WIDTH / 2
+const NODE_HEIGHT_HALF = NODE_HEIGHT / 2
 import { NodeDetailPopup } from './NodeDetailPopup'
 import { useTheme } from '../hooks/useTheme'
 
@@ -160,7 +167,15 @@ export interface UniverseCanvasProps {
   accentColor?: string
 }
 
-export function UniverseCanvas({
+export function UniverseCanvas(props: UniverseCanvasProps) {
+  return (
+    <ReactFlowProvider>
+      <UniverseCanvasInner {...props} />
+    </ReactFlowProvider>
+  )
+}
+
+function UniverseCanvasInner({
   sessions,
   dags,
   isLoading = false,
@@ -177,6 +192,21 @@ export function UniverseCanvas({
   const contextMenu = useContextMenu()
   const [detailSession, setDetailSession] = useState<ApiSession | null>(null)
   const prevLayoutRef = useRef<{ nodes: Node[]; edges: UniverseEdge[] } | null>(null)
+  const reactFlow = useReactFlow()
+
+  const dagBySessionId = useMemo(() => {
+    const map = new Map<string, { dagId: string; nodeStatus: string }>()
+    for (const dag of dags) {
+      for (const node of Object.values(dag.nodes)) {
+        if (node.session) {
+          map.set(node.session.id, { dagId: dag.id, nodeStatus: node.status })
+        } else {
+          map.set(node.id, { dagId: dag.id, nodeStatus: node.status })
+        }
+      }
+    }
+    return map
+  }, [dags])
 
   useEffect(() => {
     if (detailSession) {
@@ -242,16 +272,63 @@ export function UniverseCanvas({
     }
   }, [layoutKey, nodesWithHandlers, layoutEdges, setNodes, setEdges])
 
+  const handleOpenParent = useCallback(
+    (parentId: string) => {
+      const parent = sessions.find((s) => s.id === parentId)
+      if (parent) {
+        setDetailSession(parent)
+        onNodeSelect?.(parent)
+      }
+      const layoutNode = layoutNodes.find((n) => n.id === parentId)
+      if (layoutNode) {
+        const cx = layoutNode.position.x + NODE_WIDTH_HALF
+        const cy = layoutNode.position.y + NODE_HEIGHT_HALF
+        reactFlow.setCenter(cx, cy, { zoom: 1, duration: 400 })
+      }
+    },
+    [sessions, onNodeSelect, layoutNodes, reactFlow]
+  )
+
+  const handleViewInDag = useCallback(
+    (dagId: string, _sessionId: string) => {
+      const dagNodes = layoutNodes.filter((n) => {
+        const data = n.data as { groupId?: string } | undefined
+        return data?.groupId === `dag-${dagId}`
+      })
+      if (dagNodes.length === 0) return
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      for (const node of dagNodes) {
+        const nodeMaxX = node.position.x + NODE_FULL_WIDTH
+        const nodeMaxY = node.position.y + NODE_FULL_HEIGHT
+        if (node.position.x < minX) minX = node.position.x
+        if (node.position.y < minY) minY = node.position.y
+        if (nodeMaxX > maxX) maxX = nodeMaxX
+        if (nodeMaxY > maxY) maxY = nodeMaxY
+      }
+      reactFlow.fitBounds({ x: minX, y: minY, width: maxX - minX, height: maxY - minY }, { padding: 0.2, duration: 400 })
+    },
+    [layoutNodes, reactFlow]
+  )
+
   const contextMenuActions: ContextMenuActions = useMemo(
     () => ({
       onSendReply,
       onStopMinion,
       onCloseSession,
       onOpenThread,
+      onOpenParent: handleOpenParent,
+      onViewInDag: handleViewInDag,
       isActionLoading,
     }),
-    [onSendReply, onStopMinion, onCloseSession, onOpenThread, isActionLoading]
+    [onSendReply, onStopMinion, onCloseSession, onOpenThread, handleOpenParent, handleViewInDag, isActionLoading]
   )
+
+  const activeDagContext: DagContext | null = contextMenu.state.session
+    ? dagBySessionId.get(contextMenu.state.session.id) ?? null
+    : null
 
   const statusColors = getStatusColors(isDark)
 
@@ -321,6 +398,7 @@ export function UniverseCanvas({
           position={contextMenu.state.position}
           actions={contextMenuActions}
           onClose={contextMenu.close}
+          dagContext={activeDagContext}
         />
       )}
 

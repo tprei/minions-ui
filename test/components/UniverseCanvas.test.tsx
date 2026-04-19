@@ -24,6 +24,12 @@ vi.mock('@reactflow/core', async () => {
         </div>
       )
     }),
+    ReactFlowProvider: vi.fn(({ children }) => <>{children}</>),
+    useReactFlow: vi.fn(() => ({
+      setCenter: vi.fn(),
+      fitBounds: vi.fn(),
+      fitView: vi.fn(),
+    })),
     useNodesState: vi.fn((initial: unknown[]) => [initial, vi.fn(), vi.fn()]),
     useEdgesState: vi.fn((initial: unknown[]) => [initial, vi.fn(), vi.fn()]),
     MarkerType: { ArrowClosed: 'arrowClosed' },
@@ -321,6 +327,101 @@ describe('UniverseCanvas', () => {
     if (node) {
       fireEvent.click(node)
       expect(onNodeSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 's1' }))
+    }
+  })
+
+  it('context menu shows "Open parent" for a child session', () => {
+    const parent = createSession({ id: 'parent-1', slug: 'parent-task', childIds: ['child-1'] })
+    const child = createSession({ id: 'child-1', slug: 'child-task', parentId: 'parent-1' })
+    render(<UniverseCanvas {...defaultProps} sessions={[parent, child]} />)
+
+    const node = document.querySelector('[data-testid="universe-node-child-1"]')
+    if (node) {
+      fireEvent.contextMenu(node.parentElement!, { clientX: 50, clientY: 50 })
+      expect(document.body.innerHTML).toContain('Open parent')
+    } else {
+      throw new Error('child node not found')
+    }
+  })
+
+  it('context menu shows "View in DAG" for a DAG-member session', () => {
+    const dag = createDag()
+    render(<UniverseCanvas {...defaultProps} dags={[dag]} />)
+
+    const node = document.querySelector('[data-testid="universe-node-dag-session-1"]')
+    if (node) {
+      fireEvent.contextMenu(node.parentElement!, { clientX: 50, clientY: 50 })
+      expect(document.body.innerHTML).toContain('View in DAG')
+    } else {
+      throw new Error('dag node not found')
+    }
+  })
+
+  it('context menu shows "Retry node" when DAG node status is ci-failed', () => {
+    const dag = createDag({
+      nodes: {
+        'node-1': {
+          id: 'node-1',
+          slug: 'dag-root',
+          status: 'ci-failed',
+          dependencies: [],
+          dependents: [],
+          session: createSession({ id: 'dag-session-1', slug: 'dag-root', status: 'running' }),
+        },
+      },
+    })
+    render(<UniverseCanvas {...defaultProps} dags={[dag]} />)
+
+    const node = document.querySelector('[data-testid="universe-node-dag-session-1"]')
+    if (node) {
+      fireEvent.contextMenu(node.parentElement!, { clientX: 50, clientY: 50 })
+      expect(document.body.innerHTML).toContain('Retry node')
+    } else {
+      throw new Error('dag node not found')
+    }
+  })
+
+  it('does not show "Open parent" for a standalone session', () => {
+    const sessions = [createSession({ id: 's1', slug: 'alone' })]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+
+    const node = document.querySelector('[data-testid="universe-node-s1"]')
+    if (node) {
+      fireEvent.contextMenu(node.parentElement!, { clientX: 50, clientY: 50 })
+      expect(document.body.innerHTML).not.toContain('Open parent')
+      expect(document.body.innerHTML).not.toContain('View in DAG')
+    }
+  })
+
+  it('retry click sends /retry via onSendReply', () => {
+    const onSendReply = vi.fn().mockResolvedValue(undefined)
+    const dag = createDag({
+      nodes: {
+        'node-1': {
+          id: 'node-1',
+          slug: 'dag-root',
+          status: 'ci-failed',
+          dependencies: [],
+          dependents: [],
+          session: createSession({ id: 'dag-session-1', slug: 'dag-root', status: 'running' }),
+        },
+      },
+    })
+    render(<UniverseCanvas {...defaultProps} dags={[dag]} onSendReply={onSendReply} />)
+
+    const node = document.querySelector('[data-testid="universe-node-dag-session-1"]')
+    if (node) {
+      fireEvent.contextMenu(node.parentElement!, { clientX: 50, clientY: 50 })
+      const retryButton = Array.from(document.querySelectorAll('button')).find(
+        (b) => b.textContent?.includes('Retry node')
+      )
+      expect(retryButton).toBeTruthy()
+      if (retryButton) {
+        fireEvent.click(retryButton)
+        expect(onSendReply).toHaveBeenCalledWith('dag-session-1', '/retry')
+      }
+    } else {
+      throw new Error('dag node not found')
     }
   })
 })
