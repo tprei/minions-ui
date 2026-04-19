@@ -263,6 +263,77 @@ describe('App view toggle', () => {
     expect(screen.queryByTestId('canvas-mobile-modal')).toBeNull()
   })
 
+  it('renders the Ship tab in the view toggle', async () => {
+    seedConnection()
+    stubFetch([session()])
+    await resetViewMode()
+    const App = (await import('../src/App')).default
+    render(<App />)
+
+    const toggle = await screen.findByTestId('view-toggle')
+    expect(within(toggle).getByTestId('view-toggle-ship')).toBeTruthy()
+  })
+
+  it('switches to ship view when Ship tab clicked on desktop', async () => {
+    seedConnection()
+    const shipDag: ApiDagGraph = {
+      id: 'ship-1',
+      rootTaskId: 'n1',
+      nodes: {
+        n1: { id: 'n1', slug: 'ship-node', status: 'landed', dependencies: [], dependents: [] },
+      },
+      status: 'running',
+      createdAt: '2024-01-01',
+      updatedAt: '2024-01-01',
+    }
+    stubFetch([session()], [shipDag])
+    await resetViewMode()
+    const App = (await import('../src/App')).default
+    render(<App />)
+
+    fireEvent.click(await screen.findByTestId('view-toggle-ship'))
+    const shipPane = await screen.findByTestId('ship-pane')
+    expect(shipPane).toBeTruthy()
+    expect(within(shipPane).getByTestId('ship-pipeline-board-ship-1')).toBeTruthy()
+  })
+
+  it('shows the empty ship state when no DAG qualifies as a ship pipeline', async () => {
+    seedConnection()
+    stubFetch([session()])
+    await resetViewMode()
+    const App = (await import('../src/App')).default
+    render(<App />)
+
+    fireEvent.click(await screen.findByTestId('view-toggle-ship'))
+    expect(await screen.findByTestId('ship-pipeline-empty')).toBeTruthy()
+  })
+
+  it('renders mobile full-screen ship modal with close button on mobile', async () => {
+    setDesktop(false)
+    seedConnection()
+    const shipDag: ApiDagGraph = {
+      id: 'ship-m',
+      rootTaskId: 'n1',
+      nodes: {
+        n1: { id: 'n1', slug: 'ship-node', status: 'landed', dependencies: [], dependents: [] },
+      },
+      status: 'running',
+      createdAt: '2024-01-01',
+      updatedAt: '2024-01-01',
+    }
+    stubFetch([session()], [shipDag])
+    await resetViewMode()
+    const App = (await import('../src/App')).default
+    render(<App />)
+
+    fireEvent.click(await screen.findByTestId('view-toggle-ship'))
+    const modal = await screen.findByTestId('ship-mobile-modal')
+    expect(modal).toBeTruthy()
+
+    fireEvent.click(within(modal).getByTestId('ship-mobile-close'))
+    expect(screen.queryByTestId('ship-mobile-modal')).toBeNull()
+  })
+
   it('canvas sendReply callback calls /api/messages', async () => {
     seedConnection()
     const { sendMessage } = stubFetch([session({ id: 's1', slug: 'brave-fox', quickActions: [{ type: 'retry', label: 'Retry', message: 'retry please' }] })])
