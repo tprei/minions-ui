@@ -34,6 +34,24 @@ function findParentSession(sessions: ApiSession[], dag: ApiDagGraph): ApiSession
   return null
 }
 
+// Returns the PR URL from the earliest node in topological order that has one.
+// Nodes without dependencies come first (stack/DAG base), then nodes whose
+// dependencies are already covered. `Object.values(graph.nodes)` iteration
+// order already follows insertion order, which the server emits topologically,
+// so a light dependency check is enough to skip isolated mid-chain entries.
+function firstNodePrUrl(nodes: ApiDagNode[]): string | undefined {
+  const covered = new Set<string>()
+  for (const n of nodes) {
+    const ready = n.dependencies.every((d) => covered.has(d))
+    if (ready && n.session?.prUrl) return n.session.prUrl
+    covered.add(n.id)
+  }
+  for (const n of nodes) {
+    if (n.session?.prUrl) return n.session.prUrl
+  }
+  return undefined
+}
+
 const DAG_NODE_COLORS: Record<ApiDagNode['status'], string> = {
   pending: 'bg-slate-300 dark:bg-slate-600',
   running: 'bg-blue-500 animate-pulse',
@@ -90,6 +108,13 @@ export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps
 
   const parentClickable = !!parent && !!onSelect && !isViewingParent
   const parentLabel = parent ? parent.slug || parent.id : `dag-${graph.id.replace(/^dag-/, '')}`
+
+  // Parent orchestrators (`/plan`, `/dag`) usually don't own a PR — each
+  // child does. Fall back to the first node's PR (topological base of the
+  // stack/DAG) so users can always jump to a representative PR from the
+  // panel header.
+  const headerPrUrl = parent?.prUrl ?? firstNodePrUrl(nodes)
+  const headerPrLabel = parent?.prUrl ? 'Parent PR' : 'First PR'
 
   return (
     <div
@@ -162,16 +187,18 @@ export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps
             )}
           </span>
         </button>
-        {parent?.prUrl && (
+        {headerPrUrl && (
           <a
-            href={parent.prUrl}
+            href={headerPrUrl}
             target="_blank"
             rel="noopener noreferrer"
-            class="flex items-center px-3 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
+            class="flex items-center gap-1 px-3 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
             data-testid="dag-status-parent-pr"
-            title="Open parent PR on GitHub"
+            title={`Open ${headerPrLabel.toLowerCase()} on GitHub`}
           >
-            PR ↗
+            <span class="hidden sm:inline">{headerPrLabel}</span>
+            <span class="sm:hidden">PR</span>
+            <span aria-hidden="true">↗</span>
           </a>
         )}
       </div>
