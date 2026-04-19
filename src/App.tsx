@@ -6,6 +6,7 @@ import { ConnectionSettings } from './connections/ConnectionSettings'
 import { ConnectionPicker } from './connections/ConnectionPicker'
 import { ConnectionsDrawer } from './connections/ConnectionsDrawer'
 import { ConversationView } from './chat/ConversationView'
+import { Transcript } from './chat/transcript'
 import { MessageInput } from './chat/MessageInput'
 import { NewTaskBar } from './chat/NewTaskBar'
 import { QuickActionsBar } from './chat/QuickActionsBar'
@@ -562,7 +563,11 @@ function ChatPane({
                 client={store.client}
               />
             )}
-            <ConversationView messages={session.conversation} />
+            {hasFeature(store, 'transcript') ? (
+              <TranscriptPane store={store} sessionId={session.id} />
+            ) : (
+              <ConversationView messages={session.conversation} />
+            )}
             <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
               <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />
               <SlashCommandMenu session={session} context={text} onCommand={handleSlashCommand} />
@@ -587,6 +592,20 @@ function ChatPane({
       </SessionTabs>
     </div>
   )
+}
+
+function TranscriptPane({ store, sessionId }: { store: ConnectionStore; sessionId: string }) {
+  const transcript = store.getTranscript(sessionId)
+  if (!transcript) {
+    return (
+      <div class="flex-1 flex items-center justify-center px-4 py-8 bg-slate-50 dark:bg-slate-900">
+        <div class="text-xs text-slate-500 dark:text-slate-400 italic">
+          Transcript unavailable for this session.
+        </div>
+      </div>
+    )
+  }
+  return <Transcript store={transcript} />
 }
 
 function EmptyPane() {

@@ -109,4 +109,33 @@ describe('MessageInput', () => {
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2))
     expect(onSend).toHaveBeenNthCalledWith(2, 'retry me')
   })
+
+  it('renders the composer toolbar with kbd hints', () => {
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    const toolbar = screen.getByTestId('composer-toolbar')
+    expect(toolbar.textContent).toContain('Enter')
+    expect(toolbar.textContent).toContain('send')
+    expect(toolbar.textContent).toContain('newline')
+  })
+
+  it('shows char count when text is entered', () => {
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    expect(screen.queryByTestId('composer-char-count')).toBeNull()
+    fireEvent.input(getTextarea(), { target: { value: 'hello' } })
+    expect(screen.getByTestId('composer-char-count').textContent).toBe('5')
+  })
+
+  it('shows slash command indicator when input begins with /', () => {
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    expect(screen.queryByTestId('composer-slash-indicator')).toBeNull()
+    fireEvent.input(getTextarea(), { target: { value: '/stop' } })
+    expect(screen.getByTestId('composer-slash-indicator')).toBeTruthy()
+  })
+
+  it('uses agent-focused placeholder copy (no Telegram phrasing)', () => {
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    const placeholder = getTextarea().getAttribute('placeholder') ?? ''
+    expect(placeholder.toLowerCase()).not.toContain('telegram')
+    expect(placeholder).toContain('agent')
+  })
 })
