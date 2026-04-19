@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/preact'
+import { render, screen, fireEvent } from '@testing-library/preact'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ConversationView } from '../../src/chat/ConversationView'
 import type { ConversationMessage } from '../../src/api/types'
@@ -74,14 +74,17 @@ describe('ConversationView', () => {
     expect(scrollToBottomSpy).toHaveBeenCalled()
   })
 
-  it('does not scroll when user is scrolled up', () => {
-    const scrollToBottomSpy = vi.fn()
+  it('does not scroll when user has scrolled up', () => {
     const { rerender } = render(
       <ConversationView messages={[{ role: 'user', text: 'first' }]} />
     )
     const container = screen.getByTestId('conversation-view')
     Object.defineProperty(container, 'clientHeight', { writable: true, configurable: true, value: 200 })
     Object.defineProperty(container, 'scrollHeight', { writable: true, configurable: true, value: 800 })
+    Object.defineProperty(container, 'scrollTop', { writable: true, configurable: true, value: 0 })
+    fireEvent.scroll(container)
+
+    const scrollToBottomSpy = vi.fn()
     Object.defineProperty(container, 'scrollTop', {
       set: scrollToBottomSpy,
       get: () => 0,
@@ -94,5 +97,74 @@ describe('ConversationView', () => {
     ]} />)
 
     expect(scrollToBottomSpy).not.toHaveBeenCalled()
+  })
+
+  it('shows jump-to-latest button when user scrolls up', () => {
+    render(<ConversationView messages={makeMessages([{ role: 'user', text: 'first' }])} />)
+    const container = screen.getByTestId('conversation-view')
+    Object.defineProperty(container, 'clientHeight', { writable: true, configurable: true, value: 200 })
+    Object.defineProperty(container, 'scrollHeight', { writable: true, configurable: true, value: 800 })
+    Object.defineProperty(container, 'scrollTop', { writable: true, configurable: true, value: 0 })
+
+    expect(screen.queryByTestId('jump-to-latest')).toBeNull()
+    fireEvent.scroll(container)
+    expect(screen.getByTestId('jump-to-latest')).toBeTruthy()
+  })
+
+  it('hides jump-to-latest button when user is near bottom', () => {
+    render(<ConversationView messages={makeMessages([{ role: 'user', text: 'first' }])} />)
+    const container = screen.getByTestId('conversation-view')
+    Object.defineProperty(container, 'clientHeight', { writable: true, configurable: true, value: 200 })
+    Object.defineProperty(container, 'scrollHeight', { writable: true, configurable: true, value: 800 })
+    Object.defineProperty(container, 'scrollTop', { writable: true, configurable: true, value: 0 })
+
+    fireEvent.scroll(container)
+    expect(screen.getByTestId('jump-to-latest')).toBeTruthy()
+
+    Object.defineProperty(container, 'scrollTop', { writable: true, configurable: true, value: 600 })
+    fireEvent.scroll(container)
+    expect(screen.queryByTestId('jump-to-latest')).toBeNull()
+  })
+
+  it('jump-to-latest button scrolls to bottom and resumes auto-follow', () => {
+    const { rerender } = render(
+      <ConversationView messages={makeMessages([{ role: 'user', text: 'first' }])} />
+    )
+    const container = screen.getByTestId('conversation-view')
+    Object.defineProperty(container, 'clientHeight', { writable: true, configurable: true, value: 200 })
+    Object.defineProperty(container, 'scrollHeight', { writable: true, configurable: true, value: 800 })
+    let currentScrollTop = 0
+    const scrollSpy = vi.fn((v: number) => { currentScrollTop = v })
+    Object.defineProperty(container, 'scrollTop', {
+      configurable: true,
+      get: () => currentScrollTop,
+      set: scrollSpy,
+    })
+
+    fireEvent.scroll(container)
+    const button = screen.getByTestId('jump-to-latest')
+    fireEvent.click(button)
+
+    expect(scrollSpy).toHaveBeenCalledWith(800)
+    expect(screen.queryByTestId('jump-to-latest')).toBeNull()
+
+    scrollSpy.mockClear()
+    Object.defineProperty(container, 'scrollHeight', { writable: true, configurable: true, value: 1200 })
+    rerender(<ConversationView messages={[
+      { role: 'user', text: 'first' },
+      { role: 'assistant', text: 'second' },
+    ]} />)
+
+    expect(scrollSpy).toHaveBeenCalledWith(1200)
+  })
+
+  it('does not show jump-to-latest button when there are no messages', () => {
+    render(<ConversationView messages={[]} />)
+    const container = screen.getByTestId('conversation-view')
+    Object.defineProperty(container, 'clientHeight', { writable: true, configurable: true, value: 200 })
+    Object.defineProperty(container, 'scrollHeight', { writable: true, configurable: true, value: 800 })
+    Object.defineProperty(container, 'scrollTop', { writable: true, configurable: true, value: 0 })
+    fireEvent.scroll(container)
+    expect(screen.queryByTestId('jump-to-latest')).toBeNull()
   })
 })
