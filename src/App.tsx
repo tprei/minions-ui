@@ -1,5 +1,5 @@
 import { signal, useSignal } from '@preact/signals'
-import { useState, useEffect, useMemo } from 'preact/hooks'
+import { useState, useEffect, useMemo, useCallback } from 'preact/hooks'
 import { useRegisterSW } from 'virtual:pwa-register/preact'
 import { connections, activeId, getActiveStore } from './connections/store'
 import { ConnectionSettings } from './connections/ConnectionSettings'
@@ -14,10 +14,48 @@ import { ConfirmRoot } from './hooks/useConfirm'
 import { InstallPrompt } from './pwa/InstallPrompt'
 import { useOnlineStatus } from './pwa/useOnlineStatus'
 import { useMediaQuery } from './hooks/useMediaQuery'
+import { UniverseCanvas } from './components/UniverseCanvas'
 import type { ApiSession, MinionCommand, QuickAction, RepoEntry } from './api/types'
+
+export type ViewMode = 'list' | 'canvas'
 
 const showSettings = signal(false)
 const showDrawer = signal(false)
+const viewMode = signal<ViewMode>('list')
+
+function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (next: ViewMode) => void }) {
+  const baseBtn = 'px-2 py-1 text-xs font-medium transition-colors'
+  const activeBtn = 'bg-indigo-600 text-white'
+  const idleBtn = 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+  return (
+    <div
+      class="inline-flex rounded-md border border-slate-300 dark:border-slate-600 overflow-hidden"
+      role="group"
+      aria-label="View mode"
+    >
+      <button
+        type="button"
+        onClick={() => onChange('list')}
+        aria-pressed={mode === 'list'}
+        title="Show sessions as a list with inline chat"
+        class={`${baseBtn} ${mode === 'list' ? activeBtn : idleBtn}`}
+        data-testid="view-toggle-list"
+      >
+        List
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('canvas')}
+        aria-pressed={mode === 'canvas'}
+        title="Show the universe canvas with DAGs and trees"
+        class={`${baseBtn} ${mode === 'canvas' ? activeBtn : idleBtn}`}
+        data-testid="view-toggle-canvas"
+      >
+        Canvas
+      </button>
+    </div>
+  )
+}
 
 function ConnectionStatusBadge({ status }: { status: string }) {
   const color =
@@ -337,17 +375,63 @@ function ActiveView() {
   const store = id ? getActiveStore() : null
   const conn = connections.value.find((c) => c.id === id)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
   const isOnline = useOnlineStatus()
   const isDesktop = useMediaQuery('(min-width: 768px)')
+  const mode = viewMode.value
 
   useEffect(() => {
     const color = conn?.color ?? '#3b82f6'
     document.documentElement.style.setProperty('--accent', color)
   }, [conn?.color])
 
+  const openSessionInChat = useCallback((sid: string) => {
+    setSessionId(sid)
+    viewMode.value = 'list'
+  }, [])
+
+  const handleCanvasOpenThread = useCallback((s: ApiSession) => {
+    openSessionInChat(s.id)
+  }, [openSessionInChat])
+
+  const handleCanvasOpenChat = useCallback((sid: string) => {
+    openSessionInChat(sid)
+  }, [openSessionInChat])
+
+  const handleCanvasSendReply = useCallback(async (sid: string, message: string) => {
+    if (!store) return
+    setActionLoading(true)
+    try {
+      await store.client.sendMessage(message, sid)
+    } finally {
+      setActionLoading(false)
+    }
+  }, [store])
+
+  const handleCanvasStop = useCallback(async (sid: string) => {
+    if (!store) return
+    setActionLoading(true)
+    try {
+      await store.sendCommand({ action: 'stop', sessionId: sid })
+    } finally {
+      setActionLoading(false)
+    }
+  }, [store])
+
+  const handleCanvasClose = useCallback(async (sid: string) => {
+    if (!store) return
+    setActionLoading(true)
+    try {
+      await store.sendCommand({ action: 'close', sessionId: sid })
+    } finally {
+      setActionLoading(false)
+    }
+  }, [store])
+
   if (!store || !conn) return null
 
   const sessions = store.sessions.value
+  const dags = store.dags.value
   const selected = sessionId ? sessions.find((s) => s.id === sessionId) ?? null : null
 
   const handleSendMessage = async (text: string, sid: string) => {
@@ -374,15 +458,18 @@ function ActiveView() {
       <header class="flex items-center gap-3 px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
         <ConnectionPicker onManage={() => { showDrawer.value = true }} />
         <ConnectionStatusBadge status={store.status.value} />
-        <button
-          type="button"
-          onClick={() => void store.refresh()}
-          class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
-          title="Refetch sessions and DAGs from the minion"
-          data-testid="header-refresh-btn"
-        >
-          Refresh
-        </button>
+        <div class="ml-auto flex items-center gap-2">
+          <ViewToggle mode={mode} onChange={(next) => { viewMode.value = next }} />
+          <button
+            type="button"
+            onClick={() => void store.refresh()}
+            class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+            title="Refetch sessions and DAGs from the minion"
+            data-testid="header-refresh-btn"
+          >
+            Refresh
+          </button>
+        </div>
       </header>
       {store.error.value && (
         <div class="flex items-center gap-3 px-4 py-2 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 shrink-0">
@@ -391,7 +478,21 @@ function ActiveView() {
         </div>
       )}
       <NewTaskBar repos={store.version.value?.repos ?? []} onSend={handleNewTask} />
-      {isDesktop.value ? (
+      {mode === 'canvas' && isDesktop.value ? (
+        <div class="flex-1 min-h-0 bg-slate-50 dark:bg-slate-900" data-testid="canvas-pane">
+          <UniverseCanvas
+            sessions={sessions}
+            dags={dags}
+            onSendReply={handleCanvasSendReply}
+            onStopMinion={handleCanvasStop}
+            onCloseSession={handleCanvasClose}
+            onOpenThread={handleCanvasOpenThread}
+            onOpenChat={handleCanvasOpenChat}
+            isActionLoading={actionLoading}
+            accentColor={conn.color}
+          />
+        </div>
+      ) : isDesktop.value ? (
         <div class="flex flex-1 min-h-0">
           <aside class="w-72 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-y-auto shrink-0">
             <SessionList
@@ -420,6 +521,41 @@ function ActiveView() {
           ) : (
             <EmptyPane />
           )}
+        </div>
+      )}
+      {mode === 'canvas' && !isDesktop.value && (
+        <div
+          class="fixed inset-0 z-40 flex flex-col bg-white dark:bg-slate-900"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Universe canvas"
+          data-testid="canvas-modal"
+        >
+          <header class="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
+            <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">Universe</span>
+            <button
+              type="button"
+              onClick={() => { viewMode.value = 'list' }}
+              class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+              aria-label="Close canvas"
+              data-testid="canvas-modal-close"
+            >
+              Close
+            </button>
+          </header>
+          <div class="flex-1 min-h-0 overflow-hidden">
+            <UniverseCanvas
+              sessions={sessions}
+              dags={dags}
+              onSendReply={handleCanvasSendReply}
+              onStopMinion={handleCanvasStop}
+              onCloseSession={handleCanvasClose}
+              onOpenThread={handleCanvasOpenThread}
+              onOpenChat={handleCanvasOpenChat}
+              isActionLoading={actionLoading}
+              accentColor={conn.color}
+            />
+          </div>
         </div>
       )}
       {showDrawer.value && (
