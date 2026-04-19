@@ -116,8 +116,17 @@ function SessionItem({
   const borderLeft = indent > 0 ? { borderLeft: '2px solid rgb(148 163 184 / 0.35)' } : undefined
   const flash = useFlashOnChange(session)
   const combinedFlash = flash ?? (active ? 'focus' : undefined)
+  const rowRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!active) return
+    const node = rowRef.current
+    if (node && typeof node.scrollIntoView === 'function') {
+      node.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
+    }
+  }, [active, session.id])
   return (
     <div
+      ref={rowRef}
       style={{ marginLeft, ...borderLeft }}
       data-flash={combinedFlash ?? undefined}
       data-session-id={session.id}
@@ -208,6 +217,24 @@ function SessionList({
     [sessions]
   )
   const groups = useMemo(() => buildSessionGroups(sorted, dags), [sorted, dags])
+  // Map every session id to its kind (parent / child / variant) so the
+  // horizontal mobile strip can render the same P / C / V badges as the
+  // vertical desktop sidebar. Undefined for standalone sessions.
+  const kindById = useMemo(() => {
+    const m = new Map<string, NonNullable<SessionItemKind>>()
+    for (const g of groups) {
+      if (g.kind === 'dag') {
+        if (g.parent) m.set(g.parent.id, 'parent')
+        for (const c of g.children) m.set(c.id, 'child')
+      } else if (g.kind === 'parent-child') {
+        m.set(g.parent.id, 'parent')
+        for (const c of g.children) m.set(c.id, 'child')
+      } else if (g.kind === 'variant') {
+        for (const s of g.sessions) m.set(s.id, 'variant')
+      }
+    }
+    return m
+  }, [groups])
 
   if (sorted.length === 0) {
     return (
@@ -225,6 +252,7 @@ function SessionList({
               session={s}
               active={activeSessionId === s.id}
               onSelect={() => onSelect(s.id)}
+              kind={kindById.get(s.id)}
             />
           </div>
         ))}
@@ -553,7 +581,9 @@ function DesktopBody({
     const aside = asideRef.current
     if (!aside) return
     const row = aside.querySelector<HTMLElement>(`[data-session-id="${sessionId}"]`)
-    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    if (row && typeof row.scrollIntoView === 'function') {
+      row.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
   }, [sessionId])
 
   return (
@@ -609,6 +639,16 @@ function MobileSessionStrip({
     setCollapsed(next)
     try { localStorage.setItem('minions-ui:mobile-strip-collapsed', String(next)) } catch { /* ignore */ }
   }
+
+  // Auto-expand when the active session changes so the user can actually see
+  // the focus-pulse + horizontal scroll-into-view. The preference is not
+  // persisted on this code path — manual collapses still stick.
+  useEffect(() => {
+    if (!activeSessionId) return
+    if (collapsed) setCollapsed(false)
+    // Intentionally not persisting here; user's explicit collapse wins on next
+    // navigation if they toggle again.
+  }, [activeSessionId])
 
   if (sessions.length === 0) {
     return (
@@ -757,6 +797,7 @@ function ActiveView() {
               store={store}
               onSend={handleSendMessage}
               onCommand={handleCommand}
+              onNavigate={setSessionId}
             />
           ) : (
             <EmptyPane />
