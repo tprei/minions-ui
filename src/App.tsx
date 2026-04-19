@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals'
-import { useState, useEffect, useMemo } from 'preact/hooks'
+import { useState, useEffect, useMemo, useRef } from 'preact/hooks'
 import { useRegisterSW } from 'virtual:pwa-register/preact'
 import { connections, activeId, getActiveStore } from './connections/store'
 import { ConnectionSettings } from './connections/ConnectionSettings'
@@ -22,6 +22,9 @@ import { InstallPrompt } from './pwa/InstallPrompt'
 import { useOnlineStatus } from './pwa/useOnlineStatus'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { WorktreeHeader } from './components/WorktreeHeader'
+import { DagStatusPanel } from './chat/DagStatusPanel'
+import { buildSessionGroups, type SessionGroup } from './state/hierarchy'
+import type { ApiDagGraph } from './api/types'
 import { currentRoute } from './routing/current'
 import { VariantGroupView } from './groups/VariantGroupView'
 import type { ApiSession, MinionCommand, QuickAction } from './api/types'
@@ -53,7 +56,48 @@ function statusDot(status: ApiSession['status']): string {
   return 'bg-slate-400'
 }
 
-function SessionItem({ session, active, onSelect }: { session: ApiSession; active: boolean; onSelect: () => void }) {
+function useFlashOnChange(session: ApiSession): 'success' | 'fail' | 'update' | null {
+  const [flash, setFlash] = useState<'success' | 'fail' | 'update' | null>(null)
+  const prev = useRef({ status: session.status, updatedAt: session.updatedAt, mounted: false })
+
+  useEffect(() => {
+    const p = prev.current
+    if (!p.mounted) {
+      p.mounted = true
+      p.status = session.status
+      p.updatedAt = session.updatedAt
+      return
+    }
+    let next: 'success' | 'fail' | 'update' | null = null
+    if (p.status !== session.status) {
+      if (session.status === 'completed') next = 'success'
+      else if (session.status === 'failed') next = 'fail'
+      else next = 'update'
+    } else if (p.updatedAt !== session.updatedAt) {
+      next = 'update'
+    }
+    p.status = session.status
+    p.updatedAt = session.updatedAt
+    if (!next) return
+    setFlash(next)
+    const timer = setTimeout(() => setFlash(null), 900)
+    return () => clearTimeout(timer)
+  }, [session.status, session.updatedAt])
+
+  return flash
+}
+
+function SessionItem({
+  session,
+  active,
+  onSelect,
+  indent = 0,
+}: {
+  session: ApiSession
+  active: boolean
+  onSelect: () => void
+  indent?: number
+}) {
   const preview = session.conversation.length > 0
     ? session.conversation[session.conversation.length - 1].text.slice(0, 60)
     : session.command.slice(0, 60)
@@ -61,21 +105,52 @@ function SessionItem({ session, active, onSelect }: { session: ApiSession; activ
   const active_ = active
     ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700'
     : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+  const marginLeft = indent > 0 ? `${indent * 16}px` : undefined
+  const borderLeft = indent > 0 ? { borderLeft: '2px solid rgb(148 163 184 / 0.35)' } : undefined
+  const flash = useFlashOnChange(session)
   return (
-    <button class={`${baseClasses} ${active_}`} onClick={onSelect} data-testid={`session-item-${session.id}`}>
-      <div class="flex items-center gap-2">
-        <span class={`inline-block h-2 w-2 rounded-full shrink-0 ${statusDot(session.status)}`} />
-        <span class="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
-        {session.repo && (
-          <span class="text-[10px] font-mono rounded bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 text-slate-600 dark:text-slate-300 truncate">
-            {shortRepo(session.repo)}
-          </span>
-        )}
-        <span class="ml-auto text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{session.status}</span>
-      </div>
-      <div class="text-xs text-slate-600 dark:text-slate-400 truncate">{preview || '—'}</div>
-    </button>
+    <div style={{ marginLeft, ...borderLeft }} data-flash={flash ?? undefined} data-testid={`session-row-${session.id}`}>
+      <button
+        class={`${baseClasses} ${active_}`}
+        onClick={onSelect}
+        data-testid={`session-item-${session.id}`}
+      >
+        <div class="flex items-center gap-2">
+          <span class={`inline-block h-2 w-2 rounded-full shrink-0 ${statusDot(session.status)}`} />
+          <span class="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
+          {session.repo && (
+            <span class="text-[10px] font-mono rounded bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 text-slate-600 dark:text-slate-300 truncate">
+              {shortRepo(session.repo)}
+            </span>
+          )}
+          <span class="ml-auto text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{session.status}</span>
+        </div>
+        <div class="text-xs text-slate-600 dark:text-slate-400 truncate">{preview || '—'}</div>
+      </button>
+    </div>
   )
+}
+
+function GroupHeader({ label, count, tone = 'default' }: { label: string; count: number; tone?: 'default' | 'dag' | 'variant' }) {
+  const toneClass =
+    tone === 'dag'
+      ? 'text-indigo-700 dark:text-indigo-300'
+      : tone === 'variant'
+        ? 'text-fuchsia-700 dark:text-fuchsia-300'
+        : 'text-slate-500 dark:text-slate-400'
+  return (
+    <div class={`flex items-center gap-2 px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider font-semibold ${toneClass}`}>
+      <span>{label}</span>
+      <span class="text-slate-400 dark:text-slate-500 font-normal">· {count}</span>
+    </div>
+  )
+}
+
+function dagStatusTone(status: ApiDagGraph['status']): string {
+  if (status === 'running') return 'text-blue-600 dark:text-blue-400'
+  if (status === 'completed') return 'text-green-600 dark:text-green-400'
+  if (status === 'failed') return 'text-red-600 dark:text-red-400'
+  return 'text-slate-500 dark:text-slate-400'
 }
 
 function shortRepo(repoUrl: string): string {
@@ -85,11 +160,13 @@ function shortRepo(repoUrl: string): string {
 
 function SessionList({
   sessions,
+  dags,
   activeSessionId,
   onSelect,
   orientation,
 }: {
   sessions: ApiSession[]
+  dags: ApiDagGraph[]
   activeSessionId: string | null
   onSelect: (id: string) => void
   orientation: 'vertical' | 'horizontal'
@@ -98,6 +175,8 @@ function SessionList({
     () => [...sessions].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
     [sessions]
   )
+  const groups = useMemo(() => buildSessionGroups(sorted, dags), [sorted, dags])
+
   if (sorted.length === 0) {
     return (
       <div class="text-xs text-slate-500 dark:text-slate-400 p-3 italic">
@@ -121,15 +200,116 @@ function SessionList({
     )
   }
   return (
-    <div class="flex flex-col gap-1 p-2 overflow-y-auto">
-      {sorted.map((s) => (
-        <SessionItem
-          key={s.id}
-          session={s}
-          active={activeSessionId === s.id}
-          onSelect={() => onSelect(s.id)}
+    <div class="flex flex-col overflow-y-auto" data-testid="session-list">
+      {groups.map((g) => (
+        <GroupView
+          key={groupKey(g)}
+          group={g}
+          activeSessionId={activeSessionId}
+          onSelect={onSelect}
         />
       ))}
+    </div>
+  )
+}
+
+function groupKey(g: SessionGroup): string {
+  switch (g.kind) {
+    case 'dag': return `dag:${g.dag.id}`
+    case 'parent-child': return `pc:${g.parent.id}`
+    case 'variant': return `var:${g.groupId}`
+    case 'standalone': return `s:${g.session.id}`
+  }
+}
+
+function GroupView({
+  group,
+  activeSessionId,
+  onSelect,
+}: {
+  group: SessionGroup
+  activeSessionId: string | null
+  onSelect: (id: string) => void
+}) {
+  if (group.kind === 'dag') {
+    const dag = group.dag
+    const total = Object.keys(dag.nodes).length
+    return (
+      <>
+        <div class="flex items-center gap-2 px-3 pt-3 pb-1" data-testid={`group-dag-${dag.id}`}>
+          <span class="text-[10px] uppercase tracking-wider font-semibold text-indigo-700 dark:text-indigo-300">DAG</span>
+          <span class="font-mono text-[11px] text-slate-600 dark:text-slate-300 truncate">{dag.id.replace(/^dag-/, '')}</span>
+          <span class={`ml-auto text-[10px] font-medium ${dagStatusTone(dag.status)}`}>{dag.status} · {total}</span>
+        </div>
+        <div class="flex flex-col gap-1 p-2 pt-1">
+          {group.parent && (
+            <SessionItem
+              session={group.parent}
+              active={activeSessionId === group.parent.id}
+              onSelect={() => onSelect(group.parent!.id)}
+            />
+          )}
+          {group.children.map((s) => (
+            <SessionItem
+              key={s.id}
+              session={s}
+              active={activeSessionId === s.id}
+              onSelect={() => onSelect(s.id)}
+              indent={1}
+            />
+          ))}
+        </div>
+      </>
+    )
+  }
+  if (group.kind === 'parent-child') {
+    return (
+      <>
+        <GroupHeader label="Parent" count={1 + group.children.length} />
+        <div class="flex flex-col gap-1 p-2 pt-1">
+          <SessionItem
+            session={group.parent}
+            active={activeSessionId === group.parent.id}
+            onSelect={() => onSelect(group.parent.id)}
+          />
+          {group.children.map((s) => (
+            <SessionItem
+              key={s.id}
+              session={s}
+              active={activeSessionId === s.id}
+              onSelect={() => onSelect(s.id)}
+              indent={1}
+            />
+          ))}
+        </div>
+      </>
+    )
+  }
+  if (group.kind === 'variant') {
+    return (
+      <>
+        <GroupHeader label={`Variants`} count={group.sessions.length} tone="variant" />
+        <div class="flex flex-col gap-1 p-2 pt-1">
+          {group.sessions.map((s) => (
+            <SessionItem
+              key={s.id}
+              session={s}
+              active={activeSessionId === s.id}
+              onSelect={() => onSelect(s.id)}
+              indent={1}
+            />
+          ))}
+        </div>
+      </>
+    )
+  }
+  return (
+    <div class="px-2 py-0.5">
+      <SessionItem
+        session={group.session}
+        active={activeSessionId === group.session.id}
+        onSelect={() => onSelect(group.session.id)}
+      />
     </div>
   )
 }
@@ -243,6 +423,7 @@ function ChatPane({
         </div>
       </header>
       <WorktreeHeader session={session} store={store} />
+      <DagStatusPanel session={session} store={store} />
       <SessionTabs
         tabs={[
           { id: 'chat', label: 'Chat', available: true },
@@ -368,6 +549,7 @@ function ActiveView() {
           <aside class="w-72 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-y-auto shrink-0">
             <SessionList
               sessions={sessions}
+              dags={store.dags.value}
               activeSessionId={sessionId}
               onSelect={setSessionId}
               orientation="vertical"
@@ -383,6 +565,7 @@ function ActiveView() {
         <div class="flex flex-col flex-1 min-h-0">
           <SessionList
             sessions={sessions}
+            dags={store.dags.value}
             activeSessionId={sessionId}
             onSelect={setSessionId}
             orientation="horizontal"

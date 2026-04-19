@@ -127,21 +127,31 @@ describe('ApiClient — getPr / getDiff / listScreenshots', () => {
     expect(url).toBe(`${BASE_URL}/api/sessions/${encodeURIComponent('weird id/with/slashes')}/pr`)
   })
 
-  it('getDiff returns workspace diff', async () => {
-    const diff: WorkspaceDiff = {
-      sessionId: 's-1',
-      branch: 'feature',
-      baseBranch: 'main',
-      patch: '--- a\n+++ b\n',
-      truncated: false,
-      stats: { filesChanged: 1, insertions: 3, deletions: 1 },
-    }
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: diff }))
+  it('getDiff maps the wire shape to the UI shape and derives stats from the patch', async () => {
+    const patch = [
+      'diff --git a/foo b/foo',
+      '--- a/foo',
+      '+++ b/foo',
+      '@@ -1,1 +1,3 @@',
+      '-x',
+      '+a',
+      '+b',
+      '+c',
+      '',
+    ].join('\n')
+    const wire = { base: 'main', head: 'feature', patch, truncated: false }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: wire }))
     vi.stubGlobal('fetch', fetchMock)
 
     const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
-    const out = await client.getDiff('s-1')
-    expect(out).toEqual(diff)
+    const out: WorkspaceDiff = await client.getDiff('s-1')
+    expect(out).toEqual({
+      branch: 'feature',
+      baseBranch: 'main',
+      patch,
+      truncated: false,
+      stats: { filesChanged: 1, insertions: 3, deletions: 1 },
+    })
   })
 
   it('listScreenshots returns list shape', async () => {

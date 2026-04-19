@@ -71,17 +71,24 @@ describe('mock-minion integration', () => {
 
   it('getDiff returns the stored workspace diff when flag on', async () => {
     minion.setVersion({ features: ['diff-viewer'] })
-    const diff: WorkspaceDiff = {
-      sessionId: 's-1',
+    const patch = [
+      'diff --git a/x b/x',
+      '--- a/x',
+      '+++ b/x',
+      '@@ -1,1 +1,2 @@',
+      '+a',
+      '+b',
+      '',
+    ].join('\n')
+    minion.setDiff('s-1', { base: 'main', head: 'feat', patch, truncated: false })
+    const out: WorkspaceDiff = await client.getDiff('s-1')
+    expect(out).toEqual({
       branch: 'feat',
       baseBranch: 'main',
-      patch: 'diff --git a/x b/x',
+      patch,
       truncated: false,
       stats: { filesChanged: 1, insertions: 2, deletions: 0 },
-    }
-    minion.setDiff('s-1', diff)
-    const out = await client.getDiff('s-1')
-    expect(out).toEqual(diff)
+    })
   })
 
   it('listScreenshots + fetchScreenshotBlob round-trip', async () => {

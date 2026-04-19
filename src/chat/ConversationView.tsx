@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { ConversationMessage } from '../api/types'
 import { renderMarkdown } from '../components/markdown'
+import { isOrchestratorStatus } from './orchestrator-filter'
 
 interface ConversationViewProps {
   messages: ConversationMessage[]
@@ -35,8 +36,13 @@ const NEAR_BOTTOM_PX = 120
 
 export function ConversationView({ messages }: ConversationViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const prevLengthRef = useRef(messages.length)
   const [following, setFollowing] = useState(true)
+
+  const visible = useMemo(
+    () => messages.filter((m) => !(m.role === 'assistant' && isOrchestratorStatus(m.text))),
+    [messages],
+  )
+  const prevLengthRef = useRef(visible.length)
 
   useEffect(() => {
     const el = scrollRef.current
@@ -48,10 +54,10 @@ export function ConversationView({ messages }: ConversationViewProps) {
     const el = scrollRef.current
     if (!el) return
     const prevLen = prevLengthRef.current
-    prevLengthRef.current = messages.length
-    if (messages.length <= prevLen) return
+    prevLengthRef.current = visible.length
+    if (visible.length <= prevLen) return
     if (following) el.scrollTop = el.scrollHeight
-  }, [messages.length, following])
+  }, [visible.length, following])
 
   function handleScroll() {
     const el = scrollRef.current
@@ -75,12 +81,12 @@ export function ConversationView({ messages }: ConversationViewProps) {
         class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 bg-slate-50 dark:bg-slate-900"
         data-testid="conversation-view"
       >
-        {messages.length === 0 && (
+        {visible.length === 0 && (
           <div class="text-xs text-slate-500 dark:text-slate-400 italic text-center py-8">
             No messages yet.
           </div>
         )}
-        {messages.map((msg, idx) =>
+        {visible.map((msg, idx) =>
           msg.role === 'assistant' ? (
             <AssistantMessage key={idx} text={msg.text} />
           ) : (
@@ -88,7 +94,7 @@ export function ConversationView({ messages }: ConversationViewProps) {
           )
         )}
       </div>
-      {!following && messages.length > 0 && (
+      {!following && visible.length > 0 && (
         <button
           type="button"
           onClick={jumpToLatest}

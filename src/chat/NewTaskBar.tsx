@@ -159,12 +159,17 @@ export function NewTaskBar({ store, navigate = defaultNavigate }: NewTaskBarProp
         )}
 
         <div
-          class="flex items-center gap-1 ml-auto"
+          class="flex items-center gap-1.5 ml-auto"
           role="group"
           aria-label="Variant count"
           data-testid="variant-count"
         >
-          <span class="text-xs text-slate-500 dark:text-slate-400">×</span>
+          <span
+            class={`text-xs ${canVariants ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}
+            title={canVariants ? 'How many parallel variants to spawn' : 'Parallel variants need library ≥ 1.111'}
+          >
+            Variants
+          </span>
           {VARIANT_COUNTS.map((n) => {
             const active = variantCount.value === n
             const gated = n > 1 && !canVariants
@@ -182,7 +187,7 @@ export function NewTaskBar({ store, navigate = defaultNavigate }: NewTaskBarProp
                 aria-pressed={active}
                 class={`h-7 min-w-7 rounded-full border px-2 text-xs font-medium transition-colors disabled:opacity-40 ${btnClass}`}
               >
-                {n}
+                ×{n}
               </button>
             )
           })}

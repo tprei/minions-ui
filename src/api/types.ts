@@ -135,8 +135,16 @@ export interface WorkspaceDiffStats {
   deletions: number
 }
 
+// Wire-shape returned by `GET /api/sessions/:id/diff`. The UI-side
+// `WorkspaceDiff` layered on top of it decorates with derived stats.
+export interface WireWorkspaceDiff {
+  base: string
+  head: string
+  patch: string
+  truncated: boolean
+}
+
 export interface WorkspaceDiff {
-  sessionId: string
   branch: string
   baseBranch: string
   patch: string
