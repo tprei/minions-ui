@@ -8,7 +8,7 @@ import {
   resetVariantGroupsForTests,
 } from '../../src/groups/store'
 import { ConfirmRoot } from '../../src/hooks/useConfirm'
-import type { ConnectionStore } from '../../src/state/types'
+import type { ConnectionStore, DiffStats } from '../../src/state/types'
 import type {
   ApiDagGraph,
   ApiSession,
@@ -55,6 +55,8 @@ function makeStore(opts: {
     error: signal<string | null>(null),
     version: signal<VersionInfo | null>(version),
     stale: signal(false),
+    diffStatsBySessionId: signal<Map<string, DiffStats>>(new Map()),
+    loadDiffStats: vi.fn(async () => {}),
     refresh: vi.fn(async () => {}),
     sendCommand: vi
       .fn<(cmd: MinionCommand) => Promise<CommandResult>>()
