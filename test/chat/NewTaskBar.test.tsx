@@ -78,6 +78,8 @@ function makeStore(opts: {
     error: signal<string | null>(null),
     version: signal<VersionInfo | null>(version),
     stale: signal(false),
+    diffStatsBySessionId: signal(new Map()),
+    loadDiffStats: vi.fn(async () => {}),
     refresh: vi.fn(async () => {}),
     sendCommand: vi.fn(async () => ({ success: true })),
     dispose: vi.fn(),

@@ -28,7 +28,6 @@ function makeClient(overrides: Partial<ApiClient> = {}): ApiClient {
 }
 
 const SAMPLE_DIFF: WorkspaceDiff = {
-  sessionId: 's-1',
   branch: 'feature',
   baseBranch: 'main',
   patch: [
