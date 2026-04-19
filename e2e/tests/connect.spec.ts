@@ -62,7 +62,7 @@ test.describe('connection flow', () => {
 
       await expect(page.getByTestId('connection-picker-trigger')).toContainText('Minion A')
 
-      await expect(page.getByTestId('universe-node-s1')).toBeVisible({ timeout: 8_000 })
+      await expect(page.getByTestId('session-item-s1')).toBeVisible({ timeout: 8_000 })
     } finally {
       await mock.close()
     }
