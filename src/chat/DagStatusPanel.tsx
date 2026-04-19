@@ -2,6 +2,7 @@ import { useComputed, useSignal } from '@preact/signals'
 import { useEffect } from 'preact/hooks'
 import type { ApiDagGraph, ApiDagNode, ApiSession } from '../api/types'
 import type { ConnectionStore } from '../state/types'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 
 interface DagStatusPanelProps {
   session: ApiSession
@@ -75,7 +76,8 @@ const DAG_NODE_LABELS: Record<ApiDagNode['status'], string> = {
 }
 
 export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps) {
-  const collapsed = useSignal(false)
+  const isDesktop = useMediaQuery('(min-width: 768px)')
+  const collapsed = useSignal(!isDesktop.value)
 
   const dag = useComputed(() => findDagForSession(store.dags.value, session))
   const parentSession = useComputed(() => {
@@ -84,8 +86,8 @@ export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps
   })
 
   useEffect(() => {
-    collapsed.value = false
-  }, [session.id, collapsed])
+    collapsed.value = !isDesktop.value
+  }, [session.id, isDesktop.value, collapsed])
 
   const graph = dag.value
   if (!graph) return null
