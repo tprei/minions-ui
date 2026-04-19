@@ -1,5 +1,5 @@
 import { signal, useSignal } from '@preact/signals'
-import { useState, useEffect } from 'preact/hooks'
+import { useState, useEffect, useCallback } from 'preact/hooks'
 import { useRegisterSW } from 'virtual:pwa-register/preact'
 import { connections, activeId, getActiveStore } from './connections/store'
 import { ConnectionSettings } from './connections/ConnectionSettings'
@@ -10,6 +10,7 @@ import { MessageInput } from './chat/MessageInput'
 import { QuickActionsBar } from './chat/QuickActionsBar'
 import { SlashCommandMenu, type SlashCommand } from './chat/SlashCommandMenu'
 import { SessionList } from './components/SessionList'
+import { UniverseCanvas } from './components/UniverseCanvas'
 import { confirm } from './hooks/useConfirm'
 import { ConfirmRoot } from './hooks/useConfirm'
 import { InstallPrompt } from './pwa/InstallPrompt'
@@ -17,8 +18,48 @@ import { useOnlineStatus } from './pwa/useOnlineStatus'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import type { ApiSession, MinionCommand, QuickAction, RepoEntry } from './api/types'
 
+export type ViewMode = 'list' | 'canvas'
+
 const showSettings = signal(false)
 const showDrawer = signal(false)
+export const viewMode = signal<ViewMode>('list')
+
+function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
+  const tabClass = (active: boolean) =>
+    `px-2.5 py-1 text-xs font-medium transition-colors ${
+      active
+        ? 'bg-indigo-600 text-white'
+        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+    }`
+  return (
+    <div
+      class="inline-flex rounded-md border border-slate-300 dark:border-slate-600 overflow-hidden"
+      role="tablist"
+      data-testid="view-toggle"
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'list'}
+        onClick={() => onChange('list')}
+        class={tabClass(mode === 'list')}
+        data-testid="view-toggle-list"
+      >
+        List
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'canvas'}
+        onClick={() => onChange('canvas')}
+        class={`${tabClass(mode === 'canvas')} border-l border-slate-300 dark:border-slate-600`}
+        data-testid="view-toggle-canvas"
+      >
+        Canvas
+      </button>
+    </div>
+  )
+}
 
 function ConnectionStatusBadge({ status }: { status: string }) {
   const color =
@@ -257,32 +298,103 @@ function ActiveView() {
   const store = id ? getActiveStore() : null
   const conn = connections.value.find((c) => c.id === id)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [isActionLoading, setIsActionLoading] = useState(false)
   const isOnline = useOnlineStatus()
   const isDesktop = useMediaQuery('(min-width: 768px)')
+  const mode = viewMode.value
 
   useEffect(() => {
     const color = conn?.color ?? '#3b82f6'
     document.documentElement.style.setProperty('--accent', color)
   }, [conn?.color])
 
+  const handleSendMessage = useCallback(
+    async (text: string, sid: string) => {
+      if (!store) return
+      await store.client.sendMessage(text, sid)
+    },
+    [store]
+  )
+
+  const handleCommand = useCallback(
+    async (cmd: MinionCommand) => {
+      if (!store) return
+      await store.sendCommand(cmd)
+    },
+    [store]
+  )
+
+  const handleNewTask = useCallback(
+    async (text: string) => {
+      if (!store) return
+      await store.client.sendMessage(text)
+    },
+    [store]
+  )
+
+  const handleCanvasSendReply = useCallback(
+    async (sid: string, message: string) => {
+      if (!store) return
+      setIsActionLoading(true)
+      try {
+        await store.client.sendMessage(message, sid)
+      } finally {
+        setIsActionLoading(false)
+      }
+    },
+    [store]
+  )
+
+  const handleCanvasStop = useCallback(
+    async (sid: string) => {
+      if (!store) return
+      setIsActionLoading(true)
+      try {
+        await store.sendCommand({ action: 'stop', sessionId: sid })
+      } finally {
+        setIsActionLoading(false)
+      }
+    },
+    [store]
+  )
+
+  const handleCanvasClose = useCallback(
+    async (sid: string) => {
+      if (!store) return
+      setIsActionLoading(true)
+      try {
+        await store.sendCommand({ action: 'close', sessionId: sid })
+      } finally {
+        setIsActionLoading(false)
+      }
+    },
+    [store]
+  )
+
+  const handleOpenChat = useCallback((sid: string) => {
+    setSessionId(sid)
+    viewMode.value = 'list'
+  }, [])
+
   if (!store || !conn) return null
 
   const sessions = store.sessions.value
+  const dags = store.dags.value
   const selected = sessionId ? sessions.find((s) => s.id === sessionId) ?? null : null
 
-  const handleSendMessage = async (text: string, sid: string) => {
-    await store.client.sendMessage(text, sid)
-  }
-
-  const handleCommand = async (cmd: MinionCommand) => {
-    await store.sendCommand(cmd)
-  }
-
-  const handleNewTask = async (text: string) => {
-    await store.client.sendMessage(text)
-  }
-
   const showOfflineBanner = !isOnline.value && store.stale.value
+
+  const canvasProps = {
+    sessions,
+    dags,
+    onSendReply: handleCanvasSendReply,
+    onStopMinion: handleCanvasStop,
+    onCloseSession: handleCanvasClose,
+    onOpenThread: () => {},
+    onOpenChat: handleOpenChat,
+    isActionLoading,
+    accentColor: conn.color,
+  }
 
   return (
     <div class="flex flex-col h-screen bg-slate-50 dark:bg-slate-900">
@@ -294,15 +406,18 @@ function ActiveView() {
       <header class="flex items-center gap-3 px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
         <ConnectionPicker onManage={() => { showDrawer.value = true }} />
         <ConnectionStatusBadge status={store.status.value} />
-        <button
-          type="button"
-          onClick={() => void store.refresh()}
-          class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
-          title="Refetch sessions and DAGs from the minion"
-          data-testid="header-refresh-btn"
-        >
-          Refresh
-        </button>
+        <div class="ml-auto flex items-center gap-2">
+          <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />
+          <button
+            type="button"
+            onClick={() => void store.refresh()}
+            class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+            title="Refetch sessions and DAGs from the minion"
+            data-testid="header-refresh-btn"
+          >
+            Refresh
+          </button>
+        </div>
       </header>
       {store.error.value && (
         <div class="flex items-center gap-3 px-4 py-2 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 shrink-0">
@@ -312,21 +427,27 @@ function ActiveView() {
       )}
       <NewTaskBar repos={store.version.value?.repos ?? []} onSend={handleNewTask} />
       {isDesktop.value ? (
-        <div class="flex flex-1 min-h-0">
-          <aside class="w-72 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-y-auto shrink-0">
-            <SessionList
-              sessions={sessions}
-              dags={store.dags.value}
-              activeSessionId={sessionId}
-              onSelect={setSessionId}
-            />
-          </aside>
-          {selected ? (
-            <ChatPane session={selected} onSend={handleSendMessage} onCommand={handleCommand} />
-          ) : (
-            <EmptyPane />
-          )}
-        </div>
+        mode === 'canvas' ? (
+          <div class="flex flex-1 min-h-0" data-testid="canvas-pane">
+            <UniverseCanvas {...canvasProps} />
+          </div>
+        ) : (
+          <div class="flex flex-1 min-h-0">
+            <aside class="w-72 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-y-auto shrink-0">
+              <SessionList
+                sessions={sessions}
+                dags={store.dags.value}
+                activeSessionId={sessionId}
+                onSelect={setSessionId}
+              />
+            </aside>
+            {selected ? (
+              <ChatPane session={selected} onSend={handleSendMessage} onCommand={handleCommand} />
+            ) : (
+              <EmptyPane />
+            )}
+          </div>
+        )
       ) : (
         <div class="flex flex-col flex-1 min-h-0">
           <div class="max-h-[45vh] overflow-y-auto border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 shrink-0">
@@ -342,6 +463,28 @@ function ActiveView() {
           ) : (
             <EmptyPane />
           )}
+        </div>
+      )}
+      {!isDesktop.value && mode === 'canvas' && (
+        <div
+          class="fixed inset-0 z-40 bg-slate-50 dark:bg-slate-900 flex flex-col"
+          data-testid="canvas-mobile-modal"
+        >
+          <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
+            <span class="text-sm font-medium text-slate-900 dark:text-slate-100">Canvas</span>
+            <button
+              type="button"
+              onClick={() => { viewMode.value = 'list' }}
+              class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+              data-testid="canvas-mobile-close"
+              aria-label="Close canvas"
+            >
+              Close
+            </button>
+          </div>
+          <div class="flex-1 min-h-0">
+            <UniverseCanvas {...canvasProps} />
+          </div>
         </div>
       )}
       {showDrawer.value && (
