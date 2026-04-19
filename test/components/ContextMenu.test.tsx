@@ -59,12 +59,28 @@ const mockPendingSession: ApiSession = {
   status: 'pending',
 }
 
+const mockChildSession: ApiSession = {
+  ...mockRunningSession,
+  id: 'child-1',
+  slug: 'busy-fox',
+  parentId: 'parent-1',
+}
+
+const mockFailedSession: ApiSession = {
+  ...mockRunningSession,
+  id: 'session-failed',
+  slug: 'broken-wheel',
+  status: 'failed',
+}
+
 function createMockActions(overrides: Partial<ContextMenuActions> = {}): ContextMenuActions {
   return {
     onSendReply: vi.fn().mockResolvedValue(undefined) as unknown as ContextMenuActions['onSendReply'],
     onStopMinion: vi.fn().mockResolvedValue(undefined) as unknown as ContextMenuActions['onStopMinion'],
     onCloseSession: vi.fn().mockResolvedValue(undefined) as unknown as ContextMenuActions['onCloseSession'],
     onOpenThread: vi.fn() as unknown as ContextMenuActions['onOpenThread'],
+    onOpenParent: vi.fn() as unknown as ContextMenuActions['onOpenParent'],
+    onViewInDag: vi.fn() as unknown as ContextMenuActions['onViewInDag'],
     isActionLoading: false,
     ...overrides,
   }
@@ -292,6 +308,190 @@ describe('ContextMenu', () => {
 
     const makeprButton = screen.getByText('Make PR').closest('button')
     expect(makeprButton?.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('renders "Open parent" when session has parentId and onOpenParent is provided', () => {
+    render(
+      <ContextMenu
+        session={mockChildSession}
+        position={{ x: 100, y: 100 }}
+        actions={mockActions}
+        onClose={mockOnClose}
+      />
+    )
+
+    expect(screen.getByText('Open parent')).toBeTruthy()
+  })
+
+  it('does not render "Open parent" when session has no parentId', () => {
+    render(
+      <ContextMenu
+        session={mockRunningSession}
+        position={{ x: 100, y: 100 }}
+        actions={mockActions}
+        onClose={mockOnClose}
+      />
+    )
+
+    expect(screen.queryByText('Open parent')).toBeNull()
+  })
+
+  it('does not render "Open parent" when onOpenParent callback is absent', () => {
+    const actionsWithoutParent = createMockActions({ onOpenParent: undefined })
+    render(
+      <ContextMenu
+        session={mockChildSession}
+        position={{ x: 100, y: 100 }}
+        actions={actionsWithoutParent}
+        onClose={mockOnClose}
+      />
+    )
+
+    expect(screen.queryByText('Open parent')).toBeNull()
+  })
+
+  it('invokes onOpenParent with parentId and closes menu when clicked', () => {
+    render(
+      <ContextMenu
+        session={mockChildSession}
+        position={{ x: 100, y: 100 }}
+        actions={mockActions}
+        onClose={mockOnClose}
+      />
+    )
+
+    fireEvent.click(screen.getByText('Open parent'))
+    expect(mockActions.onOpenParent).toHaveBeenCalledWith('parent-1')
+    expect(mockOnClose).toHaveBeenCalled()
+  })
+
+  it('renders "View in DAG" when dagContext is provided', () => {
+    render(
+      <ContextMenu
+        session={mockRunningSession}
+        position={{ x: 100, y: 100 }}
+        actions={mockActions}
+        onClose={mockOnClose}
+        dagContext={{ dagId: 'dag-7', nodeStatus: 'running' }}
+      />
+    )
+
+    expect(screen.getByText('View in DAG')).toBeTruthy()
+  })
+
+  it('does not render "View in DAG" when dagContext is null', () => {
+    render(
+      <ContextMenu
+        session={mockRunningSession}
+        position={{ x: 100, y: 100 }}
+        actions={mockActions}
+        onClose={mockOnClose}
+        dagContext={null}
+      />
+    )
+
+    expect(screen.queryByText('View in DAG')).toBeNull()
+  })
+
+  it('invokes onViewInDag with dagId and sessionId when clicked', () => {
+    render(
+      <ContextMenu
+        session={mockRunningSession}
+        position={{ x: 100, y: 100 }}
+        actions={mockActions}
+        onClose={mockOnClose}
+        dagContext={{ dagId: 'dag-7', nodeStatus: 'running' }}
+      />
+    )
+
+    fireEvent.click(screen.getByText('View in DAG'))
+    expect(mockActions.onViewInDag).toHaveBeenCalledWith('dag-7', 'session-1')
+    expect(mockOnClose).toHaveBeenCalled()
+  })
+
+  it('renders "Retry node" when DAG node status is ci-failed', () => {
+    render(
+      <ContextMenu
+        session={mockRunningSession}
+        position={{ x: 100, y: 100 }}
+        actions={mockActions}
+        onClose={mockOnClose}
+        dagContext={{ dagId: 'dag-7', nodeStatus: 'ci-failed' }}
+      />
+    )
+
+    expect(screen.getByText('Retry node')).toBeTruthy()
+  })
+
+  it('renders "Retry node" when DAG node status is failed', () => {
+    render(
+      <ContextMenu
+        session={mockRunningSession}
+        position={{ x: 100, y: 100 }}
+        actions={mockActions}
+        onClose={mockOnClose}
+        dagContext={{ dagId: 'dag-7', nodeStatus: 'failed' }}
+      />
+    )
+
+    expect(screen.getByText('Retry node')).toBeTruthy()
+  })
+
+  it('renders "Retry node" when session status is failed', () => {
+    render(
+      <ContextMenu
+        session={mockFailedSession}
+        position={{ x: 100, y: 100 }}
+        actions={mockActions}
+        onClose={mockOnClose}
+      />
+    )
+
+    expect(screen.getByText('Retry node')).toBeTruthy()
+  })
+
+  it('does not render "Retry node" for healthy running session without failing DAG', () => {
+    render(
+      <ContextMenu
+        session={mockRunningSession}
+        position={{ x: 100, y: 100 }}
+        actions={mockActions}
+        onClose={mockOnClose}
+        dagContext={{ dagId: 'dag-7', nodeStatus: 'running' }}
+      />
+    )
+
+    expect(screen.queryByText('Retry node')).toBeNull()
+  })
+
+  it('sends /retry via onSendReply when "Retry node" is clicked', () => {
+    render(
+      <ContextMenu
+        session={mockFailedSession}
+        position={{ x: 100, y: 100 }}
+        actions={mockActions}
+        onClose={mockOnClose}
+      />
+    )
+
+    fireEvent.click(screen.getByText('Retry node'))
+    expect(mockActions.onSendReply).toHaveBeenCalledWith('session-failed', '/retry')
+    expect(mockOnClose).toHaveBeenCalled()
+  })
+
+  it('disables "Retry node" when isActionLoading is true', () => {
+    const loadingActions = createMockActions({ isActionLoading: true })
+    render(
+      <ContextMenu
+        session={mockFailedSession}
+        position={{ x: 100, y: 100 }}
+        actions={loadingActions}
+        onClose={mockOnClose}
+      />
+    )
+
+    const retryButton = screen.getByText('Retry node').closest('button')
+    expect(retryButton?.hasAttribute('disabled')).toBe(true)
   })
 
   it('renders dividers between menu sections', () => {
