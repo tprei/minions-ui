@@ -14,6 +14,19 @@ describe('renderMarkdown', () => {
     expect(out).toContain('const x = 1')
   })
 
+  it('applies syntax highlighting classes for fenced blocks with a known language', () => {
+    const out = renderMarkdown('```ts\nconst x = 1\n```')
+    expect(out).toContain('language-typescript')
+    expect(out).toContain('tok-keyword')
+    expect(out).toContain('tok-number')
+  })
+
+  it('preserves mermaid blocks without tokenization', () => {
+    const out = renderMarkdown('```mermaid\ngraph TD; A-->B\n```')
+    expect(out).toContain('language-mermaid')
+    expect(out).not.toContain('tok-keyword')
+  })
+
   it('strips <script> tags (XSS)', () => {
     const out = renderMarkdown('ok <script>alert(1)</script> still ok')
     expect(out).not.toContain('<script>')
