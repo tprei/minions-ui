@@ -13,6 +13,7 @@ import { SlashCommandMenu, type SlashCommand } from './chat/SlashCommandMenu'
 import { SessionTabs, type SessionTabId } from './chat/SessionTabs'
 import { DiffTab } from './chat/DiffTab'
 import { ScreenshotsTab } from './chat/ScreenshotsTab'
+import { PrPreviewCard } from './components/PrPreviewCard'
 import { hasFeature } from './api/features'
 import type { ConnectionStore } from './state/types'
 import { confirm } from './hooks/useConfirm'
@@ -249,6 +250,13 @@ function ChatPane({
       >
         {activeTab === 'chat' && (
           <>
+            {session.prUrl && hasFeature(store, 'pr-preview') && (
+              <PrPreviewCard
+                sessionId={session.id}
+                prUrl={session.prUrl}
+                client={store.client}
+              />
+            )}
             <ConversationView messages={session.conversation} />
             <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
               <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />
