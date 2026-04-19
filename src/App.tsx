@@ -9,6 +9,11 @@ import { ConversationView } from './chat/ConversationView'
 import { MessageInput } from './chat/MessageInput'
 import { QuickActionsBar } from './chat/QuickActionsBar'
 import { SlashCommandMenu, type SlashCommand } from './chat/SlashCommandMenu'
+import { SessionTabs, type SessionTabId } from './chat/SessionTabs'
+import { DiffTab } from './chat/DiffTab'
+import { ScreenshotsTab } from './chat/ScreenshotsTab'
+import { hasFeature } from './api/features'
+import type { ConnectionStore } from './state/types'
 import { confirm } from './hooks/useConfirm'
 import { ConfirmRoot } from './hooks/useConfirm'
 import { InstallPrompt } from './pwa/InstallPrompt'
@@ -209,15 +214,18 @@ function SessionList({
 
 function ChatPane({
   session,
+  store,
   onSend,
   onCommand,
 }: {
   session: ApiSession
+  store: ConnectionStore
   onSend: (text: string, sessionId: string) => Promise<void>
   onCommand: (cmd: MinionCommand) => Promise<void>
 }) {
   const [text, setText] = useState('')
   const [pending, setPending] = useState<'stop' | 'close' | null>(null)
+  const [activeTab, setActiveTab] = useState<SessionTabId>('chat')
   const handleSend = (t: string) => onSend(t, session.id)
   const handleQuickAction = (action: QuickAction) => onSend(action.message, session.id)
 
@@ -312,12 +320,40 @@ function ChatPane({
           </button>
         </div>
       </header>
-      <ConversationView messages={session.conversation} />
-      <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
-        <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />
-        <SlashCommandMenu session={session} context={text} onCommand={handleSlashCommand} />
-        <MessageInput session={session} value={text} onValueChange={setText} onSend={handleSend} />
-      </div>
+      <SessionTabs
+        tabs={[
+          { id: 'chat', label: 'Chat', available: true },
+          { id: 'diff', label: 'Diff', available: hasFeature(store, 'diff-viewer') },
+          { id: 'screenshots', label: 'Screenshots', available: hasFeature(store, 'screenshots-http') },
+        ]}
+        active={activeTab}
+        onChange={setActiveTab}
+      >
+        {activeTab === 'chat' && (
+          <>
+            <ConversationView messages={session.conversation} />
+            <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
+              <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />
+              <SlashCommandMenu session={session} context={text} onCommand={handleSlashCommand} />
+              <MessageInput session={session} value={text} onValueChange={setText} onSend={handleSend} />
+            </div>
+          </>
+        )}
+        {activeTab === 'diff' && (
+          <DiffTab
+            sessionId={session.id}
+            sessionUpdatedAt={session.updatedAt}
+            client={store.client}
+          />
+        )}
+        {activeTab === 'screenshots' && (
+          <ScreenshotsTab
+            sessionId={session.id}
+            sessionUpdatedAt={session.updatedAt}
+            client={store.client}
+          />
+        )}
+      </SessionTabs>
     </div>
   )
 }
@@ -402,7 +438,7 @@ function ActiveView() {
             />
           </aside>
           {selected ? (
-            <ChatPane session={selected} onSend={handleSendMessage} onCommand={handleCommand} />
+            <ChatPane session={selected} store={store} onSend={handleSendMessage} onCommand={handleCommand} />
           ) : (
             <EmptyPane />
           )}
@@ -416,7 +452,7 @@ function ActiveView() {
             orientation="horizontal"
           />
           {selected ? (
-            <ChatPane session={selected} onSend={handleSendMessage} onCommand={handleCommand} />
+            <ChatPane session={selected} store={store} onSend={handleSendMessage} onCommand={handleCommand} />
           ) : (
             <EmptyPane />
           )}
