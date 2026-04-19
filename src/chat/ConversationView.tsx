@@ -1,25 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
 import type { ConversationMessage } from '../api/types'
-
-marked.setOptions({ gfm: true, breaks: true })
+import { renderMarkdown } from '../components/markdown'
 
 interface ConversationViewProps {
   messages: ConversationMessage[]
-}
-
-function renderMarkdown(text: string): string {
-  const raw = marked.parse(text, { async: false }) as string
-  return DOMPurify.sanitize(raw, {
-    ALLOWED_TAGS: [
-      'p', 'br', 'strong', 'em', 'code', 'pre', 'blockquote',
-      'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-      'a', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-      'del', 'ins', 'span', 'div',
-    ],
-    ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
-  })
 }
 
 function AssistantMessage({ text }: { text: string }) {
