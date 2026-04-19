@@ -214,6 +214,25 @@ describe('UniverseCanvas', () => {
     expect(document.body.innerHTML).toContain('Waiting for reply')
   })
 
+  it('renders all attention reasons as an icon stack', () => {
+    const sessions = [
+      createSession({
+        id: 's1',
+        slug: 'stacked',
+        needsAttention: true,
+        attentionReasons: ['failed', 'waiting_for_feedback', 'idle_long'],
+      }),
+    ]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    const stack = document.querySelector('[data-testid="attention-icon-stack"]')
+    expect(stack).toBeTruthy()
+    const icons = stack!.querySelectorAll('[data-attention-reason]')
+    expect(icons).toHaveLength(3)
+    expect(icons[0].getAttribute('data-attention-reason')).toBe('failed')
+    expect(icons[1].getAttribute('data-attention-reason')).toBe('waiting_for_feedback')
+    expect(icons[2].getAttribute('data-attention-reason')).toBe('idle_long')
+  })
+
   it('renders PR links on nodes with PRs', () => {
     const sessions = [
       createSession({

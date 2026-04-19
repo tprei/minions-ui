@@ -49,12 +49,14 @@ function layoutDagGroup(dag: ApiDagGraph, isDark: boolean): LayoutGroup {
   for (const node of dagNodes) {
     for (const depId of node.dependencies) {
       g.setEdge(depId, node.id)
+      const depNode = dag.nodes[depId]
+      const animated = node.status === 'running' || depNode?.status === 'running'
       edges.push({
         id: `dag-${dag.id}-${depId}-${node.id}`,
         source: depId,
         target: node.id,
         type: 'smoothstep',
-        animated: node.status === 'running',
+        animated,
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: isDark ? '#9ca3af' : '#6b7280',
@@ -119,13 +121,14 @@ function layoutParentChildGroup(
 
       const isCiFix = child.mode === 'ci-fix'
       const relationship: EdgeRelationship = isCiFix ? 'ci-fix' : 'parent-child'
+      const animated = child.status === 'running' || session.status === 'running'
 
       edges.push({
         id: `pc-${session.id}-${childId}`,
         source: session.id,
         target: childId,
         type: 'smoothstep',
-        animated: child.status === 'running',
+        animated,
         style: {
           stroke: isCiFix ? '#f97316' : (isDark ? '#60a5fa' : '#3b82f6'),
           strokeDasharray: isCiFix ? '4 4' : '6 3',
@@ -237,6 +240,57 @@ function positionGroups(groups: LayoutGroup[]): { nodes: Node[]; edges: Edge[] }
   return { nodes: allNodes, edges: allEdges }
 }
 
+function buildDagNodeIndexBySessionId(dags: ApiDagGraph[]): Map<string, ApiDagNode> {
+  const map = new Map<string, ApiDagNode>()
+  for (const dag of dags) {
+    for (const node of Object.values(dag.nodes)) {
+      if (node.session) map.set(node.session.id, node)
+    }
+  }
+  return map
+}
+
+function buildCrossGroupEdges(
+  standalone: ApiSession[],
+  dagNodeBySessionId: Map<string, ApiDagNode>,
+  isDark: boolean,
+): Edge[] {
+  const edges: Edge[] = []
+  for (const child of standalone) {
+    if (!child.parentId) continue
+    const parentDagNode = dagNodeBySessionId.get(child.parentId)
+    if (!parentDagNode) continue
+
+    const isCiFix = child.mode === 'ci-fix'
+    const relationship: EdgeRelationship = isCiFix ? 'ci-fix' : 'parent-child'
+    const parentRunning = parentDagNode.status === 'running'
+    const parentCiPending = parentDagNode.status === 'ci-pending'
+    const childRunning = child.status === 'running'
+    const animated = childRunning || parentRunning || (isCiFix && parentCiPending)
+
+    const color = isCiFix ? '#f97316' : (isDark ? '#a78bfa' : '#7c3aed')
+
+    edges.push({
+      id: `cross-${parentDagNode.id}-${child.id}`,
+      source: parentDagNode.id,
+      target: child.id,
+      type: 'smoothstep',
+      animated,
+      style: {
+        stroke: color,
+        strokeDasharray: isCiFix ? '4 4' : '2 3',
+        opacity: 0.7,
+      },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color,
+      },
+      data: { relationship },
+    })
+  }
+  return edges
+}
+
 export function layoutUniverse(
   sessions: ApiSession[],
   dags: ApiDagGraph[],
@@ -265,5 +319,10 @@ export function layoutUniverse(
     groups.push(standaloneGroup)
   }
 
-  return positionGroups(groups)
+  const positioned = positionGroups(groups)
+
+  const dagNodeBySessionId = buildDagNodeIndexBySessionId(dags)
+  const crossGroupEdges = buildCrossGroupEdges(standalone, dagNodeBySessionId, isDark)
+
+  return { nodes: positioned.nodes, edges: [...positioned.edges, ...crossGroupEdges] }
 }

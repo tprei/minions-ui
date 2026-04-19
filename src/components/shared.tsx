@@ -121,6 +121,34 @@ export function AttentionBadge({ reason, darkMode }: AttentionBadgeProps) {
   )
 }
 
+interface AttentionIconStackProps {
+  reasons: AttentionReason[]
+  darkMode: boolean
+}
+
+export function AttentionIconStack({ reasons, darkMode }: AttentionIconStackProps) {
+  if (reasons.length === 0) return null
+  return (
+    <div class="inline-flex items-center gap-0.5" data-testid="attention-icon-stack">
+      {reasons.map((reason) => {
+        const config = ATTENTION_CONFIG[reason] ?? ATTENTION_CONFIG.idle_long
+        const className = darkMode ? config.darkClassName : config.className
+        return (
+          <span
+            key={reason}
+            title={config.label}
+            aria-label={config.label}
+            data-attention-reason={reason}
+            class={`inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full text-xs ${className}`}
+          >
+            {config.emoji}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
 type DagNodeStatus = ApiDagNode['status']
 
 export function getStatusColors(isDark: boolean): Record<DagNodeStatus, { bg: string; border: string; text: string }> {

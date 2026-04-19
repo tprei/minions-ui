@@ -15,7 +15,7 @@ import '@reactflow/core/dist/base.css'
 import '@reactflow/controls/dist/style.css'
 import '@reactflow/minimap/dist/style.css'
 import type { ApiSession, ApiDagGraph } from '../api/types'
-import { StatusBadge, AttentionBadge, getStatusColors, getAttentionBorder, formatRelativeTime } from './shared'
+import { StatusBadge, AttentionIconStack, getStatusColors, getAttentionBorder, formatRelativeTime } from './shared'
 import { PrLink } from './PrLink'
 import { ContextMenu, useLongPress, useContextMenu } from './ContextMenu'
 import type { ContextMenuActions } from './ContextMenu'
@@ -116,7 +116,7 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
         <div class="flex items-center gap-2 mt-1">
           <StatusBadge status={status} />
           {session?.needsAttention && session.attentionReasons.length > 0 && (
-            <AttentionBadge reason={session.attentionReasons[0]} darkMode={isDark} />
+            <AttentionIconStack reasons={session.attentionReasons} darkMode={isDark} />
           )}
         </div>
 

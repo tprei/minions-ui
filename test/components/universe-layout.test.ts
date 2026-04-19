@@ -417,4 +417,229 @@ describe('universe-layout', () => {
     expect(pcNodes).toHaveLength(2)
     expect(result.edges).toHaveLength(1)
   })
+
+  it('animates DAG edges when the source (dependency) is running', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const dag = makeDag({
+      id: 'dag-1',
+      nodes: {
+        n1: {
+          id: 'n1',
+          slug: 'first',
+          status: 'running',
+          dependencies: [],
+          dependents: ['n2'],
+        },
+        n2: {
+          id: 'n2',
+          slug: 'second',
+          status: 'pending',
+          dependencies: ['n1'],
+          dependents: [],
+        },
+      },
+    })
+
+    const result = layoutUniverse([], [dag], false)
+    const edge = result.edges.find((e) => e.source === 'n1' && e.target === 'n2')
+    expect(edge?.animated).toBe(true)
+  })
+
+  it('does not animate DAG edges when neither end is running', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const dag = makeDag({
+      id: 'dag-1',
+      nodes: {
+        n1: {
+          id: 'n1',
+          slug: 'first',
+          status: 'completed',
+          dependencies: [],
+          dependents: ['n2'],
+        },
+        n2: {
+          id: 'n2',
+          slug: 'second',
+          status: 'pending',
+          dependencies: ['n1'],
+          dependents: [],
+        },
+      },
+    })
+
+    const result = layoutUniverse([], [dag], false)
+    const edge = result.edges.find((e) => e.source === 'n1' && e.target === 'n2')
+    expect(edge?.animated).toBe(false)
+  })
+
+  it('animates parent-child edges when the parent is running', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const sessions = [
+      makeSession({ id: 'p', slug: 'parent', childIds: ['c'], status: 'running' }),
+      makeSession({ id: 'c', slug: 'child', parentId: 'p', status: 'completed' }),
+    ]
+
+    const result = layoutUniverse(sessions, [], false)
+    expect(result.edges[0].animated).toBe(true)
+  })
+
+  it('does not animate parent-child edges when both ends are idle', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const sessions = [
+      makeSession({ id: 'p', slug: 'parent', childIds: ['c'], status: 'completed' }),
+      makeSession({ id: 'c', slug: 'child', parentId: 'p', status: 'completed' }),
+    ]
+
+    const result = layoutUniverse(sessions, [], false)
+    expect(result.edges[0].animated).toBe(false)
+  })
+
+  it('draws a cross-group edge from a DAG-owned parent to a standalone child', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const dagSession = makeSession({ id: 'dag-sess', slug: 'dag-parent', childIds: ['orphan'] })
+    const orphan = makeSession({
+      id: 'orphan',
+      slug: 'orphan-child',
+      parentId: 'dag-sess',
+      status: 'running',
+    })
+    const dag = makeDag({
+      id: 'dag-1',
+      nodes: {
+        dn1: {
+          id: 'dn1',
+          slug: 'dag-node',
+          status: 'ci-pending',
+          dependencies: [],
+          dependents: [],
+          session: dagSession,
+        },
+      },
+    })
+
+    const result = layoutUniverse([dagSession, orphan], [dag], false)
+
+    const cross = result.edges.find((e) => e.target === 'orphan')
+    expect(cross).toBeDefined()
+    expect(cross?.source).toBe('dn1')
+    expect(cross?.data?.relationship).toBe('parent-child')
+    expect(cross?.animated).toBe(true)
+    expect(cross?.style?.opacity).toBe(0.7)
+  })
+
+  it('marks cross-group ci-fix edges with ci-fix styling and animates while parent is ci-pending', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const dagSession = makeSession({
+      id: 'dag-sess',
+      slug: 'dag-parent',
+      childIds: ['ci'],
+      status: 'running',
+    })
+    const ciFix = makeSession({
+      id: 'ci',
+      slug: 'ci-fix',
+      parentId: 'dag-sess',
+      mode: 'ci-fix',
+      status: 'pending',
+    })
+    const dag = makeDag({
+      id: 'dag-1',
+      nodes: {
+        dn1: {
+          id: 'dn1',
+          slug: 'dag-node',
+          status: 'ci-pending',
+          dependencies: [],
+          dependents: [],
+          session: dagSession,
+        },
+      },
+    })
+
+    const result = layoutUniverse([dagSession, ciFix], [dag], false)
+
+    const cross = result.edges.find((e) => e.target === 'ci')
+    expect(cross).toBeDefined()
+    expect(cross?.source).toBe('dn1')
+    expect(cross?.data?.relationship).toBe('ci-fix')
+    expect(cross?.style?.stroke).toBe('#f97316')
+    expect(cross?.style?.strokeDasharray).toBe('4 4')
+    expect(cross?.animated).toBe(true)
+  })
+
+  it('does not animate cross-group edges when parent is completed and child is idle', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const dagSession = makeSession({
+      id: 'dag-sess',
+      slug: 'dag-parent',
+      childIds: ['orphan'],
+      status: 'completed',
+    })
+    const orphan = makeSession({
+      id: 'orphan',
+      slug: 'orphan-child',
+      parentId: 'dag-sess',
+      status: 'completed',
+    })
+    const dag = makeDag({
+      id: 'dag-1',
+      nodes: {
+        dn1: {
+          id: 'dn1',
+          slug: 'dag-node',
+          status: 'completed',
+          dependencies: [],
+          dependents: [],
+          session: dagSession,
+        },
+      },
+    })
+
+    const result = layoutUniverse([dagSession, orphan], [dag], false)
+    const cross = result.edges.find((e) => e.target === 'orphan')
+    expect(cross?.animated).toBe(false)
+  })
+
+  it('does not draw cross-group edges for standalone sessions without DAG-owned parents', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const sessions = [
+      makeSession({ id: 'a', slug: 'alpha' }),
+      makeSession({ id: 'b', slug: 'beta' }),
+    ]
+    const result = layoutUniverse(sessions, [], false)
+    expect(result.edges).toHaveLength(0)
+  })
+
+  it('does not animate cross-group non-ci-fix edges when parent is ci-pending', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const dagSession = makeSession({
+      id: 'dag-sess',
+      slug: 'dag-parent',
+      childIds: ['orphan'],
+    })
+    const orphan = makeSession({
+      id: 'orphan',
+      slug: 'orphan-child',
+      parentId: 'dag-sess',
+      status: 'pending',
+    })
+    const dag = makeDag({
+      id: 'dag-1',
+      nodes: {
+        dn1: {
+          id: 'dn1',
+          slug: 'dag-node',
+          status: 'ci-pending',
+          dependencies: [],
+          dependents: [],
+          session: dagSession,
+        },
+      },
+    })
+
+    const result = layoutUniverse([dagSession, orphan], [dag], false)
+    const cross = result.edges.find((e) => e.target === 'orphan')
+    expect(cross?.data?.relationship).toBe('parent-child')
+    expect(cross?.animated).toBe(false)
+  })
 })
