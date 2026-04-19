@@ -4,6 +4,7 @@ import type { SseEvent } from '../api/types'
 import type { SseStatus } from '../api/sse'
 import type { ConnectionStore, DiffStats } from './types'
 import { loadSnapshot, saveSnapshot } from './persist'
+import { createTranscriptStore, type TranscriptStore } from './transcript'
 
 export function createConnectionStore(client: ApiClient, connectionId: string): ConnectionStore {
   const sessions = signal<import('../api/types').ApiSession[]>([])
@@ -14,6 +15,17 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
   const stale = signal<boolean>(false)
   const diffStatsBySessionId = signal<Map<string, DiffStats>>(new Map())
   const diffStatsInFlight = new Set<string>()
+  const transcripts = new Map<string, TranscriptStore>()
+
+  function getTranscript(sessionId: string): TranscriptStore | null {
+    const existing = transcripts.get(sessionId)
+    if (existing) return existing
+    const sess = sessions.value.find((s) => s.id === sessionId)
+    if (!sess) return null
+    const store = createTranscriptStore({ client, slug: sess.slug })
+    transcripts.set(sessionId, store)
+    return store
+  }
 
   async function loadDiffStats(sessionId: string): Promise<void> {
     if (diffStatsInFlight.has(sessionId)) return
@@ -124,6 +136,11 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
         dags.value = dags.value.filter((d) => d.id !== event.dagId)
         scheduleSnapshot()
         break
+      case 'transcript_event': {
+        const store = transcripts.get(event.sessionId)
+        if (store) store.applyEvent(event.event)
+        break
+      }
     }
   }
 
@@ -134,6 +151,9 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     },
     onReconnect() {
       void refresh()
+      for (const ts of transcripts.values()) {
+        void ts.reconcile()
+      }
     },
   })
 
@@ -154,11 +174,14 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     sendCommand(cmd) {
       return client.sendCommand(cmd)
     },
+    getTranscript,
     dispose() {
       if (snapshotTimer !== null) {
         clearTimeout(snapshotTimer)
         snapshotTimer = null
       }
+      for (const ts of transcripts.values()) ts.dispose()
+      transcripts.clear()
       handle.close()
     },
   }

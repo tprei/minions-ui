@@ -49,6 +49,7 @@ function makeStore(opts: {
     loadDiffStats: opts.loadDiffStats ?? (async () => {}),
     refresh: async () => {},
     sendCommand: async () => ({ success: true }),
+    getTranscript: () => null,
     dispose: () => {},
   }
 }
