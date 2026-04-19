@@ -3,6 +3,7 @@ import { render, screen, cleanup } from '@testing-library/preact'
 import {
   StatusBadge,
   AttentionBadge,
+  AttentionIconStack,
   getStatusColors,
   getAttentionBorder,
   formatRelativeTime,
@@ -105,6 +106,53 @@ describe('AttentionBadge', () => {
       render(<AttentionBadge reason={reason as keyof typeof ATTENTION_CONFIG} darkMode={false} />)
       expect(screen.getByText(config.emoji)).toBeTruthy()
     }
+  })
+})
+
+describe('AttentionIconStack', () => {
+  beforeEach(() => {
+    cleanup()
+  })
+
+  it('renders nothing when reasons is empty', () => {
+    const { container } = render(<AttentionIconStack reasons={[]} darkMode={false} />)
+    expect(container.querySelector('[data-testid="attention-icon-stack"]')).toBeNull()
+  })
+
+  it('renders a single icon for a single reason', () => {
+    render(<AttentionIconStack reasons={['failed']} darkMode={false} />)
+    const stack = document.querySelector('[data-testid="attention-icon-stack"]')
+    expect(stack).toBeTruthy()
+    const icons = stack!.querySelectorAll('[data-attention-reason]')
+    expect(icons).toHaveLength(1)
+    expect(icons[0].getAttribute('data-attention-reason')).toBe('failed')
+  })
+
+  it('renders all reasons as separate icons in order', () => {
+    render(
+      <AttentionIconStack
+        reasons={['failed', 'waiting_for_feedback', 'ci_fix']}
+        darkMode={false}
+      />
+    )
+    const icons = document.querySelectorAll('[data-attention-reason]')
+    expect(icons).toHaveLength(3)
+    expect(icons[0].getAttribute('data-attention-reason')).toBe('failed')
+    expect(icons[1].getAttribute('data-attention-reason')).toBe('waiting_for_feedback')
+    expect(icons[2].getAttribute('data-attention-reason')).toBe('ci_fix')
+  })
+
+  it('sets title attribute to the full reason label for accessibility', () => {
+    render(<AttentionIconStack reasons={['waiting_for_feedback']} darkMode={false} />)
+    const icon = document.querySelector('[data-attention-reason="waiting_for_feedback"]')
+    expect(icon?.getAttribute('title')).toBe('Waiting for reply')
+    expect(icon?.getAttribute('aria-label')).toBe('Waiting for reply')
+  })
+
+  it('uses dark-mode classes when darkMode is true', () => {
+    render(<AttentionIconStack reasons={['failed']} darkMode={true} />)
+    const icon = document.querySelector('[data-attention-reason="failed"]')!
+    expect(icon.className).toContain('bg-red-900/50')
   })
 })
 
