@@ -34,7 +34,7 @@ test.describe('SSE reconnect', () => {
 
       await expect(page.getByText('live')).toBeVisible({ timeout: 20_000 })
 
-      await expect(page.getByTestId('universe-node-s-reconnect')).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByTestId('session-item-s-reconnect')).toBeVisible({ timeout: 10_000 })
     } finally {
       await mock.close()
     }
