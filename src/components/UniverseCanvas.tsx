@@ -329,6 +329,9 @@ export function UniverseCanvas({
           session={detailSession}
           onClose={() => setDetailSession(null)}
           onOpenChat={onOpenChat}
+          sessions={sessions}
+          dags={dags}
+          onSelectSession={(s) => setDetailSession(s)}
         />
       )}
     </div>
