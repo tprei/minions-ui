@@ -1,8 +1,36 @@
 import * as http from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { ApiSession, ApiDagGraph, SseEvent, MinionCommand, VersionInfo } from '../../src/api/types'
+import type {
+  ApiSession,
+  ApiDagGraph,
+  SseEvent,
+  MinionCommand,
+  VersionInfo,
+  CreateSessionRequest,
+  CreateSessionVariantsRequest,
+  PrPreview,
+  WorkspaceDiff,
+  ScreenshotList,
+  ScreenshotEntry,
+  VapidPublicKey,
+  PushSubscriptionJSON,
+} from '../../src/api/types'
 
-export type { ApiSession, ApiDagGraph, SseEvent, MinionCommand, VersionInfo }
+export type {
+  ApiSession,
+  ApiDagGraph,
+  SseEvent,
+  MinionCommand,
+  VersionInfo,
+  CreateSessionRequest,
+  CreateSessionVariantsRequest,
+  PrPreview,
+  WorkspaceDiff,
+  ScreenshotList,
+  ScreenshotEntry,
+  VapidPublicKey,
+  PushSubscriptionJSON,
+}
 
 export interface MockMinion {
   url: string
@@ -11,9 +39,18 @@ export interface MockMinion {
   setSessions(sessions: ApiSession[]): void
   setDags(dags: ApiDagGraph[]): void
   setVersion(v: Partial<VersionInfo>): void
+  setPr(sessionId: string, pr: PrPreview | null): void
+  setDiff(sessionId: string, diff: WorkspaceDiff | null): void
+  setScreenshots(sessionId: string, screenshots: ScreenshotEntry[]): void
+  setScreenshotBlob(file: string, body: Buffer, contentType?: string): void
+  setVapidKey(key: string): void
   drop(): void
   lastCommands: MinionCommand[]
   lastMessages: Array<{ text: string; sessionId?: string }>
+  lastCreateSessionRequests: CreateSessionRequest[]
+  lastCreateVariantsRequests: CreateSessionVariantsRequest[]
+  pushSubscriptions: PushSubscriptionJSON[]
+  lastUnsubscribeEndpoints: string[]
   close(): Promise<void>
 }
 
@@ -24,6 +61,7 @@ function writeSse(res: ServerResponse, event: SseEvent): void {
 function cors(res: ServerResponse, allowedOrigin: string): void {
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
   res.setHeader('Access-Control-Max-Age', '600')
 }
 
@@ -34,6 +72,28 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
     req.on('error', reject)
   })
+}
+
+let sessionCounter = 0
+function makeSession(req: CreateSessionRequest): ApiSession {
+  sessionCounter += 1
+  const id = `mock-session-${sessionCounter}`
+  const now = new Date().toISOString()
+  return {
+    id,
+    slug: `mock-${sessionCounter}`,
+    status: 'pending',
+    command: `/${req.mode} ${req.prompt}`,
+    repo: req.repo,
+    createdAt: now,
+    updatedAt: now,
+    childIds: [],
+    needsAttention: false,
+    attentionReasons: [],
+    quickActions: [],
+    mode: req.mode,
+    conversation: [{ role: 'user', text: req.prompt }],
+  }
 }
 
 export async function createMockMinion(opts?: {
@@ -51,8 +111,18 @@ export async function createMockMinion(opts?: {
     features: [],
   }
 
+  const prBySession = new Map<string, PrPreview>()
+  const diffBySession = new Map<string, WorkspaceDiff>()
+  const screenshotsBySession = new Map<string, ScreenshotEntry[]>()
+  const screenshotBlobs = new Map<string, { body: Buffer; contentType: string }>()
+  let vapidKey = 'BMOCK_VAPID_PUBLIC_KEY_00000000000000000000000000000000000000000000000000000000000000000000000000000000'
+  const pushSubscriptions: PushSubscriptionJSON[] = []
+  const lastUnsubscribeEndpoints: string[] = []
+
   const lastCommands: MinionCommand[] = []
   const lastMessages: Array<{ text: string; sessionId?: string }> = []
+  const lastCreateSessionRequests: CreateSessionRequest[] = []
+  const lastCreateVariantsRequests: CreateSessionVariantsRequest[] = []
 
   let activeSseRes: ServerResponse | null = null
 
@@ -65,6 +135,23 @@ export async function createMockMinion(opts?: {
     res.writeHead(401, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: 'Unauthorized' }))
     return false
+  }
+
+  function hasFeature(name: string): boolean {
+    return versionInfo.features.includes(name)
+  }
+
+  function sendJson(res: ServerResponse, status: number, payload: unknown): void {
+    res.writeHead(status, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(payload))
+  }
+
+  function notFound(res: ServerResponse): void {
+    sendJson(res, 404, { error: 'Not found' })
+  }
+
+  function featureDisabled(res: ServerResponse, name: string): void {
+    sendJson(res, 404, { error: `feature '${name}' not enabled` })
   }
 
   const server = http.createServer(async (req, res) => {
@@ -82,22 +169,114 @@ export async function createMockMinion(opts?: {
 
     if (path === '/api/version' && req.method === 'GET') {
       if (!checkAuth(req, res)) return
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ data: versionInfo }))
+      sendJson(res, 200, { data: versionInfo })
       return
     }
 
     if (!checkAuth(req, res)) return
 
     if (path === '/api/sessions' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ data: sessions }))
+      sendJson(res, 200, { data: sessions })
       return
     }
 
+    if (path === '/api/sessions' && req.method === 'POST') {
+      if (!hasFeature('sessions-create')) return featureDisabled(res, 'sessions-create')
+      const body = await readBody(req)
+      const payload = JSON.parse(body) as CreateSessionRequest
+      if (!payload.prompt || !payload.mode) {
+        return sendJson(res, 400, { error: 'prompt and mode are required' })
+      }
+      lastCreateSessionRequests.push(payload)
+      const session = makeSession(payload)
+      sessions = [...sessions, session]
+      sendJson(res, 200, { data: session })
+      return
+    }
+
+    if (path === '/api/sessions/variants' && req.method === 'POST') {
+      if (!hasFeature('sessions-variants')) return featureDisabled(res, 'sessions-variants')
+      const body = await readBody(req)
+      const payload = JSON.parse(body) as CreateSessionVariantsRequest
+      if (!payload.prompt || !payload.mode || !payload.count || payload.count < 2) {
+        return sendJson(res, 400, { error: 'prompt, mode, and count >= 2 are required' })
+      }
+      lastCreateVariantsRequests.push(payload)
+      const groupId = `group-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+      const variants: ApiSession[] = []
+      for (let i = 0; i < payload.count; i++) {
+        const s = makeSession(payload)
+        s.variantGroupId = groupId
+        variants.push(s)
+      }
+      sessions = [...sessions, ...variants]
+      sendJson(res, 200, { data: { groupId, sessions: variants } })
+      return
+    }
+
+    const sessionSubMatch = path.match(/^\/api\/sessions\/([^/]+)\/(pr|diff|screenshots)$/)
+    if (sessionSubMatch && req.method === 'GET') {
+      const sessionId = decodeURIComponent(sessionSubMatch[1])
+      const kind = sessionSubMatch[2]
+      if (kind === 'pr') {
+        if (!hasFeature('pr-preview')) return featureDisabled(res, 'pr-preview')
+        const pr = prBySession.get(sessionId)
+        if (!pr) return notFound(res)
+        return sendJson(res, 200, { data: pr })
+      }
+      if (kind === 'diff') {
+        if (!hasFeature('diff-viewer')) return featureDisabled(res, 'diff-viewer')
+        const diff = diffBySession.get(sessionId)
+        if (!diff) return notFound(res)
+        return sendJson(res, 200, { data: diff })
+      }
+      if (kind === 'screenshots') {
+        if (!hasFeature('screenshots-http')) return featureDisabled(res, 'screenshots-http')
+        const list = screenshotsBySession.get(sessionId) ?? []
+        return sendJson(res, 200, { data: { sessionId, screenshots: list } satisfies ScreenshotList })
+      }
+    }
+
+    const screenshotMatch = path.match(/^\/api\/screenshots\/(.+)$/)
+    if (screenshotMatch && req.method === 'GET') {
+      if (!hasFeature('screenshots-http')) return featureDisabled(res, 'screenshots-http')
+      const file = decodeURIComponent(screenshotMatch[1])
+      const blob = screenshotBlobs.get(file)
+      if (!blob) return notFound(res)
+      res.writeHead(200, { 'Content-Type': blob.contentType, 'Content-Length': String(blob.body.length) })
+      res.end(blob.body)
+      return
+    }
+
+    if (path === '/api/push/vapid-public-key' && req.method === 'GET') {
+      if (!hasFeature('web-push')) return featureDisabled(res, 'web-push')
+      return sendJson(res, 200, { data: { key: vapidKey } satisfies VapidPublicKey })
+    }
+
+    if (path === '/api/push-subscribe' && req.method === 'POST') {
+      if (!hasFeature('web-push')) return featureDisabled(res, 'web-push')
+      const body = await readBody(req)
+      const sub = JSON.parse(body) as PushSubscriptionJSON
+      if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
+        return sendJson(res, 400, { error: 'invalid subscription' })
+      }
+      pushSubscriptions.push(sub)
+      return sendJson(res, 200, { data: { ok: true, id: `sub-${pushSubscriptions.length}` } })
+    }
+
+    if (path === '/api/push-subscribe' && req.method === 'DELETE') {
+      if (!hasFeature('web-push')) return featureDisabled(res, 'web-push')
+      const body = await readBody(req)
+      const payload = JSON.parse(body) as { endpoint: string }
+      if (!payload.endpoint) return sendJson(res, 400, { error: 'endpoint is required' })
+      lastUnsubscribeEndpoints.push(payload.endpoint)
+      const idx = pushSubscriptions.findIndex((s) => s.endpoint === payload.endpoint)
+      if (idx !== -1) pushSubscriptions.splice(idx, 1)
+      return sendJson(res, 200, { data: { ok: true } })
+    }
+
     if (path === '/api/dags' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ data: dags }))
+      sendJson(res, 200, { data: dags })
       return
     }
 
@@ -124,8 +303,7 @@ export async function createMockMinion(opts?: {
       const body = await readBody(req)
       const cmd = JSON.parse(body) as MinionCommand
       lastCommands.push(cmd)
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ data: { success: true } }))
+      sendJson(res, 200, { data: { success: true } })
       return
     }
 
@@ -133,18 +311,14 @@ export async function createMockMinion(opts?: {
       const body = await readBody(req)
       const payload = JSON.parse(body) as { text: string; sessionId?: string }
       if (!payload.text) {
-        res.writeHead(400, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: 'text is required' }))
-        return
+        return sendJson(res, 400, { error: 'text is required' })
       }
       lastMessages.push({ text: payload.text, sessionId: payload.sessionId })
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ data: { ok: true, sessionId: payload.sessionId ?? null } }))
+      sendJson(res, 200, { data: { ok: true, sessionId: payload.sessionId ?? null } })
       return
     }
 
-    res.writeHead(404, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ error: 'Not found' }))
+    notFound(res)
   })
 
   await new Promise<void>((resolve) => server.listen(0, 'localhost', resolve))
@@ -157,6 +331,10 @@ export async function createMockMinion(opts?: {
     token,
     lastCommands,
     lastMessages,
+    lastCreateSessionRequests,
+    lastCreateVariantsRequests,
+    pushSubscriptions,
+    lastUnsubscribeEndpoints,
 
     emit(event: SseEvent) {
       if (activeSseRes) writeSse(activeSseRes, event)
@@ -172,6 +350,28 @@ export async function createMockMinion(opts?: {
 
     setVersion(v: Partial<VersionInfo>) {
       versionInfo = { ...versionInfo, ...v }
+    },
+
+    setPr(sessionId: string, pr: PrPreview | null) {
+      if (pr) prBySession.set(sessionId, pr)
+      else prBySession.delete(sessionId)
+    },
+
+    setDiff(sessionId: string, diff: WorkspaceDiff | null) {
+      if (diff) diffBySession.set(sessionId, diff)
+      else diffBySession.delete(sessionId)
+    },
+
+    setScreenshots(sessionId: string, screenshots: ScreenshotEntry[]) {
+      screenshotsBySession.set(sessionId, screenshots)
+    },
+
+    setScreenshotBlob(file: string, body: Buffer, contentType = 'image/png') {
+      screenshotBlobs.set(file, { body, contentType })
+    },
+
+    setVapidKey(key: string) {
+      vapidKey = key
     },
 
     drop() {
