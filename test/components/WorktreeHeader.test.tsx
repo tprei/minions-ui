@@ -37,6 +37,7 @@ function makeStore(opts: {
   })
   const diffStatsBySessionId = signal<Map<string, DiffStats>>(opts.initialStats ?? new Map())
   return {
+    connectionId: 'test-conn',
     client: {} as ConnectionStore['client'],
     sessions: signal([]),
     dags: signal([]),
