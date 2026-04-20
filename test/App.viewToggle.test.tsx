@@ -2,6 +2,8 @@ import { render, screen, fireEvent, within } from '@testing-library/preact'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { installMockEventSource } from './sse-mock'
 import type { VersionInfo, ApiSession, ApiDagGraph } from '../src/api/types'
+import App, { viewMode } from '../src/App'
+import { connections, activeId, disposeAll } from '../src/connections/store'
 
 vi.mock('virtual:pwa-register/preact', () => ({
   useRegisterSW: vi.fn().mockReturnValue({}),
@@ -135,18 +137,10 @@ function session(over: Partial<ApiSession> = {}): ApiSession {
 }
 
 function seedConnection() {
-  localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
-    version: 1,
-    connections: [
-      { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
-    ],
-    activeId: 'c1',
-  }))
-}
-
-async function resetViewMode() {
-  const mod = await import('../src/App')
-  mod.viewMode.value = 'list'
+  connections.value = [
+    { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+  ]
+  activeId.value = 'c1'
 }
 
 describe('App view toggle', () => {
@@ -155,11 +149,17 @@ describe('App view toggle', () => {
   beforeEach(() => {
     localStorage.clear()
     mock = installMockEventSource()
-    vi.resetModules()
+    viewMode.value = 'list'
+    disposeAll()
+    connections.value = []
+    activeId.value = null
     setDesktop(true)
   })
 
   afterEach(() => {
+    connections.value = []
+    activeId.value = null
+    disposeAll()
     mock.restore()
     vi.unstubAllGlobals()
     localStorage.clear()
@@ -168,8 +168,6 @@ describe('App view toggle', () => {
   it('renders ViewToggle with List selected by default', async () => {
     seedConnection()
     stubFetch([session()])
-    await resetViewMode()
-    const App = (await import('../src/App')).default
     render(<App />)
 
     const toggle = await screen.findByTestId('view-toggle')
@@ -182,8 +180,6 @@ describe('App view toggle', () => {
   it('switches to canvas view when Canvas tab clicked on desktop', async () => {
     seedConnection()
     stubFetch([session()])
-    await resetViewMode()
-    const App = (await import('../src/App')).default
     render(<App />)
 
     await screen.findByText('brave-fox')
@@ -197,8 +193,6 @@ describe('App view toggle', () => {
   it('switching back to List hides the canvas pane', async () => {
     seedConnection()
     stubFetch([session()])
-    await resetViewMode()
-    const App = (await import('../src/App')).default
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('view-toggle-canvas'))
@@ -212,8 +206,6 @@ describe('App view toggle', () => {
   it('clicking a node in canvas opens detail popup with Open Chat button', async () => {
     seedConnection()
     stubFetch([session({ id: 's1', slug: 'brave-fox' })])
-    await resetViewMode()
-    const App = (await import('../src/App')).default
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('view-toggle-canvas'))
@@ -225,8 +217,6 @@ describe('App view toggle', () => {
   it('Open Chat from canvas popup switches to list and selects session', async () => {
     seedConnection()
     stubFetch([session({ id: 's1', slug: 'brave-fox' })])
-    await resetViewMode()
-    const App = (await import('../src/App')).default
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('view-toggle-canvas'))
@@ -234,8 +224,6 @@ describe('App view toggle', () => {
     fireEvent.click(node)
     fireEvent.click(await screen.findByText('Open Chat'))
 
-    // Chat pane renders the upgrade notice because the mock minion
-    // does not advertise the 'transcript' feature.
     await screen.findByTestId('transcript-upgrade-notice')
     expect(screen.queryByTestId('canvas-pane')).toBeNull()
   })
@@ -244,8 +232,6 @@ describe('App view toggle', () => {
     setDesktop(false)
     seedConnection()
     stubFetch([session()])
-    await resetViewMode()
-    const App = (await import('../src/App')).default
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('view-toggle-canvas'))
@@ -261,8 +247,6 @@ describe('App view toggle', () => {
   it('renders the Ship tab in the view toggle', async () => {
     seedConnection()
     stubFetch([session()])
-    await resetViewMode()
-    const App = (await import('../src/App')).default
     render(<App />)
 
     const toggle = await screen.findByTestId('view-toggle')
@@ -282,8 +266,6 @@ describe('App view toggle', () => {
       updatedAt: '2024-01-01',
     }
     stubFetch([session()], [shipDag])
-    await resetViewMode()
-    const App = (await import('../src/App')).default
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('view-toggle-ship'))
@@ -295,8 +277,6 @@ describe('App view toggle', () => {
   it('shows the empty ship state when no DAG qualifies as a ship pipeline', async () => {
     seedConnection()
     stubFetch([session()])
-    await resetViewMode()
-    const App = (await import('../src/App')).default
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('view-toggle-ship'))
@@ -317,8 +297,6 @@ describe('App view toggle', () => {
       updatedAt: '2024-01-01',
     }
     stubFetch([session()], [shipDag])
-    await resetViewMode()
-    const App = (await import('../src/App')).default
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('view-toggle-ship'))
@@ -332,8 +310,6 @@ describe('App view toggle', () => {
   it('canvas sendReply callback calls /api/messages', async () => {
     seedConnection()
     const { sendMessage } = stubFetch([session({ id: 's1', slug: 'brave-fox', quickActions: [{ type: 'retry', label: 'Retry', message: 'retry please' }] })])
-    await resetViewMode()
-    const App = (await import('../src/App')).default
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('view-toggle-canvas'))
