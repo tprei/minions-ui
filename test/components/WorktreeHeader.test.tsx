@@ -42,6 +42,7 @@ function makeStore(opts: {
     sessions: signal([]),
     dags: signal([]),
     status: signal('live'),
+    reconnectAt: signal<number | null>(null),
     error: signal(null),
     version,
     stale: signal(false),

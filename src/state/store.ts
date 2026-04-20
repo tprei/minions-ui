@@ -165,6 +165,7 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     sessions,
     dags,
     status,
+    reconnectAt: handle.reconnectAt,
     error,
     version,
     stale,

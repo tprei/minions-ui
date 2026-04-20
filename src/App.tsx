@@ -88,7 +88,13 @@ function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode
   )
 }
 
-function ConnectionStatusBadge({ status }: { status: string }) {
+function ConnectionStatusBadge({
+  status,
+  reconnectAt,
+}: {
+  status: string
+  reconnectAt?: number | null
+}) {
   const color =
     status === 'live'
       ? 'bg-green-500'
@@ -97,10 +103,34 @@ function ConnectionStatusBadge({ status }: { status: string }) {
         : status === 'connecting'
           ? 'bg-blue-500'
           : 'bg-slate-400'
+
+  const [seconds, setSeconds] = useState<number | null>(null)
+  useEffect(() => {
+    if (status !== 'retrying' || !reconnectAt) {
+      setSeconds(null)
+      return
+    }
+    const tick = () => {
+      const ms = reconnectAt - Date.now()
+      setSeconds(ms > 0 ? Math.ceil(ms / 1000) : 0)
+    }
+    tick()
+    const id = setInterval(tick, 500)
+    return () => clearInterval(id)
+  }, [status, reconnectAt])
+
+  const label =
+    status === 'retrying' && seconds !== null
+      ? `retrying in ${seconds}s`
+      : status
+
   return (
-    <span class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+    <span
+      class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400"
+      data-testid="connection-status-badge"
+    >
       <span class={`inline-block h-2 w-2 rounded-full ${color}`} />
-      {status}
+      <span data-testid="connection-status-label">{label}</span>
     </span>
   )
 }
@@ -914,7 +944,7 @@ function ActiveView() {
       )}
       <header class="flex items-center gap-2 px-3 sm:px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
         <ConnectionPicker onManage={() => { showDrawer.value = true }} />
-        <ConnectionStatusBadge status={store.status.value} />
+        <ConnectionStatusBadge status={store.status.value} reconnectAt={store.reconnectAt.value} />
         <div class="ml-auto flex items-center gap-1.5">
           <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />
           <ThemeToggle />

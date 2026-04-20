@@ -52,6 +52,7 @@ function makeStore(opts: {
     sessions: signal<ApiSession[]>(opts.sessions ?? []),
     dags: signal<ApiDagGraph[]>([]),
     status: signal('live'),
+    reconnectAt: signal<number | null>(null),
     error: signal<string | null>(null),
     version: signal<VersionInfo | null>(version),
     stale: signal(false),
