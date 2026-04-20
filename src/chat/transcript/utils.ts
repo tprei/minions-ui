@@ -127,7 +127,14 @@ export function buildTranscriptRows(events: TranscriptEvent[]): BuildRowsResult 
       case 'tool_call': {
         const result = resultsByToolUseId.get(e.call.toolUseId) ?? null
         if (result) handledResultIds.add(result.id)
-        rows.push({ kind: 'tool-call', turn: e.turn, seq: e.seq, call: e, result })
+        const idx = rows.findIndex(
+          (r) => r.kind === 'tool-call' && r.call.call.toolUseId === e.call.toolUseId,
+        )
+        if (idx >= 0) {
+          rows[idx] = { kind: 'tool-call', turn: e.turn, seq: e.seq, call: e, result }
+        } else {
+          rows.push({ kind: 'tool-call', turn: e.turn, seq: e.seq, call: e, result })
+        }
         break
       }
       case 'tool_result':
