@@ -204,13 +204,15 @@ export async function createMockMinion(opts?: {
       lastCreateVariantsRequests.push(payload)
       const groupId = `group-${Date.now()}-${Math.floor(Math.random() * 1000)}`
       const variants: ApiSession[] = []
+      const results: Array<{ sessionId: string; slug: string; threadId: number }> = []
       for (let i = 0; i < payload.count; i++) {
         const s = makeSession(payload)
         s.variantGroupId = groupId
         variants.push(s)
+        results.push({ sessionId: s.slug, slug: s.slug, threadId: s.threadId ?? 0 })
       }
       sessions = [...sessions, ...variants]
-      sendJson(res, 200, { data: { groupId, sessions: variants } })
+      sendJson(res, 200, { data: { sessions: results } })
       return
     }
 

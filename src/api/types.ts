@@ -77,21 +77,25 @@ export interface VersionInfo {
   repos?: RepoEntry[]
 }
 
-export type CreateSessionMode = 'task' | 'plan' | 'think' | 'dag' | 'split' | 'stack' | 'ship' | 'doctor'
+export type CreateSessionMode = 'task' | 'plan' | 'think' | 'review' | 'ship-think'
 
 export interface CreateSessionRequest {
   prompt: string
   mode: CreateSessionMode
   repo?: string
+  profileId?: string
 }
 
 export interface CreateSessionVariantsRequest extends CreateSessionRequest {
   count: number
 }
 
+export type CreateSessionVariantResult =
+  | { sessionId: string; slug: string; threadId: number }
+  | { error: string }
+
 export interface CreateSessionVariantsResult {
-  groupId: string
-  sessions: ApiSession[]
+  sessions: CreateSessionVariantResult[]
 }
 
 export type PrState = 'open' | 'closed' | 'merged'

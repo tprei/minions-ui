@@ -60,10 +60,11 @@ function makeStore(opts: {
       .mockImplementation(
         opts.createVariantsImpl ??
           (async (req) => ({
-            groupId: 'g-xyz',
-            sessions: Array.from({ length: req.count }, (_, i) =>
-              makeSession({ id: `sv-${i + 1}`, variantGroupId: 'g-xyz' })
-            ),
+            sessions: Array.from({ length: req.count }, (_, i) => ({
+              sessionId: `sv-${i + 1}`,
+              slug: `sv-${i + 1}`,
+              threadId: 100 + i,
+            })),
           }))
       ),
     sendCommand: vi.fn<(cmd: MinionCommand) => Promise<CommandResult>>(),
@@ -116,7 +117,7 @@ describe('NewTaskBar', () => {
     expect(screen.getByTestId('mode-task')).toBeTruthy()
     expect(screen.getByTestId('mode-plan')).toBeTruthy()
     expect(screen.getByTestId('mode-think')).toBeTruthy()
-    expect(screen.getByTestId('mode-ship')).toBeTruthy()
+    expect(screen.getByTestId('mode-ship-think')).toBeTruthy()
     expect(screen.getByTestId('mode-task').getAttribute('aria-checked')).toBe('true')
   })
 
@@ -192,7 +193,7 @@ describe('NewTaskBar', () => {
       repos: [{ alias: 'primary', url: 'https://github.com/org/primary' }],
     })
     const navigate = vi.fn<(hash: string) => void>()
-    render(<NewTaskBar store={store} navigate={navigate} />)
+    render(<NewTaskBar store={store} navigate={navigate} generateGroupId={() => 'g-xyz'} />)
     fireEvent.click(screen.getByTestId('variant-3'))
     const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
     fireEvent.input(textarea, { target: { value: 'split it' } })
@@ -231,7 +232,7 @@ describe('NewTaskBar', () => {
       repos: [{ alias: 'primary', url: 'https://github.com/org/primary' }],
     })
     const navigate = vi.fn<(hash: string) => void>()
-    render(<NewTaskBar store={store} navigate={navigate} />)
+    render(<NewTaskBar store={store} navigate={navigate} generateGroupId={() => 'g-xyz'} />)
     fireEvent.click(screen.getByTestId('variant-2'))
     const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
     fireEvent.input(textarea, { target: { value: 'compare approaches' } })
@@ -243,7 +244,7 @@ describe('NewTaskBar', () => {
     expect(recorded?.prompt).toBe('compare approaches')
     expect(recorded?.mode).toBe('task')
     expect(recorded?.repo).toBe('primary')
-    expect(recorded?.variantSessionIds).toHaveLength(2)
+    expect(recorded?.variantSessionIds).toEqual(['sv-1', 'sv-2'])
   })
 
   it('Launch button label reflects variant count', async () => {
