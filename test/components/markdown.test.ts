@@ -14,6 +14,19 @@ describe('renderMarkdown', () => {
     expect(out).toContain('const x = 1')
   })
 
+  it('wraps fenced code blocks with a copy-to-clipboard button', () => {
+    const out = renderMarkdown('```\nconst x = 1\n```')
+    expect(out).toContain('code-block-wrap')
+    expect(out).toContain('data-copy')
+    expect(out).toContain('aria-label="Copy code to clipboard"')
+  })
+
+  it('does not add a copy button to mermaid blocks', () => {
+    const out = renderMarkdown('```mermaid\ngraph TD; A-->B\n```')
+    expect(out).not.toContain('data-copy')
+    expect(out).not.toContain('code-block-wrap')
+  })
+
   it('applies syntax highlighting classes for fenced blocks with a known language', () => {
     const out = renderMarkdown('```ts\nconst x = 1\n```')
     expect(out).toContain('language-typescript')
