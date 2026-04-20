@@ -37,6 +37,48 @@ export function MarkdownView({ source, class: className, 'data-testid': testId }
   useEffect(() => {
     const root = rootRef.current
     if (!root) return
+    const timers = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>()
+    const onClick = (e: Event) => {
+      const target = e.target
+      if (!(target instanceof Element)) return
+      const btn = target.closest<HTMLButtonElement>('button[data-copy]')
+      if (!btn || !root.contains(btn)) return
+      const code = btn.parentElement?.querySelector('pre > code')
+      if (!code) return
+      const text = code.textContent ?? ''
+      const showState = (label: string) => {
+        btn.textContent = label
+        const existing = timers.get(btn)
+        if (existing) clearTimeout(existing)
+        timers.set(
+          btn,
+          setTimeout(() => {
+            btn.textContent = 'Copy'
+            timers.delete(btn)
+          }, 1500),
+        )
+      }
+      const clip = navigator.clipboard
+      if (clip && typeof clip.writeText === 'function') {
+        clip.writeText(text).then(
+          () => showState('Copied'),
+          () => showState('Failed'),
+        )
+      } else {
+        showState('Failed')
+      }
+    }
+    root.addEventListener('click', onClick)
+    return () => {
+      root.removeEventListener('click', onClick)
+      for (const t of timers.values()) clearTimeout(t)
+      timers.clear()
+    }
+  }, [html])
+
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return
     const blocks = Array.from(
       root.querySelectorAll<HTMLElement>('pre > code.language-mermaid'),
     )

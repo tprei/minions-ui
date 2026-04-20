@@ -22,7 +22,12 @@ marked.use({
           ? `hljs language-${rawLang}`
           : 'hljs'
       const body = highlight(text, rawLang)
-      return `<pre><code class="${className}">${body}\n</code></pre>\n`
+      const button =
+        '<button type="button" data-copy aria-label="Copy code to clipboard" ' +
+        'class="code-copy-btn absolute top-2 right-2 text-[11px] leading-none px-2 py-1 rounded ' +
+        'bg-slate-700/70 hover:bg-slate-600 text-slate-100 select-none transition-colors ' +
+        'focus:outline-none focus:ring-2 focus:ring-indigo-400">Copy</button>'
+      return `<div class="code-block-wrap relative"><pre><code class="${className}">${body}\n</code></pre>${button}</div>\n`
     },
   },
 })
@@ -31,10 +36,10 @@ const ALLOWED_TAGS = [
   'p', 'br', 'strong', 'em', 'code', 'pre', 'blockquote',
   'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'a', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-  'del', 'ins', 'span', 'div',
+  'del', 'ins', 'span', 'div', 'button',
 ]
 
-const ALLOWED_ATTR = ['href', 'target', 'rel', 'class']
+const ALLOWED_ATTR = ['href', 'target', 'rel', 'class', 'type', 'aria-label', 'data-copy']
 
 export function renderMarkdown(text: string): string {
   const raw = marked.parse(text, { async: false }) as string
