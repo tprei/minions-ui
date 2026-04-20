@@ -1,7 +1,5 @@
 import type { ConnectionStore } from '../../state/types'
 
-export const MIN_LIBRARY_VERSION = '1.119'
-
 export interface TranscriptUpgradeNoticeProps {
   store: ConnectionStore
 }
@@ -33,12 +31,17 @@ export function TranscriptUpgradeNotice({ store }: TranscriptUpgradeNoticeProps)
           This minion needs a library update
         </h2>
         <p class="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-          The conductor-style chat view needs{' '}
+          The conductor-style chat view needs a{' '}
           <code class="font-mono text-slate-800 dark:text-slate-200">
-            @tprei/telegram-minions ≥ {MIN_LIBRARY_VERSION}
-          </code>
-          . This minion reports{' '}
-          <code class="font-mono text-slate-800 dark:text-slate-200">{running}</code>.
+            @tprei/telegram-minions
+          </code>{' '}
+          build that advertises the{' '}
+          <code class="font-mono text-slate-800 dark:text-slate-200">transcript</code>{' '}
+          feature on{' '}
+          <code class="font-mono text-slate-800 dark:text-slate-200">/api/version</code>.
+          This minion reports version{' '}
+          <code class="font-mono text-slate-800 dark:text-slate-200">{running}</code> and
+          did not advertise that flag.
         </p>
         <p class="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
           Redeploy with the latest image (
