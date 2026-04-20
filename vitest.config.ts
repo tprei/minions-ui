@@ -1,12 +1,22 @@
 import { defineConfig } from 'vitest/config'
-import preact from '@preact/preset-vite'
 import { fileURLToPath } from 'url'
 import { resolve, dirname } from 'path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+let preactPlugin: unknown[] = []
+try {
+  const mod = await import('@preact/preset-vite')
+  preactPlugin = [(mod.default || mod)()]
+} catch { /* optional dependency */ }
+
 export default defineConfig({
-  plugins: [preact()],
+  plugins: preactPlugin,
+  esbuild: {
+    jsxFactory: 'h',
+    jsxFragment: 'Fragment',
+    jsxImportSource: 'preact',
+  },
   test: {
     globals: true,
     environment: 'jsdom',
