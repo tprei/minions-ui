@@ -7,12 +7,6 @@ vi.mock('virtual:pwa-register/preact', () => ({
   useRegisterSW: vi.fn().mockReturnValue({}),
 }))
 
-vi.mock('idb-keyval', () => ({
-  get: vi.fn().mockResolvedValue(undefined),
-  set: vi.fn().mockResolvedValue(undefined),
-  del: vi.fn().mockResolvedValue(undefined),
-}))
-
 const VERSION: VersionInfo = { apiVersion: '1', libraryVersion: '0.1.0', features: [] }
 
 function stubFetch(sessions: ApiSession[] = [], dags: ApiDagGraph[] = []) {
