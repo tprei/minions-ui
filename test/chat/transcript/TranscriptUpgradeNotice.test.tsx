@@ -1,10 +1,7 @@
 import { render, screen } from '@testing-library/preact'
 import { signal } from '@preact/signals'
 import { describe, it, expect, vi } from 'vitest'
-import {
-  TranscriptUpgradeNotice,
-  MIN_LIBRARY_VERSION,
-} from '../../../src/chat/transcript/TranscriptUpgradeNotice'
+import { TranscriptUpgradeNotice } from '../../../src/chat/transcript/TranscriptUpgradeNotice'
 import type { ConnectionStore } from '../../../src/state/types'
 import type { VersionInfo, ApiSession, ApiDagGraph } from '../../../src/api/types'
 
@@ -29,12 +26,13 @@ function makeStore(version: VersionInfo | null): ConnectionStore {
 }
 
 describe('TranscriptUpgradeNotice', () => {
-  it('reports the minimum library version the conductor view needs', () => {
-    const store = makeStore({ apiVersion: '1', libraryVersion: '1.110.0', features: [] })
+  it('explains the missing transcript feature flag and echoes the running version', () => {
+    const store = makeStore({ apiVersion: '1', libraryVersion: '1.118.7', features: [] })
     render(<TranscriptUpgradeNotice store={store} />)
     const notice = screen.getByTestId('transcript-upgrade-notice')
-    expect(notice.textContent).toContain(MIN_LIBRARY_VERSION)
-    expect(notice.textContent).toContain('1.110.0')
+    expect(notice.textContent).toContain('transcript')
+    expect(notice.textContent).toContain('/api/version')
+    expect(notice.textContent).toContain('1.118.7')
   })
 
   it('falls back to "unknown" when the minion has not reported a version yet', () => {
