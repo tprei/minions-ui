@@ -40,7 +40,7 @@ export function ToolCallCard({ call, result, defaultOpen = false }: Props) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        class="w-full flex flex-col items-stretch gap-0.5 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40"
+        class="w-full flex flex-col items-stretch gap-0.5 px-3 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40"
         aria-expanded={open}
         data-testid="transcript-tool-call-toggle"
       >

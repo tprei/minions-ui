@@ -208,6 +208,35 @@ describe('buildTranscriptRows', () => {
     expect(rows.filter((r) => r.kind === 'tool-result-orphan')).toHaveLength(0)
   })
 
+  it('deduplicates repeated tool_call events with the same toolUseId', () => {
+    const events: TranscriptEvent[] = [
+      toolCall(1, 'tu1', 'Read', 'read'),
+      toolCall(2, 'tu1', 'Read', 'read'),
+      toolCall(3, 'tu1', 'Read', 'read'),
+    ]
+    const { rows } = buildTranscriptRows(events)
+    const callRows = rows.filter((r) => r.kind === 'tool-call')
+    expect(callRows).toHaveLength(1)
+    if (callRows[0].kind === 'tool-call') {
+      expect(callRows[0].seq).toBe(3)
+    }
+  })
+
+  it('still pairs a late tool_result when tool_call events repeat', () => {
+    const events: TranscriptEvent[] = [
+      toolCall(1, 'tu1', 'Read', 'read'),
+      toolCall(2, 'tu1', 'Read', 'read'),
+      toolResult(3, 'tu1', 'ok', 'done'),
+    ]
+    const { rows } = buildTranscriptRows(events)
+    const callRows = rows.filter((r) => r.kind === 'tool-call')
+    expect(callRows).toHaveLength(1)
+    expect(rows.filter((r) => r.kind === 'tool-result-orphan')).toHaveLength(0)
+    if (callRows[0].kind === 'tool-call') {
+      expect(callRows[0].result?.result.text).toBe('done')
+    }
+  })
+
   it('emits an orphan row for tool_result without a matching tool_call', () => {
     const events: TranscriptEvent[] = [toolResult(1, 'missing', 'ok', 'lonely')]
     const { rows } = buildTranscriptRows(events)
