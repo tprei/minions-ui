@@ -2,7 +2,7 @@ import { useMemo, useState } from 'preact/hooks'
 import { useComputed } from '@preact/signals'
 import type { ApiSession, MinionCommand } from '../api/types'
 import type { ConnectionStore } from '../state/types'
-import { ConversationView } from '../chat/ConversationView'
+import { Transcript, TranscriptUpgradeNotice } from '../chat/transcript'
 import { confirm } from '../hooks/useConfirm'
 import { hasFeature } from '../api/features'
 import { formatRoute } from '../routing/route'
@@ -191,6 +191,7 @@ function VariantColumns({ store, group, variants, navigate }: VariantColumnsProp
           id={v.id}
           session={v.session}
           group={group}
+          store={store}
           onPickWinner={pickWinner}
           onOpen={() => {
             if (v.session) navigate(formatRoute({ name: 'session', sessionSlug: v.session.slug }))
@@ -205,11 +206,12 @@ interface VariantColumnProps {
   id: string
   session: ApiSession | null
   group: VariantGroup
+  store: ConnectionStore
   onPickWinner: (s: ApiSession) => Promise<void>
   onOpen: () => void
 }
 
-function VariantColumn({ id, session, group, onPickWinner, onOpen }: VariantColumnProps) {
+function VariantColumn({ id, session, group, store, onPickWinner, onOpen }: VariantColumnProps) {
   const [picking, setPicking] = useState(false)
   const isWinner = group.winnerId === id
   const winnerLocked = typeof group.winnerId === 'string'
@@ -273,7 +275,7 @@ function VariantColumn({ id, session, group, onPickWinner, onOpen }: VariantColu
       </div>
       <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
         {session ? (
-          <ConversationView messages={session.conversation} />
+          <VariantTranscript store={store} session={session} />
         ) : (
           <div class="flex-1 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500 italic p-6">
             Variant hasn't landed yet.
@@ -282,4 +284,19 @@ function VariantColumn({ id, session, group, onPickWinner, onOpen }: VariantColu
       </div>
     </section>
   )
+}
+
+function VariantTranscript({ store, session }: { store: ConnectionStore; session: ApiSession }) {
+  if (!hasFeature(store, 'transcript')) {
+    return <TranscriptUpgradeNotice store={store} />
+  }
+  const transcript = store.getTranscript(session.id)
+  if (!transcript) {
+    return (
+      <div class="flex-1 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500 italic p-6">
+        Transcript unavailable.
+      </div>
+    )
+  }
+  return <Transcript store={transcript} />
 }

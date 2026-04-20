@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/preact'
+import { render, screen, fireEvent } from '@testing-library/preact'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { installMockEventSource } from './sse-mock'
 import type { VersionInfo, ApiSession, ApiDagGraph } from '../src/api/types'
@@ -86,7 +86,7 @@ describe('App', () => {
     await screen.findByText('brave-fox')
   })
 
-  it('clicking a session in the sidebar opens its conversation inline', async () => {
+  it('clicking a session in the sidebar opens the chat pane inline', async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
       connections: [
@@ -94,15 +94,16 @@ describe('App', () => {
       ],
       activeId: 'c1',
     }))
-    stubFetch([session({ conversation: [{ role: 'user', text: 'hello' }] })])
+    stubFetch([session()])
     const App = (await import('../src/App')).default
     render(<App />)
 
     const item = await screen.findByTestId('session-item-s1')
     fireEvent.click(item)
 
-    const conv = await screen.findByTestId('conversation-view')
-    expect(within(conv).getByText('hello')).toBeTruthy()
+    // Mock minion advertises no 'transcript' feature, so the chat pane
+    // renders the upgrade notice rather than a transcript timeline.
+    await screen.findByTestId('transcript-upgrade-notice')
   })
 
   it('renders the variant group view when the hash is #/g/:groupId', async () => {
@@ -202,7 +203,7 @@ describe('App', () => {
     expect(screen.getByTestId('session-item-s3')).toBeTruthy()
   })
 
-  it('switching sessions swaps the conversation pane', async () => {
+  it('switching sessions keeps the chat pane mounted', async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
       connections: [
@@ -211,18 +212,16 @@ describe('App', () => {
       activeId: 'c1',
     }))
     stubFetch([
-      session({ id: 's1', slug: 'brave-fox', conversation: [{ role: 'user', text: 'first' }] }),
-      session({ id: 's2', slug: 'swift-cat', conversation: [{ role: 'user', text: 'second' }] }),
+      session({ id: 's1', slug: 'brave-fox' }),
+      session({ id: 's2', slug: 'swift-cat' }),
     ])
     const App = (await import('../src/App')).default
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('session-item-s1'))
-    const conv1 = await screen.findByTestId('conversation-view')
-    expect(within(conv1).getByText('first')).toBeTruthy()
+    await screen.findByTestId('transcript-upgrade-notice')
 
     fireEvent.click(screen.getByTestId('session-item-s2'))
-    const conv2 = await screen.findByTestId('conversation-view')
-    await within(conv2).findByText('second')
+    await screen.findByTestId('transcript-upgrade-notice')
   })
 })

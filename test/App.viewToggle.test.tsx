@@ -230,7 +230,7 @@ describe('App view toggle', () => {
 
   it('Open Chat from canvas popup switches to list and selects session', async () => {
     seedConnection()
-    stubFetch([session({ id: 's1', slug: 'brave-fox', conversation: [{ role: 'user', text: 'hello-from-canvas' }] })])
+    stubFetch([session({ id: 's1', slug: 'brave-fox' })])
     await resetViewMode()
     const App = (await import('../src/App')).default
     render(<App />)
@@ -240,8 +240,9 @@ describe('App view toggle', () => {
     fireEvent.click(node)
     fireEvent.click(await screen.findByText('Open Chat'))
 
-    const conv = await screen.findByTestId('conversation-view')
-    expect(within(conv).getByText('hello-from-canvas')).toBeTruthy()
+    // Chat pane renders the upgrade notice because the mock minion
+    // does not advertise the 'transcript' feature.
+    await screen.findByTestId('transcript-upgrade-notice')
     expect(screen.queryByTestId('canvas-pane')).toBeNull()
   })
 
