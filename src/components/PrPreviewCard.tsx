@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import type { ApiClient } from '../api/client'
 import type { PrCheck, PrCheckStatus, PrPreview, PrState } from '../api/types'
 import { MarkdownView } from './MarkdownView'
+import { Skeleton, SkeletonLines } from './Skeleton'
 
 export const PR_PREVIEW_POLL_MS = 30_000
 
@@ -125,10 +126,15 @@ function AuthorChip({ login }: { login: string }) {
 function LoadingCard() {
   return (
     <div
-      class="mx-3 mt-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-500 dark:text-slate-400"
+      class="mx-3 mt-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2"
       data-testid="pr-preview-loading"
     >
-      Loading PR preview…
+      <div class="flex items-center gap-2 mb-2">
+        <Skeleton width={16} height={16} rounded="full" />
+        <Skeleton width={140} height={12} rounded="sm" />
+        <Skeleton width={40} height={12} rounded="sm" class="ml-auto" />
+      </div>
+      <SkeletonLines count={2} lineHeight={8} />
     </div>
   )
 }

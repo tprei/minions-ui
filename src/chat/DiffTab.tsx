@@ -3,6 +3,7 @@ import type { ApiClient } from '../api/client'
 import type { WorkspaceDiff } from '../api/types'
 import { parseUnifiedDiff, type DiffFile, countChanges, fileDisplayPath } from './diff-parse'
 import { detectLanguage, highlightLine, tokenClass } from './syntax-highlight'
+import { Skeleton, SkeletonLines } from '../components/Skeleton'
 
 interface DiffTabProps {
   sessionId: string
@@ -62,8 +63,14 @@ export function DiffTab({ sessionId, sessionUpdatedAt, client }: DiffTabProps) {
 
   if (loading && !diff) {
     return (
-      <div class="flex-1 flex items-center justify-center text-xs text-slate-500 dark:text-slate-400" data-testid="diff-loading">
-        Loading diff…
+      <div class="flex-1 flex flex-col gap-3 p-3" data-testid="diff-loading">
+        <div class="flex items-center gap-2">
+          <Skeleton width={80} height={14} rounded="sm" />
+          <Skeleton width={120} height={14} rounded="sm" />
+          <Skeleton width={60} height={14} rounded="sm" class="ml-auto" />
+        </div>
+        <SkeletonLines count={6} lineHeight={12} />
+        <SkeletonLines count={4} lineHeight={12} />
       </div>
     )
   }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type { ApiClient } from '../api/client'
 import type { ScreenshotEntry, ScreenshotList } from '../api/types'
+import { Skeleton } from '../components/Skeleton'
 
 interface ScreenshotsTabProps {
   sessionId: string
@@ -99,8 +100,10 @@ export function ScreenshotsTab({ sessionId, sessionUpdatedAt, client }: Screensh
 
   if (loading && !list) {
     return (
-      <div class="flex-1 flex items-center justify-center text-xs text-slate-500 dark:text-slate-400" data-testid="screenshots-loading">
-        Loading screenshots…
+      <div class="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2 p-3" data-testid="screenshots-loading">
+        {Array.from({ length: 6 }, (_, i) => (
+          <Skeleton key={i} height={96} rounded="md" />
+        ))}
       </div>
     )
   }

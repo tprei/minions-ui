@@ -13,6 +13,7 @@ export interface SseHandlers {
 export interface EventStreamHandle {
   close(): void
   status: Signal<SseStatus>
+  reconnectAt: Signal<number | null>
 }
 
 export function openEventStream(opts: {
@@ -22,6 +23,7 @@ export function openEventStream(opts: {
 }): EventStreamHandle {
   const { baseUrl, token, handlers } = opts
   const status = signal<SseStatus>('connecting')
+  const reconnectAt = signal<number | null>(null)
   let es: EventSource | null = null
   let attempt = 0
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -41,10 +43,12 @@ export function openEventStream(opts: {
   function connect() {
     if (closed) return
     setStatus('connecting')
+    reconnectAt.value = null
     es = new EventSource(buildUrl())
 
     es.onopen = () => {
       attempt = 0
+      reconnectAt.value = null
       setStatus('live')
       handlers.onReconnect?.()
     }
@@ -56,6 +60,7 @@ export function openEventStream(opts: {
       setStatus('retrying')
       const delay = Math.floor(Math.random() * Math.min(30000, 500 * 2 ** attempt))
       attempt++
+      reconnectAt.value = Date.now() + delay
       reconnectTimer = setTimeout(connect, delay)
     }
 
@@ -73,6 +78,7 @@ export function openEventStream(opts: {
 
   return {
     status,
+    reconnectAt,
     close() {
       if (closed) return
       closed = true
@@ -80,6 +86,7 @@ export function openEventStream(opts: {
         clearTimeout(reconnectTimer)
         reconnectTimer = null
       }
+      reconnectAt.value = null
       es?.close()
       es = null
       setStatus('closed')

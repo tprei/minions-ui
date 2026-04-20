@@ -19,6 +19,7 @@ export interface ConnectionStore {
   sessions: ReadonlySignal<ApiSession[]>
   dags: ReadonlySignal<ApiDagGraph[]>
   status: ReadonlySignal<SseStatus>
+  reconnectAt: ReadonlySignal<number | null>
   error: ReadonlySignal<string | null>
   version: ReadonlySignal<VersionInfo | null>
   stale: ReadonlySignal<boolean>
