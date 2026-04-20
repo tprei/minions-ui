@@ -65,13 +65,13 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   }, [open.value, open])
 
   return (
-    <div class="relative" ref={containerRef}>
+    <div class="relative min-w-0 shrink" ref={containerRef}>
       <button
         data-testid="connection-picker-trigger"
         onClick={handleToggle}
         aria-haspopup="listbox"
         aria-expanded={open.value}
-        class="flex items-center gap-2 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+        class="flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 sm:px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors min-w-0"
       >
         {activeConn ? (
           <>
@@ -80,7 +80,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
               style={{ backgroundColor: activeConn.color }}
               data-testid="picker-active-dot"
             />
-            <span class="max-w-[140px] truncate">{activeConn.label}</span>
+            <span class="max-w-[80px] sm:max-w-[140px] truncate">{activeConn.label}</span>
           </>
         ) : (
           <span class="text-slate-500">No connection</span>

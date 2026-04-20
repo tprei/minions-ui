@@ -43,7 +43,7 @@ export const viewMode = signal<ViewMode>('list')
 
 function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
   const tabClass = (active: boolean) =>
-    `px-2.5 py-1 text-xs font-medium transition-colors ${
+    `px-1.5 sm:px-2.5 py-1 text-xs font-medium transition-colors ${
       active
         ? 'bg-indigo-600 text-white'
         : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -58,31 +58,37 @@ function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode
         type="button"
         role="tab"
         aria-selected={mode === 'list'}
+        aria-label="List"
         onClick={() => onChange('list')}
         class={tabClass(mode === 'list')}
         data-testid="view-toggle-list"
       >
-        List
+        <span class="sm:hidden" aria-hidden="true">☰</span>
+        <span class="hidden sm:inline">List</span>
       </button>
       <button
         type="button"
         role="tab"
         aria-selected={mode === 'canvas'}
+        aria-label="Canvas"
         onClick={() => onChange('canvas')}
         class={`${tabClass(mode === 'canvas')} border-l border-slate-300 dark:border-slate-600`}
         data-testid="view-toggle-canvas"
       >
-        Canvas
+        <span class="sm:hidden" aria-hidden="true">◎</span>
+        <span class="hidden sm:inline">Canvas</span>
       </button>
       <button
         type="button"
         role="tab"
         aria-selected={mode === 'ship'}
+        aria-label="Ship"
         onClick={() => onChange('ship')}
         class={`${tabClass(mode === 'ship')} border-l border-slate-300 dark:border-slate-600`}
         data-testid="view-toggle-ship"
       >
-        Ship
+        <span class="sm:hidden" aria-hidden="true">🚀</span>
+        <span class="hidden sm:inline">Ship</span>
       </button>
     </div>
   )
@@ -126,7 +132,7 @@ function ConnectionStatusBadge({
 
   return (
     <span
-      class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400"
+      class="hidden sm:flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400"
       data-testid="connection-status-badge"
     >
       <span class={`inline-block h-2 w-2 rounded-full ${color}`} />
@@ -641,10 +647,10 @@ function ActiveView() {
           Offline — showing last snapshot
         </div>
       )}
-      <header class="flex items-center gap-2 px-3 sm:px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
+      <header class="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0 overflow-hidden">
         <ConnectionPicker onManage={() => { showDrawer.value = true }} />
         <ConnectionStatusBadge status={store.status.value} reconnectAt={store.reconnectAt.value} />
-        <div class="ml-auto flex items-center gap-1.5">
+        <div class="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
           <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />
           <ThemeToggle />
           {hasFeature(store, 'messages') && (

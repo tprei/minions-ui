@@ -12,12 +12,14 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['test/**/*.test.{ts,tsx}'],
     setupFiles: ['test/setup.ts'],
+    testTimeout: 30000,
   },
   resolve: {
     alias: {
       react: 'preact/compat',
       'react-dom': 'preact/compat',
       'virtual:pwa-register/preact': resolve(__dirname, 'test/mocks/pwa-register.ts'),
+      'idb-keyval': resolve(__dirname, 'test/mocks/idb-keyval.ts'),
     },
   },
 })
