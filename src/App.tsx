@@ -582,6 +582,30 @@ function ActiveView() {
     viewMode.value = 'list'
   }, [])
 
+  const [cleaning, setCleaning] = useState(false)
+  const handleClean = useCallback(async () => {
+    if (!store) return
+    const ok = await confirm({
+      title: 'Clean unused resources?',
+      message: 'Runs /clean to prune unused worktrees, branches, and session state on the minion.',
+      destructive: true,
+      confirmLabel: 'Clean',
+    })
+    if (!ok) return
+    setCleaning(true)
+    try {
+      await store.client.sendMessage('/clean')
+    } catch (e) {
+      await confirm({
+        title: 'Clean failed',
+        message: e instanceof Error ? e.message : 'Unknown error',
+        mode: 'alert',
+      })
+    } finally {
+      setCleaning(false)
+    }
+  }, [store])
+
   if (!store || !conn) return null
 
   const selected = sessionId ? sessions.find((s) => s.id === sessionId) ?? null : null
@@ -623,6 +647,18 @@ function ActiveView() {
         <div class="ml-auto flex items-center gap-1.5">
           <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />
           <ThemeToggle />
+          {hasFeature(store, 'messages') && (
+            <button
+              type="button"
+              onClick={() => void handleClean()}
+              disabled={cleaning}
+              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Clean unused worktrees, branches, and session state"
+              data-testid="header-clean-btn"
+            >
+              {cleaning ? 'Cleaning…' : 'Clean'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void store.refresh()}

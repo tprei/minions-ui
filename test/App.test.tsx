@@ -203,6 +203,72 @@ describe('App', () => {
     expect(screen.getByTestId('session-item-s3')).toBeTruthy()
   })
 
+  it('hides the Clean button when the minion does not advertise the messages feature', { timeout: 15000 }, async () => {
+    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
+      version: 1,
+      connections: [
+        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+      ],
+      activeId: 'c1',
+    }))
+    stubFetch([session()])
+    const App = (await import('../src/App')).default
+    render(<App />)
+    await screen.findByText('My Minion')
+    expect(screen.queryByTestId('header-clean-btn')).toBeNull()
+  })
+
+  it('clicking Clean sends /clean via /api/messages after confirmation', { timeout: 15000 }, async () => {
+    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
+      version: 1,
+      connections: [
+        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+      ],
+      activeId: 'c1',
+    }))
+    const versionWithMessages: VersionInfo = {
+      apiVersion: '1',
+      libraryVersion: '1.110.0',
+      features: ['messages'],
+    }
+    const postedBodies: unknown[] = []
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/api/version')) {
+        return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ data: versionWithMessages }) })
+      }
+      if (url.includes('/api/sessions')) {
+        return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ data: [session()] }) })
+      }
+      if (url.includes('/api/dags')) {
+        return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ data: [] }) })
+      }
+      if (url.includes('/api/messages') && init?.method === 'POST') {
+        postedBodies.push(JSON.parse(String(init.body)))
+        return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ data: { ok: true, sessionId: null } }) })
+      }
+      return Promise.resolve({ ok: false, status: 404, statusText: 'NF', json: () => Promise.resolve({ data: null }) })
+    }))
+    const App = (await import('../src/App')).default
+    render(<App />)
+
+    const cleanBtn = await screen.findByTestId('header-clean-btn')
+    fireEvent.click(cleanBtn)
+
+    const dialog = await screen.findByRole('dialog')
+    const confirmBtn = Array.from(dialog.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Clean',
+    )
+    expect(confirmBtn).toBeTruthy()
+    fireEvent.click(confirmBtn!)
+
+    await vi.waitFor(() => {
+      expect(postedBodies.length).toBeGreaterThan(0)
+    })
+    const body = postedBodies[0] as { text: string; sessionId?: string }
+    expect(body.text).toBe('/clean')
+    expect(body.sessionId).toBeUndefined()
+  })
+
   it('switching sessions keeps the chat pane mounted', async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
