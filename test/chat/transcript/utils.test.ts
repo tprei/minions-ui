@@ -133,10 +133,12 @@ describe('buildTranscriptRows', () => {
     expect(separators).toHaveLength(2)
   })
 
-  it('coalesces streaming assistant_text events with the same blockId, keeping latest text', () => {
+  it('accumulates streaming assistant_text deltas and replaces with full text on final', () => {
     const events: TranscriptEvent[] = [
       assistantText(1, 'b1', 'Hel', false),
-      assistantText(2, 'b1', 'Hello world', true),
+      assistantText(2, 'b1', 'lo ', false),
+      assistantText(3, 'b1', 'world', false),
+      assistantText(4, 'b1', 'Hello world', true),
     ]
     const { rows } = buildTranscriptRows(events)
     const textRows = rows.filter((r) => r.kind === 'assistant-text')
@@ -147,10 +149,26 @@ describe('buildTranscriptRows', () => {
     }
   })
 
-  it('coalesces streaming thinking events with the same blockId', () => {
+  it('accumulates partial assistant_text deltas even before the final event arrives', () => {
     const events: TranscriptEvent[] = [
-      thinking(1, 'th1', 'partial', false),
-      thinking(2, 'th1', 'partial more', true),
+      assistantText(1, 'b1', 'Hel', false),
+      assistantText(2, 'b1', 'lo', false),
+    ]
+    const { rows } = buildTranscriptRows(events)
+    const textRows = rows.filter((r) => r.kind === 'assistant-text')
+    expect(textRows).toHaveLength(1)
+    if (textRows[0].kind === 'assistant-text') {
+      expect(textRows[0].event.text).toBe('Hello')
+      expect(textRows[0].event.final).toBe(false)
+    }
+  })
+
+  it('accumulates streaming thinking deltas', () => {
+    const events: TranscriptEvent[] = [
+      thinking(1, 'th1', 'part', false),
+      thinking(2, 'th1', 'ial', false),
+      thinking(3, 'th1', ' more', false),
+      thinking(4, 'th1', 'partial more', true),
     ]
     const { rows } = buildTranscriptRows(events)
     const thRows = rows.filter((r) => r.kind === 'thinking')
