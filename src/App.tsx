@@ -5,8 +5,7 @@ import { connections, activeId, getActiveStore } from './connections/store'
 import { ConnectionSettings } from './connections/ConnectionSettings'
 import { ConnectionPicker } from './connections/ConnectionPicker'
 import { ConnectionsDrawer } from './connections/ConnectionsDrawer'
-import { ConversationView } from './chat/ConversationView'
-import { Transcript } from './chat/transcript'
+import { Transcript, TranscriptUpgradeNotice } from './chat/transcript'
 import { MessageInput } from './chat/MessageInput'
 import { NewTaskBar } from './chat/NewTaskBar'
 import { QuickActionsBar } from './chat/QuickActionsBar'
@@ -159,9 +158,7 @@ function SessionItem({
   indent?: number
   kind?: SessionItemKind
 }) {
-  const preview = session.conversation.length > 0
-    ? session.conversation[session.conversation.length - 1].text.slice(0, 60)
-    : session.command.slice(0, 60)
+  const preview = session.command.slice(0, 60)
   const baseClasses = 'w-full text-left px-3 py-2 rounded-md border transition-colors flex flex-col gap-1'
   const active_ = active
     ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 ring-2 ring-indigo-400/60 dark:ring-indigo-500/50'
@@ -566,7 +563,7 @@ function ChatPane({
             {hasFeature(store, 'transcript') ? (
               <TranscriptPane store={store} sessionId={session.id} />
             ) : (
-              <ConversationView messages={session.conversation} />
+              <TranscriptUpgradeNotice store={store} />
             )}
             <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
               <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />

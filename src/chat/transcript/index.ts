@@ -1,4 +1,5 @@
 export { Transcript } from './Transcript'
+export { TranscriptUpgradeNotice, MIN_LIBRARY_VERSION } from './TranscriptUpgradeNotice'
 export { TurnSeparator } from './TurnSeparator'
 export { UserMessageCard } from './UserMessageCard'
 export { AssistantTextBlock } from './AssistantTextBlock'
