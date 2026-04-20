@@ -27,7 +27,7 @@ export const NEW_TASK_MODES: ModeOption[] = [
   { value: 'task', label: 'Task', hint: 'Execute end-to-end' },
   { value: 'plan', label: 'Plan', hint: 'Produce a plan; no execution' },
   { value: 'think', label: 'Think', hint: 'Deliberate; no side effects' },
-  { value: 'ship', label: 'Ship', hint: 'Finish with a PR' },
+  { value: 'ship-think', label: 'Ship', hint: 'Finish with a PR' },
 ]
 
 export const VARIANT_COUNTS: ReadonlyArray<number> = [1, 2, 3, 4]
@@ -35,6 +35,7 @@ export const VARIANT_COUNTS: ReadonlyArray<number> = [1, 2, 3, 4]
 export interface NewTaskBarProps {
   store: ConnectionStore
   navigate?: (hash: string) => void
+  generateGroupId?: () => string
 }
 
 function defaultNavigate(hash: string): void {
@@ -43,7 +44,18 @@ function defaultNavigate(hash: string): void {
   }
 }
 
-export function NewTaskBar({ store, navigate = defaultNavigate }: NewTaskBarProps) {
+function defaultGenerateGroupId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `g-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+}
+
+export function NewTaskBar({
+  store,
+  navigate = defaultNavigate,
+  generateGroupId = defaultGenerateGroupId,
+}: NewTaskBarProps) {
   const mode = useSignal<CreateSessionMode>('task')
   const prompt = useSignal('')
   const repo = useSignal('')
@@ -102,16 +114,30 @@ export function NewTaskBar({ store, navigate = defaultNavigate }: NewTaskBarProp
           repo: selectedRepo,
           count: variantCount.value,
         })
+        const slugs: string[] = []
+        const errors: string[] = []
+        for (const result of out.sessions) {
+          if ('slug' in result) slugs.push(result.slug)
+          else errors.push(result.error)
+        }
+        if (slugs.length === 0) {
+          error.value = errors[0] ?? 'Failed to create variants'
+          return
+        }
+        const groupId = generateGroupId()
         recordVariantGroup(store.connectionId, {
-          groupId: out.groupId,
+          groupId,
           prompt: p,
           mode: mode.value,
           repo: selectedRepo,
-          variantSessionIds: out.sessions.map((s) => s.id),
+          variantSessionIds: slugs,
           createdAt: new Date().toISOString(),
         })
         prompt.value = ''
-        navigate(formatRoute({ name: 'group', groupId: out.groupId }))
+        if (errors.length > 0) {
+          error.value = `${errors.length} variant${errors.length > 1 ? 's' : ''} failed to launch`
+        }
+        navigate(formatRoute({ name: 'group', groupId }))
       } else {
         await store.client.createSession({
           prompt: p,

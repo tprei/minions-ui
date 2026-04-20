@@ -34,11 +34,12 @@ describe('mock-minion integration', () => {
     expect(minion.lastCreateSessionRequests[before]).toEqual({ prompt: 'hello', mode: 'task', repo: 'example' })
   })
 
-  it('createSessionVariants returns a group of N sessions sharing a groupId', async () => {
+  it('createSessionVariants returns N successful slug/threadId tuples', async () => {
     minion.setVersion({ features: ['sessions-variants'] })
     const out = await client.createSessionVariants({ prompt: 'parallel', mode: 'task', count: 3 })
     expect(out.sessions).toHaveLength(3)
-    expect(new Set(out.sessions.map((s) => s.variantGroupId))).toEqual(new Set([out.groupId]))
+    const slugs = out.sessions.map((s) => ('slug' in s ? s.slug : null))
+    expect(slugs.every((s) => typeof s === 'string' && s.length > 0)).toBe(true)
   })
 
   it('gated endpoints return 404 with a feature-disabled error when flag off', async () => {

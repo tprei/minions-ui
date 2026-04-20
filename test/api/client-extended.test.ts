@@ -78,10 +78,12 @@ describe('ApiClient — createSession', () => {
 })
 
 describe('ApiClient — createSessionVariants', () => {
-  it('POSTs to /api/sessions/variants and unwraps group result', async () => {
+  it('POSTs to /api/sessions/variants and unwraps the variants result', async () => {
     const result: CreateSessionVariantsResult = {
-      groupId: 'group-1',
-      sessions: [SAMPLE_SESSION, { ...SAMPLE_SESSION, id: 's-2' }],
+      sessions: [
+        { sessionId: 's-1', slug: 's-1', threadId: 1 },
+        { sessionId: 's-2', slug: 's-2', threadId: 2 },
+      ],
     }
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: result }))
     vi.stubGlobal('fetch', fetchMock)
