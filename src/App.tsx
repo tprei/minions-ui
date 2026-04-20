@@ -151,6 +151,15 @@ function ChatPane({
   const [text, setText] = useState('')
   const [pending, setPending] = useState<'stop' | 'close' | null>(null)
   const [activeTab, setActiveTab] = useState<SessionTabId>('chat')
+  const isDesktopPane = useMediaQuery('(min-width: 768px)')
+  const [fullscreen, setFullscreen] = useState<boolean>(() =>
+    typeof localStorage !== 'undefined' && localStorage.getItem('minions-ui:chat-fullscreen') === 'true',
+  )
+  const toggleFullscreen = () => {
+    const next = !fullscreen
+    setFullscreen(next)
+    try { localStorage.setItem('minions-ui:chat-fullscreen', String(next)) } catch { /* ignore */ }
+  }
   const handleSend = (t: string) => onSend(t, session.id)
   const handleQuickAction = (action: QuickAction) => onSend(action.message, session.id)
 
@@ -202,9 +211,13 @@ function ChatPane({
 
   const stoppable = session.status === 'running' || session.status === 'pending'
   const closable = session.status !== 'completed' && session.status !== 'failed'
+  const mobileFullscreen = !isDesktopPane.value && fullscreen
+  const rootClass = mobileFullscreen
+    ? 'fixed inset-0 z-40 flex flex-col bg-white dark:bg-slate-800'
+    : 'flex flex-col flex-1 min-h-0 bg-white dark:bg-slate-800'
 
   return (
-    <div class="flex flex-col flex-1 min-h-0 bg-white dark:bg-slate-800">
+    <div class={rootClass} data-testid="chat-pane" data-fullscreen={mobileFullscreen ? 'true' : 'false'}>
       <header class="flex items-center gap-2 px-4 py-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
         <span class={`inline-block h-2 w-2 rounded-full ${statusDot(session.status)}`} />
         <span class="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
@@ -223,6 +236,18 @@ function ChatPane({
           </a>
         )}
         <div class="ml-auto flex items-center gap-1.5">
+          {!isDesktopPane.value && (
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              title={fullscreen ? 'Exit full screen' : 'Expand chat to full screen'}
+              aria-label={fullscreen ? 'Exit full screen' : 'Expand chat to full screen'}
+              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+              data-testid="chat-fullscreen-btn"
+            >
+              {fullscreen ? 'Collapse' : 'Expand'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void handleStop()}
