@@ -652,21 +652,23 @@ function ActiveView() {
               type="button"
               onClick={() => void handleClean()}
               disabled={cleaning}
-              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Clean unused worktrees, branches, and session state"
+              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={cleaning ? 'Cleaning…' : 'Clean unused worktrees, branches, and session state'}
+              aria-label={cleaning ? 'Cleaning…' : 'Clean unused worktrees, branches, and session state'}
               data-testid="header-clean-btn"
             >
-              {cleaning ? 'Cleaning…' : 'Clean'}
+              <span aria-hidden="true">🧹</span>
             </button>
           )}
           <button
             type="button"
             onClick={() => void store.refresh()}
-            class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+            class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
             title="Refetch sessions and DAGs from the minion"
+            aria-label="Refetch sessions and DAGs from the minion"
             data-testid="header-refresh-btn"
           >
-            Refresh
+            <span aria-hidden="true">🔄</span>
           </button>
         </div>
       </header>
