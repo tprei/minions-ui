@@ -196,6 +196,18 @@ describe('ToolCallCard', () => {
     fireEvent.click(screen.getByTestId('transcript-tool-call-toggle'))
     expect(screen.getByTestId('transcript-tool-call-pending')).toBeTruthy()
   })
+
+  it('shows an inline result preview when collapsed', () => {
+    render(<ToolCallCard call={makeCall()} result={makeResult('ok', '127.0.0.1 localhost\nanother line')} />)
+    const preview = screen.getByTestId('transcript-tool-call-preview')
+    expect(preview.textContent).toBe('127.0.0.1 localhost')
+  })
+
+  it('hides the inline preview once expanded', () => {
+    render(<ToolCallCard call={makeCall()} result={makeResult('ok', 'inline preview text')} />)
+    fireEvent.click(screen.getByTestId('transcript-tool-call-toggle'))
+    expect(screen.queryByTestId('transcript-tool-call-preview')).toBeNull()
+  })
 })
 
 describe('ToolResultBody', () => {

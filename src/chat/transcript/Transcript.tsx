@@ -128,7 +128,17 @@ function RowView({ row }: { row: TranscriptRow }) {
     case 'tool-call':
       return <ToolCallCard call={row.call} result={row.result} />
     case 'tool-result-orphan':
-      return <ToolResultBody event={row.event} />
+      return (
+        <div
+          class="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 overflow-hidden"
+          data-testid="transcript-tool-result-orphan"
+        >
+          <div class="px-3 py-1.5 text-[10px] uppercase tracking-wide font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40">
+            Tool result (no matching call)
+          </div>
+          <ToolResultBody event={row.event} />
+        </div>
+      )
     case 'status':
       return <StatusBanner event={row.event} />
   }

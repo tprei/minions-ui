@@ -9,6 +9,8 @@ interface Props {
 
 export function ThinkingBlock({ event, defaultOpen = false }: Props) {
   const [open, setOpen] = useState(defaultOpen)
+  const trimmed = event.text.trim()
+  if (event.final && trimmed.length === 0) return null
   const preview = event.text.slice(0, 80).replace(/\s+/g, ' ').trim()
   const shouldTruncate = event.text.length > 80
   return (

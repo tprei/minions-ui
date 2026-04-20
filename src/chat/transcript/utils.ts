@@ -82,7 +82,19 @@ export function buildTranscriptRows(events: TranscriptEvent[]): BuildRowsResult 
           const idx = rows.findIndex(
             (r) => r.kind === 'assistant-text' && r.blockId === e.blockId,
           )
-          if (idx >= 0) rows[idx] = { kind: 'assistant-text', blockId: e.blockId, turn: e.turn, seq: e.seq, event: e }
+          if (idx >= 0) {
+            const prev = rows[idx]
+            if (prev.kind === 'assistant-text') {
+              const mergedText = e.final ? e.text : (prev.event.text ?? '') + (e.text ?? '')
+              rows[idx] = {
+                kind: 'assistant-text',
+                blockId: e.blockId,
+                turn: e.turn,
+                seq: e.seq,
+                event: { ...e, text: mergedText },
+              }
+            }
+          }
         } else {
           rows.push({ kind: 'assistant-text', blockId: e.blockId, turn: e.turn, seq: e.seq, event: e })
         }
@@ -93,7 +105,19 @@ export function buildTranscriptRows(events: TranscriptEvent[]): BuildRowsResult 
         const prevSeq = blockSeen.get(e.blockId)
         if (prevSeq !== undefined) {
           const idx = rows.findIndex((r) => r.kind === 'thinking' && r.blockId === e.blockId)
-          if (idx >= 0) rows[idx] = { kind: 'thinking', blockId: e.blockId, turn: e.turn, seq: e.seq, event: e }
+          if (idx >= 0) {
+            const prev = rows[idx]
+            if (prev.kind === 'thinking') {
+              const mergedText = e.final ? e.text : (prev.event.text ?? '') + (e.text ?? '')
+              rows[idx] = {
+                kind: 'thinking',
+                blockId: e.blockId,
+                turn: e.turn,
+                seq: e.seq,
+                event: { ...e, text: mergedText },
+              }
+            }
+          }
         } else {
           rows.push({ kind: 'thinking', blockId: e.blockId, turn: e.turn, seq: e.seq, event: e })
         }

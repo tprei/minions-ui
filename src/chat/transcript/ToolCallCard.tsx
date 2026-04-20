@@ -14,6 +14,7 @@ export function ToolCallCard({ call, result, defaultOpen = false }: Props) {
   const summary = call.call
 
   const status: 'pending' | 'ok' | 'error' = result?.result.status ?? 'pending'
+  const preview = buildResultPreview(result)
   const statusBadge = (
     <span
       class={`text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded ${
@@ -39,24 +40,34 @@ export function ToolCallCard({ call, result, defaultOpen = false }: Props) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40"
+        class="w-full flex flex-col items-stretch gap-0.5 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40"
         aria-expanded={open}
         data-testid="transcript-tool-call-toggle"
       >
-        <ChevronIcon open={open} class="w-3 h-3 text-slate-400" />
-        <ToolKindIcon kind={summary.kind} class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-        <span class="font-mono text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400 shrink-0">
-          {summary.name}
-        </span>
-        <span class="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
-          {summary.title}
-        </span>
-        {summary.subtitle && (
-          <span class="text-[11px] text-slate-500 dark:text-slate-400 truncate font-mono">
-            {summary.subtitle}
+        <div class="flex items-center gap-2 min-w-0">
+          <ChevronIcon open={open} class="w-3 h-3 text-slate-400 shrink-0" />
+          <ToolKindIcon kind={summary.kind} class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+          <span class="font-mono text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400 shrink-0">
+            {summary.name}
           </span>
+          <span class="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
+            {summary.title}
+          </span>
+          {summary.subtitle && (
+            <span class="text-[11px] text-slate-500 dark:text-slate-400 truncate font-mono">
+              {summary.subtitle}
+            </span>
+          )}
+          <span class="ml-auto flex items-center gap-2 shrink-0">{statusBadge}</span>
+        </div>
+        {!open && preview && (
+          <div
+            class="pl-[1.375rem] text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate"
+            data-testid="transcript-tool-call-preview"
+          >
+            {preview}
+          </div>
         )}
-        <span class="ml-auto flex items-center gap-2">{statusBadge}</span>
       </button>
       {open && (
         <div
@@ -123,4 +134,31 @@ function formatValue(v: unknown): string {
   } catch {
     return String(v)
   }
+}
+
+function buildResultPreview(result: Props['result']): string | null {
+  if (!result) return null
+  const { result: payload } = result
+  if (payload.status === 'error') {
+    const msg = payload.error || payload.text
+    if (!msg) return null
+    return firstLine(msg, 160)
+  }
+  if (payload.status === 'pending') return null
+  if (!payload.text) {
+    if (payload.images && payload.images.length > 0) {
+      return payload.images.length === 1 ? '1 image' : `${payload.images.length} images`
+    }
+    return null
+  }
+  return firstLine(payload.text, 160)
+}
+
+function firstLine(text: string, max: number): string | null {
+  const trimmed = text.replace(/\r/g, '').replace(/^\s+/, '')
+  if (trimmed.length === 0) return null
+  const nl = trimmed.indexOf('\n')
+  const line = nl >= 0 ? trimmed.slice(0, nl) : trimmed
+  if (line.length <= max) return line
+  return line.slice(0, max - 1).trimEnd() + '…'
 }
