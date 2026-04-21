@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { createApiClient, ApiError } from '../../src/api/client'
 import { createMockMinion, type MockMinion } from '../../e2e/fixtures/mock-minion'
