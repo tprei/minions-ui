@@ -672,7 +672,7 @@ function ActiveView() {
           Offline — showing last snapshot
         </div>
       )}
-      <header class="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0 overflow-hidden">
+      <header class="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0 overflow-x-clip">
         <ConnectionPicker onManage={() => { showDrawer.value = true }} />
         <ConnectionStatusBadge status={store.status.value} reconnectAt={store.reconnectAt.value} />
         <div class="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
