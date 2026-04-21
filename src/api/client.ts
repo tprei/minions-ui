@@ -10,6 +10,9 @@ import type {
   PrPreview,
   PushSubscribeAck,
   PushSubscriptionJSON,
+  ResourceSnapshot,
+  RuntimeConfigResponse,
+  RuntimeOverrides,
   ScreenshotList,
   TranscriptSnapshot,
   VapidPublicKey,
@@ -47,6 +50,9 @@ export interface ApiClient {
   getVapidKey(): Promise<VapidPublicKey>
   subscribePush(sub: PushSubscriptionJSON): Promise<PushSubscribeAck>
   unsubscribePush(endpoint: string): Promise<{ ok: true }>
+  getMetrics(): Promise<ResourceSnapshot>
+  getRuntimeConfig(): Promise<RuntimeConfigResponse>
+  patchRuntimeConfig(patch: RuntimeOverrides): Promise<RuntimeConfigResponse>
   openEventStream(handlers: SseHandlers): EventStreamHandle
   baseUrl: string
   token: string
@@ -78,6 +84,19 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
   async function post<T>(path: string, data: unknown): Promise<T> {
     const res = await fetch(`${baseUrl}${path}`, {
       method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(data),
+    })
+    const body = (await res.json()) as ApiResponse<T>
+    if (!res.ok || body.error) {
+      throw new ApiError(res.status, body.error ?? res.statusText)
+    }
+    return body.data
+  }
+
+  async function patch<T>(path: string, data: unknown): Promise<T> {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: 'PATCH',
       headers: headers(),
       body: JSON.stringify(data),
     })
@@ -177,6 +196,18 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
 
     unsubscribePush(endpoint: string) {
       return del<{ ok: true }>('/api/push-subscribe', { endpoint })
+    },
+
+    getMetrics() {
+      return get<ResourceSnapshot>('/api/metrics')
+    },
+
+    getRuntimeConfig() {
+      return get<RuntimeConfigResponse>('/api/config/runtime')
+    },
+
+    patchRuntimeConfig(patchBody: RuntimeOverrides) {
+      return patch<RuntimeConfigResponse>('/api/config/runtime', patchBody)
     },
 
     openEventStream(handlers: SseHandlers): EventStreamHandle {

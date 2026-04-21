@@ -17,12 +17,16 @@ function makeStore(version: VersionInfo | null): ConnectionStore {
     version: signal<VersionInfo | null>(version),
     stale: signal(false),
     diffStatsBySessionId: signal(new Map()),
+    resourceSnapshot: signal(null),
+    runtimeConfig: signal(null),
     loadDiffStats: vi.fn(async () => {}),
     refresh: vi.fn(async () => {}),
     sendCommand: vi.fn(async () => ({ success: true })),
     getTranscript: vi.fn(() => null),
     applySessionCreated: vi.fn(),
     applySessionDeleted: vi.fn(),
+    refreshRuntimeConfig: vi.fn(async () => {}),
+    updateRuntimeConfig: vi.fn(async () => {}),
     dispose: vi.fn(),
   }
 }

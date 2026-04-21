@@ -5,6 +5,8 @@ import { connections, activeId, getActiveStore } from './connections/store'
 import { ConnectionSettings } from './connections/ConnectionSettings'
 import { ConnectionPicker } from './connections/ConnectionPicker'
 import { ConnectionsDrawer } from './connections/ConnectionsDrawer'
+import { ResourceChip } from './components/ResourceChip'
+import { RuntimeConfigDrawer, type RuntimeTab } from './settings/RuntimeConfigDrawer'
 import { Transcript, TranscriptUpgradeNotice } from './chat/transcript'
 import { MessageInput } from './chat/MessageInput'
 import { NewTaskBar } from './chat/NewTaskBar'
@@ -39,6 +41,7 @@ export type ViewMode = 'list' | 'canvas' | 'ship'
 
 const showSettings = signal(false)
 const showDrawer = signal(false)
+const showRuntime = signal<RuntimeTab | null>(null)
 export const viewMode = signal<ViewMode>('list')
 
 function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
@@ -687,9 +690,24 @@ function ActiveView() {
       <header class="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0 overflow-x-clip">
         <ConnectionPicker onManage={() => { showDrawer.value = true }} />
         <ConnectionStatusBadge status={store.status.value} reconnectAt={store.reconnectAt.value} />
+        {hasFeature(store, 'resource-metrics') && (
+          <ResourceChip store={store} onOpen={() => { showRuntime.value = 'resources' }} />
+        )}
         <div class="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
           <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />
           <ThemeToggle />
+          {hasFeature(store, 'runtime-config') && (
+            <button
+              type="button"
+              onClick={() => { showRuntime.value = 'config' }}
+              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+              title="Runtime config"
+              aria-label="Open runtime config"
+              data-testid="header-runtime-config-btn"
+            >
+              <span aria-hidden="true">⚙️</span>
+            </button>
+          )}
           {hasFeature(store, 'messages') && (
             <button
               type="button"
@@ -821,6 +839,13 @@ function ActiveView() {
       )}
       {showDrawer.value && (
         <ConnectionsDrawer onClose={() => { showDrawer.value = false }} />
+      )}
+      {showRuntime.value !== null && (
+        <RuntimeConfigDrawer
+          store={store}
+          initialTab={showRuntime.value}
+          onClose={() => { showRuntime.value = null }}
+        />
       )}
     </div>
   )

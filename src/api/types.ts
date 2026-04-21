@@ -58,6 +58,111 @@ export type SseEvent =
   | { type: 'dag_updated'; dag: ApiDagGraph }
   | { type: 'dag_deleted'; dagId: string }
   | { type: 'transcript_event'; sessionId: string; event: TranscriptEvent }
+  | { type: 'resource'; snapshot: ResourceSnapshot }
+
+export type LimitSource = 'cgroup' | 'host'
+
+export interface CpuSnapshot {
+  usagePercent: number
+  cpuCount: number
+  source: LimitSource
+}
+
+export interface MemorySnapshot {
+  usedBytes: number
+  limitBytes: number
+  rssBytes: number
+  source: LimitSource
+}
+
+export interface DiskSnapshot {
+  path: string
+  usedBytes: number
+  totalBytes: number
+}
+
+export interface CountsSnapshot {
+  activeSessions: number
+  maxSessions: number
+  activeLoops: number
+  maxLoops: number
+}
+
+export interface ResourceSnapshot {
+  ts: number
+  cpu: CpuSnapshot
+  memory: MemorySnapshot
+  disk: DiskSnapshot
+  eventLoopLagMs: number
+  counts: CountsSnapshot
+}
+
+export type OverrideFieldType = 'number' | 'boolean'
+export type OverrideApply = 'live' | 'restart'
+export type OverrideCategory = 'loops' | 'concurrency' | 'features'
+
+export interface OverrideField {
+  key: string
+  label: string
+  type: OverrideFieldType
+  category: OverrideCategory
+  apply: OverrideApply
+  min?: number
+  max?: number
+  integer?: boolean
+  description?: string
+}
+
+export interface LoopMeta {
+  id: string
+  name: string
+  defaultIntervalMs: number
+  defaultEnabled: boolean
+}
+
+export interface RuntimeOverridesSchema {
+  fields: OverrideField[]
+  loops: LoopMeta[]
+}
+
+export interface LoopOverride {
+  enabled?: boolean
+  intervalMs?: number
+}
+
+export interface RuntimeOverrides {
+  loops?: Record<string, LoopOverride>
+  workspace?: {
+    maxConcurrentSessions?: number
+  }
+  loopsConfig?: {
+    maxConcurrentLoops?: number
+    reservedInteractiveSlots?: number
+  }
+  mcp?: {
+    browserEnabled?: boolean
+    githubEnabled?: boolean
+    context7Enabled?: boolean
+    sentryEnabled?: boolean
+    supabaseEnabled?: boolean
+    flyEnabled?: boolean
+    zaiEnabled?: boolean
+  }
+  ci?: {
+    babysitEnabled?: boolean
+  }
+  quota?: {
+    retryMax?: number
+    defaultSleepMs?: number
+  }
+}
+
+export interface RuntimeConfigResponse {
+  base: Record<string, unknown>
+  overrides: RuntimeOverrides
+  schema: RuntimeOverridesSchema
+  requiresRestart?: string[]
+}
 
 export type MinionCommand =
   | { action: 'reply'; sessionId: string; message: string }
