@@ -170,6 +170,7 @@ function VariantColumns({ store, group, variants, navigate }: VariantColumnsProp
       }
       if (s.status !== 'completed' && s.status !== 'failed') {
         await store.sendCommand({ action: 'close', sessionId: s.id } satisfies MinionCommand)
+        store.applySessionDeleted(s.id)
       }
     }
 

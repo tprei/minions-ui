@@ -89,11 +89,33 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     }
   }
 
+  function applySessionCreated(session: import('../api/types').ApiSession) {
+    const idx = sessions.value.findIndex((s) => s.id === session.id)
+    if (idx !== -1) {
+      const updated = [...sessions.value]
+      updated[idx] = session
+      sessions.value = updated
+    } else {
+      sessions.value = [...sessions.value, session]
+    }
+    scheduleSnapshot()
+  }
+
+  function applySessionDeleted(sessionId: string) {
+    if (!sessions.value.some((s) => s.id === sessionId)) return
+    sessions.value = sessions.value.filter((s) => s.id !== sessionId)
+    if (diffStatsBySessionId.value.has(sessionId)) {
+      const next = new Map(diffStatsBySessionId.value)
+      next.delete(sessionId)
+      diffStatsBySessionId.value = next
+    }
+    scheduleSnapshot()
+  }
+
   function onEvent(event: SseEvent) {
     switch (event.type) {
       case 'session_created':
-        sessions.value = [...sessions.value, event.session]
-        scheduleSnapshot()
+        applySessionCreated(event.session)
         break
       case 'session_updated': {
         const idx = sessions.value.findIndex((s) => s.id === event.session.id)
@@ -109,13 +131,7 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
         break
       }
       case 'session_deleted': {
-        sessions.value = sessions.value.filter((s) => s.id !== event.sessionId)
-        if (diffStatsBySessionId.value.has(event.sessionId)) {
-          const next = new Map(diffStatsBySessionId.value)
-          next.delete(event.sessionId)
-          diffStatsBySessionId.value = next
-        }
-        scheduleSnapshot()
+        applySessionDeleted(event.sessionId)
         break
       }
       case 'dag_created':
@@ -157,6 +173,40 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     },
   })
 
+  // iOS 18 can leave EventSource stuck in OPEN state with no error after
+  // backgrounding; these listeners force a reconnect when the app resumes.
+  let hiddenSince: number | null = null
+  const RECONNECT_HIDDEN_MS = 5000
+
+  function onVisibilityChange() {
+    if (typeof document === 'undefined') return
+    if (document.visibilityState === 'hidden') {
+      hiddenSince = Date.now()
+      return
+    }
+    const since = hiddenSince
+    hiddenSince = null
+    if (since === null) return
+    if (Date.now() - since < RECONNECT_HIDDEN_MS) return
+    handle.reconnect()
+  }
+
+  function onPageShow(event: PageTransitionEvent) {
+    if (event.persisted) handle.reconnect()
+  }
+
+  function onOnline() {
+    handle.reconnect()
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibilityChange)
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pageshow', onPageShow)
+    window.addEventListener('online', onOnline)
+  }
+
   void refresh()
 
   return {
@@ -176,10 +226,19 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
       return client.sendCommand(cmd)
     },
     getTranscript,
+    applySessionCreated,
+    applySessionDeleted,
     dispose() {
       if (snapshotTimer !== null) {
         clearTimeout(snapshotTimer)
         snapshotTimer = null
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange)
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pageshow', onPageShow)
+        window.removeEventListener('online', onOnline)
       }
       for (const ts of transcripts.values()) ts.dispose()
       transcripts.clear()

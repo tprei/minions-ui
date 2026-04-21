@@ -94,4 +94,150 @@ describe('createConnectionStore snapshot integration', () => {
     expect(mockSaveSnapshot).toHaveBeenCalled()
     store.dispose()
   })
+
+  it('applySessionCreated upserts by id, avoiding duplicates when SSE echoes the same session', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    vi.stubGlobal('fetch', makeResponses())
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-upsert')
+
+    store.applySessionCreated(SESSION)
+    expect(store.sessions.value).toHaveLength(1)
+
+    const echoed = [...mock.instances.values()][0]
+    echoed?.simulateOpen()
+    echoed?.push({ type: 'session_created', session: SESSION })
+
+    expect(store.sessions.value).toHaveLength(1)
+    expect(store.sessions.value[0]).toEqual(SESSION)
+    store.dispose()
+  })
+
+  it('applySessionDeleted removes the session and is a no-op when already gone', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    vi.stubGlobal('fetch', makeResponses([SESSION]))
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-delete')
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    store.applySessionDeleted(SESSION.id)
+    expect(store.sessions.value).toHaveLength(0)
+
+    store.applySessionDeleted(SESSION.id)
+    expect(store.sessions.value).toHaveLength(0)
+    store.dispose()
+  })
+
+  it('reconnects the SSE stream when the document becomes visible after >5s hidden', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    vi.stubGlobal('fetch', makeResponses())
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-visibility')
+
+    await Promise.resolve()
+    expect(mock.constructedUrls).toHaveLength(1)
+
+    const originalNow = Date.now
+    let now = 1_000_000
+    Date.now = () => now
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    now += 6_000
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    expect(mock.constructedUrls).toHaveLength(2)
+
+    Date.now = originalNow
+    store.dispose()
+  })
+
+  it('does not reconnect on a brief visibility blip', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    vi.stubGlobal('fetch', makeResponses())
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-blip')
+
+    await Promise.resolve()
+    expect(mock.constructedUrls).toHaveLength(1)
+
+    const originalNow = Date.now
+    let now = 2_000_000
+    Date.now = () => now
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    now += 500
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    expect(mock.constructedUrls).toHaveLength(1)
+
+    Date.now = originalNow
+    store.dispose()
+  })
+
+  it('reconnects on the online event', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    vi.stubGlobal('fetch', makeResponses())
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-online')
+
+    await Promise.resolve()
+    expect(mock.constructedUrls).toHaveLength(1)
+
+    window.dispatchEvent(new Event('online'))
+
+    expect(mock.constructedUrls).toHaveLength(2)
+    store.dispose()
+  })
+
+  it('reconnects on pageshow when restored from bfcache', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    vi.stubGlobal('fetch', makeResponses())
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-bfcache')
+
+    await Promise.resolve()
+    expect(mock.constructedUrls).toHaveLength(1)
+
+    const evt = new Event('pageshow') as Event & { persisted?: boolean }
+    Object.defineProperty(evt, 'persisted', { value: true })
+    window.dispatchEvent(evt)
+
+    expect(mock.constructedUrls).toHaveLength(2)
+
+    const evt2 = new Event('pageshow') as Event & { persisted?: boolean }
+    Object.defineProperty(evt2, 'persisted', { value: false })
+    window.dispatchEvent(evt2)
+
+    expect(mock.constructedUrls).toHaveLength(2)
+    store.dispose()
+  })
+
+  it('dispose() removes visibility/pageshow/online listeners', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    vi.stubGlobal('fetch', makeResponses())
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-dispose')
+
+    await Promise.resolve()
+    expect(mock.constructedUrls).toHaveLength(1)
+    store.dispose()
+
+    window.dispatchEvent(new Event('online'))
+    expect(mock.constructedUrls).toHaveLength(1)
+  })
 })

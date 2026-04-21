@@ -28,5 +28,7 @@ export interface ConnectionStore {
   refresh(): Promise<void>
   sendCommand(cmd: MinionCommand): Promise<CommandResult>
   getTranscript(sessionId: string): TranscriptStore | null
+  applySessionCreated(session: ApiSession): void
+  applySessionDeleted(sessionId: string): void
   dispose(): void
 }

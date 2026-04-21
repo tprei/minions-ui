@@ -85,6 +85,8 @@ function makeStore(opts: {
     refresh: vi.fn(async () => {}),
     sendCommand: vi.fn(async () => ({ success: true })),
     getTranscript: vi.fn(() => null),
+    applySessionCreated: vi.fn(),
+    applySessionDeleted: vi.fn(),
     dispose: vi.fn(),
   }
   return { store, client }
@@ -154,6 +156,21 @@ describe('NewTaskBar', () => {
     })
     expect(client.createSessionVariants).not.toHaveBeenCalled()
     await waitFor(() => expect(textarea.value).toBe(''))
+  })
+
+  it('optimistically inserts the created session via applySessionCreated when POST resolves', async () => {
+    const created = makeSession({ id: 'created-1', slug: 'optimism' })
+    const { store, client } = makeStore({
+      features: ['sessions-create'],
+      createSessionImpl: async () => created,
+    })
+    render(<NewTaskBar store={store} />)
+    const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
+    fireEvent.input(textarea, { target: { value: 'be snappy' } })
+    fireEvent.click(screen.getByTestId('new-task-send'))
+
+    await waitFor(() => expect(client.createSession).toHaveBeenCalled())
+    await waitFor(() => expect(store.applySessionCreated).toHaveBeenCalledWith(created))
   })
 
   it('omits repo field from payload when no repos are configured', async () => {
