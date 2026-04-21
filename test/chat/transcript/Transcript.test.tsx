@@ -154,6 +154,34 @@ describe('Transcript', () => {
     expect(groups[0].querySelectorAll('[data-testid="transcript-tool-call"]').length).toBe(3)
   })
 
+  it('collapses tool groups by default when there are more than 5 calls', async () => {
+    const calls: ToolCallEvent[] = Array.from({ length: 8 }, (_, i) => ({
+      ...baseEvent(i + 1),
+      type: 'tool_call',
+      call: {
+        toolUseId: `tu${i}`,
+        name: 'Bash',
+        kind: 'bash',
+        title: `cmd ${i}`,
+        input: {},
+      },
+    }))
+    const client = makeClient(snapshot(calls))
+    const store = createTranscriptStore({ client, slug: 's' })
+    render(<Transcript store={store} />)
+    await flush()
+    await waitFor(() => expect(screen.getByTestId('transcript-tool-group')).toBeTruthy())
+    const group = screen.getByTestId('transcript-tool-group')
+    expect(group.getAttribute('data-open')).toBe('false')
+    expect(group.querySelectorAll('[data-testid="transcript-tool-call"]').length).toBe(0)
+    expect(screen.getByText('8 tool calls')).toBeTruthy()
+
+    fireEvent.click(screen.getByTestId('transcript-tool-group-toggle'))
+    await waitFor(() =>
+      expect(group.querySelectorAll('[data-testid="transcript-tool-call"]').length).toBe(8),
+    )
+  })
+
   it('renders a lone tool call as a standalone card, not grouped', async () => {
     const call: ToolCallEvent = {
       ...baseEvent(1),

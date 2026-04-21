@@ -5,11 +5,13 @@ import { StatusBanner } from './StatusBanner'
 import { ThinkingBlock } from './ThinkingBlock'
 import { ToolCallCard } from './ToolCallCard'
 import { ToolResultBody } from './ToolResultBody'
+import { ChevronIcon } from './icons'
 import { TurnSeparator } from './TurnSeparator'
 import { UserMessageCard } from './UserMessageCard'
 import { buildTranscriptRows, type TranscriptRow } from './utils'
 
 const NEAR_BOTTOM_PX = 120
+const TOOL_GROUP_COLLAPSE_THRESHOLD = 5
 
 interface Props {
   store: TranscriptStore
@@ -175,19 +177,62 @@ function groupRows(rows: TranscriptRow[]): RenderItem[] {
 }
 
 function ToolGroup({ items }: { items: ToolCallRow[] }) {
+  const [open, setOpen] = useState(items.length <= TOOL_GROUP_COLLAPSE_THRESHOLD)
+
+  let pending = 0
+  let errors = 0
+  for (const row of items) {
+    const status = row.result?.result.status ?? 'pending'
+    if (status === 'pending') pending++
+    else if (status === 'error') errors++
+  }
+
+  const label = `${items.length} tool ${items.length === 1 ? 'call' : 'calls'}`
+
   return (
     <div
       class="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden"
       data-testid="transcript-tool-group"
+      data-open={open}
     >
-      {items.map((row) => (
-        <ToolCallCard
-          key={row.call.call.toolUseId}
-          call={row.call}
-          result={row.result}
-          variant="grouped"
-        />
-      ))}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40"
+        aria-expanded={open}
+        data-testid="transcript-tool-group-toggle"
+      >
+        <ChevronIcon open={open} class="w-3 h-3 text-slate-400 shrink-0" />
+        <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">{label}</span>
+        {pending > 0 && (
+          <span
+            class="text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+            data-testid="transcript-tool-group-pending"
+          >
+            {pending} pending
+          </span>
+        )}
+        {errors > 0 && (
+          <span
+            class="text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300"
+            data-testid="transcript-tool-group-errors"
+          >
+            {errors} {errors === 1 ? 'error' : 'errors'}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div class="border-t border-slate-200 dark:border-slate-700">
+          {items.map((row) => (
+            <ToolCallCard
+              key={row.call.call.toolUseId}
+              call={row.call}
+              result={row.result}
+              variant="grouped"
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
