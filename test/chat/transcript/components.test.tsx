@@ -5,6 +5,7 @@ import { AssistantTextBlock } from '../../../src/chat/transcript/AssistantTextBl
 import { ThinkingBlock } from '../../../src/chat/transcript/ThinkingBlock'
 import { ToolCallCard } from '../../../src/chat/transcript/ToolCallCard'
 import { ToolResultBody } from '../../../src/chat/transcript/ToolResultBody'
+import { ToolResultOrphan } from '../../../src/chat/transcript/ToolResultOrphan'
 import { StatusBanner } from '../../../src/chat/transcript/StatusBanner'
 import { TurnSeparator } from '../../../src/chat/transcript/TurnSeparator'
 import type {
@@ -306,6 +307,34 @@ describe('ToolResultBody', () => {
     expect(pre.textContent).toBe('const x = 1')
   })
 
+  it('auto-detects JSON payloads without an explicit format', () => {
+    render(<ToolResultBody event={ev({ status: 'ok', text: '{"a":1,"b":"x"}' })} />)
+    const pre = screen.getByTestId('transcript-tool-result-json')
+    expect(pre.querySelector('.tok-property')).toBeTruthy()
+    expect(pre.querySelector('.tok-number')).toBeTruthy()
+    expect(pre.textContent).toContain('"a": 1')
+  })
+
+  it('auto-detects unified diff payloads without an explicit format', () => {
+    render(
+      <ToolResultBody
+        event={ev({
+          status: 'ok',
+          text: '--- a/foo\n+++ b/foo\n@@ -1,2 +1,2 @@\n-old\n+new',
+        })}
+      />,
+    )
+    const pre = screen.getByTestId('transcript-tool-result-diff')
+    expect(pre.querySelector('.tok-insertion')).toBeTruthy()
+    expect(pre.querySelector('.tok-deletion')).toBeTruthy()
+  })
+
+  it('leaves non-json, non-diff text as plain when no format is set', () => {
+    render(<ToolResultBody event={ev({ status: 'ok', text: 'not json { oops' })} />)
+    const pre = screen.getByTestId('transcript-tool-result-text')
+    expect(pre.textContent).toBe('not json { oops')
+  })
+
   it('shows truncated badge when result.truncated', () => {
     render(<ToolResultBody event={ev({ status: 'ok', text: 'x', truncated: true, originalBytes: 5000 })} />)
     expect(screen.getByText('truncated')).toBeTruthy()
@@ -317,6 +346,35 @@ describe('ToolResultBody', () => {
     const imgs = screen.getByTestId('transcript-tool-result-images').querySelectorAll('img')
     expect(imgs).toHaveLength(1)
     expect(imgs[0].getAttribute('src')).toBe('https://example.com/x.png')
+  })
+})
+
+describe('ToolResultOrphan', () => {
+  function orphan(result: ToolResultEvent['result']): ToolResultEvent {
+    return {
+      ...baseEvent(1),
+      type: 'tool_result',
+      toolUseId: 'tu-missing',
+      result,
+    }
+  }
+
+  it('syntax highlights JSON bodies even when there is no matching call', () => {
+    render(<ToolResultOrphan event={orphan({ status: 'ok', text: '{"x":1}' })} />)
+    const pre = screen.getByTestId('transcript-tool-result-json')
+    expect(pre.querySelector('.tok-property')).toBeTruthy()
+    expect(pre.querySelector('.tok-number')).toBeTruthy()
+  })
+
+  it('honors the explicit diff format on orphaned results', () => {
+    render(
+      <ToolResultOrphan
+        event={orphan({ status: 'ok', text: '+ added\n- removed', format: 'diff' })}
+      />,
+    )
+    const pre = screen.getByTestId('transcript-tool-result-diff')
+    expect(pre.querySelector('.tok-insertion')).toBeTruthy()
+    expect(pre.querySelector('.tok-deletion')).toBeTruthy()
   })
 })
 
