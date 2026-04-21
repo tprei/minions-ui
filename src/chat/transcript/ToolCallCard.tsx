@@ -89,19 +89,20 @@ export function ToolCallCard({ call, result, defaultOpen = false, variant = 'sta
               <button
                 type="button"
                 onClick={() => setResultOpen(!resultOpen)}
-                class="w-full flex items-center gap-1.5 px-3 py-1 text-left hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                class="w-full flex items-center gap-2 px-3 py-1.5 text-left bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700/60"
                 aria-expanded={resultOpen}
                 data-testid="transcript-tool-result-toggle"
               >
-                <ChevronIcon open={resultOpen} class="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                <span class="text-[10px] uppercase tracking-wide font-semibold text-slate-500 dark:text-slate-400">
+                <ChevronIcon open={resultOpen} class="w-3 h-3 text-slate-500 dark:text-slate-300 shrink-0" />
+                <span class="text-[11px] uppercase tracking-wide font-semibold text-slate-600 dark:text-slate-300">
                   Result
                 </span>
-                {!resultOpen && (
-                  <span class="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                    {formatResultSummary(result)}
-                  </span>
-                )}
+                <span class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                  {formatResultSummary(result)}
+                </span>
+                <span class="ml-auto text-[10px] text-slate-500 dark:text-slate-400">
+                  {resultOpen ? 'hide' : 'show'}
+                </span>
               </button>
               {resultOpen && <ToolResultBody event={result} />}
             </div>
