@@ -3,6 +3,8 @@ import type { ToolCallEvent, ToolResultEvent } from '../../api/types'
 import { ChevronIcon, ToolKindIcon } from './icons'
 import { ToolResultBody } from './ToolResultBody'
 
+const RESULT_BIG_BYTES = 1024
+
 interface Props {
   call: ToolCallEvent
   result: ToolResultEvent | null
@@ -12,6 +14,7 @@ interface Props {
 
 export function ToolCallCard({ call, result, defaultOpen = false, variant = 'standalone' }: Props) {
   const [open, setOpen] = useState(defaultOpen)
+  const [resultOpen, setResultOpen] = useState(() => !isBigResult(result))
   const summary = call.call
 
   const status: 'pending' | 'ok' | 'error' = result?.result.status ?? 'pending'
@@ -33,8 +36,8 @@ export function ToolCallCard({ call, result, defaultOpen = false, variant = 'sta
 
   const containerClass =
     variant === 'grouped'
-      ? 'bg-transparent overflow-hidden'
-      : 'rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 overflow-hidden'
+      ? 'bg-white dark:bg-slate-800 overflow-hidden'
+      : 'rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden'
 
   return (
     <div
@@ -83,10 +86,25 @@ export function ToolCallCard({ call, result, defaultOpen = false, variant = 'sta
           <ToolInputView input={summary.input} />
           {result ? (
             <div class="border-t border-slate-200 dark:border-slate-700">
-              <div class="px-3 py-1 text-[10px] uppercase tracking-wide font-semibold text-slate-500 dark:text-slate-400">
-                Result
-              </div>
-              <ToolResultBody event={result} />
+              <button
+                type="button"
+                onClick={() => setResultOpen(!resultOpen)}
+                class="w-full flex items-center gap-2 px-3 py-1.5 text-left bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700/60"
+                aria-expanded={resultOpen}
+                data-testid="transcript-tool-result-toggle"
+              >
+                <ChevronIcon open={resultOpen} class="w-3 h-3 text-slate-500 dark:text-slate-300 shrink-0" />
+                <span class="text-[11px] uppercase tracking-wide font-semibold text-slate-600 dark:text-slate-300">
+                  Result
+                </span>
+                <span class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                  {formatResultSummary(result)}
+                </span>
+                <span class="ml-auto text-[10px] text-slate-500 dark:text-slate-400">
+                  {resultOpen ? 'hide' : 'show'}
+                </span>
+              </button>
+              {resultOpen && <ToolResultBody event={result} />}
             </div>
           ) : (
             <div
@@ -140,6 +158,33 @@ function formatValue(v: unknown): string {
   } catch {
     return String(v)
   }
+}
+
+function isBigResult(result: Props['result']): boolean {
+  if (!result) return false
+  const { result: payload } = result
+  if (payload.truncated) return true
+  if (payload.originalBytes !== undefined && payload.originalBytes > RESULT_BIG_BYTES) return true
+  if (payload.text && payload.text.length > RESULT_BIG_BYTES) return true
+  return false
+}
+
+function formatResultSummary(result: Props['result']): string {
+  if (!result) return ''
+  const { result: payload } = result
+  if (payload.originalBytes !== undefined) {
+    return payload.originalBytes < 1024
+      ? `${payload.originalBytes} B`
+      : `${(payload.originalBytes / 1024).toFixed(1)} KB`
+  }
+  if (payload.text) {
+    const bytes = payload.text.length
+    return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`
+  }
+  if (payload.images && payload.images.length > 0) {
+    return payload.images.length === 1 ? '1 image' : `${payload.images.length} images`
+  }
+  return ''
 }
 
 function buildResultPreview(result: Props['result']): string | null {

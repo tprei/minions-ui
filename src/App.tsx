@@ -344,8 +344,16 @@ function TranscriptPane({ store, sessionId }: { store: ConnectionStore; sessionI
 function EmptyPane() {
   return (
     <div class="flex-1 flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-900">
-      <div class="text-center text-sm text-slate-500 dark:text-slate-400">
-        Select a session on the left, or start a new one with the task bar above.
+      <div class="text-center flex flex-col items-center gap-3">
+        <img
+          src="/minion.svg"
+          alt=""
+          aria-hidden="true"
+          class="w-16 h-16 opacity-20 dark:opacity-30 dark:invert"
+        />
+        <div class="text-sm text-slate-500 dark:text-slate-400">
+          Select a session on the left, or start a new one with the task bar above.
+        </div>
       </div>
     </div>
   )

@@ -179,13 +179,13 @@ describe('NewTaskBar', () => {
     expect(client.createSession).not.toHaveBeenCalled()
   })
 
-  it('disables variant buttons >1 when sessions-variants feature is missing', () => {
+  it('disables variant options >1 when sessions-variants feature is missing', () => {
     const { store } = makeStore({ features: ['sessions-create'] })
     render(<NewTaskBar store={store} />)
-    expect((screen.getByTestId('variant-1') as HTMLButtonElement).disabled).toBe(false)
-    expect((screen.getByTestId('variant-2') as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByTestId('variant-3') as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByTestId('variant-4') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByTestId('variant-1') as HTMLOptionElement).disabled).toBe(false)
+    expect((screen.getByTestId('variant-2') as HTMLOptionElement).disabled).toBe(true)
+    expect((screen.getByTestId('variant-3') as HTMLOptionElement).disabled).toBe(true)
+    expect((screen.getByTestId('variant-4') as HTMLOptionElement).disabled).toBe(true)
   })
 
   it('calls createSessionVariants and navigates to #/g/:groupId when count > 1', async () => {
@@ -195,7 +195,7 @@ describe('NewTaskBar', () => {
     })
     const navigate = vi.fn<(hash: string) => void>()
     render(<NewTaskBar store={store} navigate={navigate} generateGroupId={() => 'g-xyz'} />)
-    fireEvent.click(screen.getByTestId('variant-3'))
+    fireEvent.change(screen.getByTestId('variant-count'), { target: { value: '3' } })
     const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
     fireEvent.input(textarea, { target: { value: 'split it' } })
     fireEvent.click(screen.getByTestId('new-task-send'))
@@ -234,7 +234,7 @@ describe('NewTaskBar', () => {
     })
     const navigate = vi.fn<(hash: string) => void>()
     render(<NewTaskBar store={store} navigate={navigate} generateGroupId={() => 'g-xyz'} />)
-    fireEvent.click(screen.getByTestId('variant-2'))
+    fireEvent.change(screen.getByTestId('variant-count'), { target: { value: '2' } })
     const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
     fireEvent.input(textarea, { target: { value: 'compare approaches' } })
     fireEvent.click(screen.getByTestId('new-task-send'))
@@ -254,7 +254,7 @@ describe('NewTaskBar', () => {
     })
     render(<NewTaskBar store={store} />)
     expect(screen.getByTestId('new-task-send').textContent).toBe('Launch')
-    fireEvent.click(screen.getByTestId('variant-4'))
+    fireEvent.change(screen.getByTestId('variant-count'), { target: { value: '4' } })
     expect(screen.getByTestId('new-task-send').textContent).toBe('Launch ×4')
   })
 })
