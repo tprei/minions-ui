@@ -147,7 +147,6 @@ const bash: Language = {
 
 const json: Language = {
   rules: [
-    { kind: 'string', re: /"(?:\\.|[^"\\])*"(?=\s*:)/ },
     { kind: 'property', re: /"(?:\\.|[^"\\])*"(?=\s*:)/ },
     { kind: 'string', re: /"(?:\\.|[^"\\])*"/ },
     { kind: 'number', re: /-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/ },
