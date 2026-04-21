@@ -165,7 +165,7 @@ describe('App view toggle', () => {
     localStorage.clear()
   })
 
-  it('renders ViewToggle with List selected by default', async () => {
+  it('renders ViewToggle with List selected by default', { timeout: 15000 }, async () => {
     seedConnection()
     stubFetch([session()])
     await resetViewMode()
@@ -179,7 +179,7 @@ describe('App view toggle', () => {
     expect(canvasBtn.getAttribute('aria-selected')).toBe('false')
   })
 
-  it('switches to canvas view when Canvas tab clicked on desktop', async () => {
+  it('switches to canvas view when Canvas tab clicked on desktop', { timeout: 15000 }, async () => {
     seedConnection()
     stubFetch([session()])
     await resetViewMode()
@@ -194,7 +194,7 @@ describe('App view toggle', () => {
     expect(within(canvasPane).getByTestId('universe-canvas')).toBeTruthy()
   })
 
-  it('switching back to List hides the canvas pane', async () => {
+  it('switching back to List hides the canvas pane', { timeout: 15000 }, async () => {
     seedConnection()
     stubFetch([session()])
     await resetViewMode()
@@ -209,7 +209,7 @@ describe('App view toggle', () => {
     await screen.findByTestId('session-item-s1')
   })
 
-  it('clicking a node in canvas opens detail popup with Open Chat button', async () => {
+  it('clicking a node in canvas opens detail popup with Open Chat button', { timeout: 15000 }, async () => {
     seedConnection()
     stubFetch([session({ id: 's1', slug: 'brave-fox' })])
     await resetViewMode()
@@ -222,7 +222,7 @@ describe('App view toggle', () => {
     expect(await screen.findByText('Open Chat')).toBeTruthy()
   })
 
-  it('Open Chat from canvas popup switches to list and selects session', async () => {
+  it('Open Chat from canvas popup switches to list and selects session', { timeout: 15000 }, async () => {
     seedConnection()
     stubFetch([session({ id: 's1', slug: 'brave-fox' })])
     await resetViewMode()
@@ -240,7 +240,7 @@ describe('App view toggle', () => {
     expect(screen.queryByTestId('canvas-pane')).toBeNull()
   })
 
-  it('renders mobile full-screen canvas modal with close button on mobile', async () => {
+  it('renders mobile full-screen canvas modal with close button on mobile', { timeout: 15000 }, async () => {
     setDesktop(false)
     seedConnection()
     stubFetch([session()])
@@ -258,7 +258,7 @@ describe('App view toggle', () => {
     expect(screen.queryByTestId('canvas-mobile-modal')).toBeNull()
   })
 
-  it('renders the Ship tab in the view toggle', async () => {
+  it('renders the Ship tab in the view toggle', { timeout: 15000 }, async () => {
     seedConnection()
     stubFetch([session()])
     await resetViewMode()
@@ -269,7 +269,7 @@ describe('App view toggle', () => {
     expect(within(toggle).getByTestId('view-toggle-ship')).toBeTruthy()
   })
 
-  it('switches to ship view when Ship tab clicked on desktop', async () => {
+  it('switches to ship view when Ship tab clicked on desktop', { timeout: 15000 }, async () => {
     seedConnection()
     const shipDag: ApiDagGraph = {
       id: 'ship-1',
@@ -292,7 +292,7 @@ describe('App view toggle', () => {
     expect(within(shipPane).getByTestId('ship-pipeline-board-ship-1')).toBeTruthy()
   })
 
-  it('shows the empty ship state when no DAG qualifies as a ship pipeline', async () => {
+  it('shows the empty ship state when no DAG qualifies as a ship pipeline', { timeout: 15000 }, async () => {
     seedConnection()
     stubFetch([session()])
     await resetViewMode()
@@ -303,7 +303,7 @@ describe('App view toggle', () => {
     expect(await screen.findByTestId('ship-pipeline-empty')).toBeTruthy()
   })
 
-  it('renders mobile full-screen ship modal with close button on mobile', async () => {
+  it('renders mobile full-screen ship modal with close button on mobile', { timeout: 15000 }, async () => {
     setDesktop(false)
     seedConnection()
     const shipDag: ApiDagGraph = {
@@ -329,7 +329,7 @@ describe('App view toggle', () => {
     expect(screen.queryByTestId('ship-mobile-modal')).toBeNull()
   })
 
-  it('canvas sendReply callback calls /api/messages', async () => {
+  it('canvas sendReply callback calls /api/messages', { timeout: 15000 }, async () => {
     seedConnection()
     const { sendMessage } = stubFetch([session({ id: 's1', slug: 'brave-fox', quickActions: [{ type: 'retry', label: 'Retry', message: 'retry please' }] })])
     await resetViewMode()

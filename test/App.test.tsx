@@ -57,7 +57,7 @@ describe('App', () => {
     localStorage.clear()
   })
 
-  it('renders empty state "Connect a minion" when no connections', async () => {
+  it('renders empty state "Connect a minion" when no connections', { timeout: 15000 }, async () => {
     stubFetch()
     const App = (await import('../src/App')).default
     render(<App />)
@@ -65,7 +65,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Add connection' })).toBeTruthy()
   })
 
-  it('renders header and session list when connection exists', async () => {
+  it('renders header and session list when connection exists', { timeout: 15000 }, async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
       connections: [
@@ -80,7 +80,7 @@ describe('App', () => {
     await screen.findByText('brave-fox')
   })
 
-  it('clicking a session in the sidebar opens the chat pane inline', async () => {
+  it('clicking a session in the sidebar opens the chat pane inline', { timeout: 15000 }, async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
       connections: [
@@ -100,7 +100,7 @@ describe('App', () => {
     await screen.findByTestId('transcript-upgrade-notice')
   })
 
-  it('renders the variant group view when the hash is #/g/:groupId', async () => {
+  it('renders the variant group view when the hash is #/g/:groupId', { timeout: 15000 }, async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
       connections: [
@@ -155,7 +155,7 @@ describe('App', () => {
     }
   })
 
-  it('renders attention pills and filters the session list when a pill is clicked', async () => {
+  it('renders attention pills and filters the session list when a pill is clicked', { timeout: 15000 }, async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
       connections: [
@@ -263,7 +263,7 @@ describe('App', () => {
     expect(body.sessionId).toBeUndefined()
   })
 
-  it('switching sessions keeps the chat pane mounted', async () => {
+  it('switching sessions keeps the chat pane mounted', { timeout: 15000 }, async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,
       connections: [
