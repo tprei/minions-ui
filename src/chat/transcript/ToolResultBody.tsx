@@ -1,5 +1,7 @@
+import { useMemo } from 'preact/hooks'
 import type { ToolResultEvent } from '../../api/types'
 import { MarkdownView } from '../../components/MarkdownView'
+import { highlight, resolveLanguage } from '../../components/highlight'
 
 interface Props {
   event: ToolResultEvent
@@ -58,7 +60,7 @@ function renderBody(event: ToolResultEvent) {
             class="max-w-[200px] max-h-[200px] rounded border border-slate-200 dark:border-slate-700"
           />
         ))}
-        {result.text && <ResultText text={result.text} format={result.format} />}
+        {result.text && <ResultText event={event} />}
       </div>
     )
   }
@@ -69,10 +71,13 @@ function renderBody(event: ToolResultEvent) {
       </div>
     )
   }
-  return <ResultText text={result.text} format={result.format} />
+  return <ResultText event={event} />
 }
 
-function ResultText({ text, format }: { text: string; format?: ToolResultEvent['result']['format'] }) {
+function ResultText({ event }: { event: ToolResultEvent }) {
+  const { result } = event
+  const text = result.text ?? ''
+  const format = result.format
   if (format === 'markdown') {
     return (
       <div class="px-3 py-2 max-h-96 overflow-auto" data-testid="transcript-tool-result-markdown">
@@ -84,24 +89,14 @@ function ResultText({ text, format }: { text: string; format?: ToolResultEvent['
     )
   }
   if (format === 'diff') {
-    return (
-      <pre
-        class="px-3 py-2 max-h-96 overflow-auto whitespace-pre font-mono text-[11px] text-slate-700 dark:text-slate-300 leading-snug"
-        data-testid="transcript-tool-result-diff"
-      >
-        {renderDiffLines(text)}
-      </pre>
-    )
+    return <CodeBlock text={text} lang="diff" testId="transcript-tool-result-diff" />
   }
   if (format === 'json') {
-    return (
-      <pre
-        class="px-3 py-2 max-h-96 overflow-auto whitespace-pre font-mono text-[11px] text-slate-700 dark:text-slate-300 leading-snug"
-        data-testid="transcript-tool-result-json"
-      >
-        {prettyJson(text)}
-      </pre>
-    )
+    return <CodeBlock text={prettyJson(text)} lang="json" testId="transcript-tool-result-json" />
+  }
+  const langHint = readLanguageHint(result.meta)
+  if (langHint && resolveLanguage(langHint)) {
+    return <CodeBlock text={text} lang={langHint} testId="transcript-tool-result-text" wrap />
   }
   return (
     <pre
@@ -111,6 +106,37 @@ function ResultText({ text, format }: { text: string; format?: ToolResultEvent['
       {text}
     </pre>
   )
+}
+
+function CodeBlock({
+  text,
+  lang,
+  testId,
+  wrap = false,
+}: {
+  text: string
+  lang: string
+  testId?: string
+  wrap?: boolean
+}) {
+  const html = useMemo(() => highlight(text, lang), [text, lang])
+  const resolved = resolveLanguage(lang)
+  const codeClass = resolved ? `hljs language-${resolved}` : 'hljs'
+  const whitespace = wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
+  return (
+    <pre
+      class={`px-3 py-2 max-h-96 overflow-auto font-mono text-[11px] leading-snug bg-slate-900 text-slate-100 ${whitespace}`}
+      data-testid={testId}
+    >
+      <code class={codeClass} dangerouslySetInnerHTML={{ __html: html }} />
+    </pre>
+  )
+}
+
+function readLanguageHint(meta: Record<string, unknown> | undefined): string | undefined {
+  if (!meta) return undefined
+  const raw = meta.language
+  return typeof raw === 'string' && raw.trim() ? raw : undefined
 }
 
 function ResultMeta({ event }: { event: ToolResultEvent }) {
@@ -128,33 +154,6 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-function renderDiffLines(text: string) {
-  const lines = text.split('\n')
-  return lines.map((line, idx) => {
-    const nl = idx < lines.length - 1 ? '\n' : ''
-    let cls = ''
-    if (line.startsWith('+++') || line.startsWith('---')) {
-      cls = 'text-slate-500 dark:text-slate-400 font-semibold'
-    } else if (line.startsWith('@@')) {
-      cls = 'text-sky-700 dark:text-sky-300'
-    } else if (line.startsWith('+')) {
-      cls = 'text-green-700 dark:text-green-400'
-    } else if (line.startsWith('-')) {
-      cls = 'text-red-700 dark:text-red-400'
-    } else if (line.startsWith('diff --git')) {
-      cls = 'text-slate-500 dark:text-slate-400 font-semibold'
-    }
-    if (!cls) {
-      return <span key={idx}>{line + nl}</span>
-    }
-    return (
-      <span key={idx} class={cls}>
-        {line + nl}
-      </span>
-    )
-  })
 }
 
 function prettyJson(text: string): string {

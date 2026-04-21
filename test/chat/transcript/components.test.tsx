@@ -247,9 +247,63 @@ describe('ToolResultBody', () => {
     expect(screen.getByTestId('transcript-tool-result-diff')).toBeTruthy()
   })
 
+  it('syntax highlights diff lines with token classes', () => {
+    render(
+      <ToolResultBody
+        event={ev({
+          status: 'ok',
+          text: '--- a/foo\n+++ b/foo\n@@ -1,2 +1,2 @@\n-old line\n+new line',
+          format: 'diff',
+        })}
+      />,
+    )
+    const pre = screen.getByTestId('transcript-tool-result-diff')
+    expect(pre.querySelector('.tok-insertion')).toBeTruthy()
+    expect(pre.querySelector('.tok-deletion')).toBeTruthy()
+    expect(pre.querySelector('.tok-hunk')).toBeTruthy()
+  })
+
   it('pretty-prints JSON', () => {
     render(<ToolResultBody event={ev({ status: 'ok', text: '{"a":1,"b":2}', format: 'json' })} />)
     expect(screen.getByTestId('transcript-tool-result-json').textContent).toContain('"a": 1')
+  })
+
+  it('syntax highlights JSON tokens', () => {
+    render(<ToolResultBody event={ev({ status: 'ok', text: '{"a":1,"b":"x"}', format: 'json' })} />)
+    const pre = screen.getByTestId('transcript-tool-result-json')
+    expect(pre.querySelector('.tok-property')).toBeTruthy()
+    expect(pre.querySelector('.tok-number')).toBeTruthy()
+    expect(pre.querySelector('.tok-string')).toBeTruthy()
+  })
+
+  it('syntax highlights plain text when meta.language is set', () => {
+    render(
+      <ToolResultBody
+        event={ev({
+          status: 'ok',
+          text: 'const x = 1',
+          meta: { language: 'typescript' },
+        })}
+      />,
+    )
+    const pre = screen.getByTestId('transcript-tool-result-text')
+    expect(pre.querySelector('.tok-keyword')).toBeTruthy()
+    expect(pre.querySelector('.tok-number')).toBeTruthy()
+  })
+
+  it('falls back to plain text when meta.language is unknown', () => {
+    render(
+      <ToolResultBody
+        event={ev({
+          status: 'ok',
+          text: 'const x = 1',
+          meta: { language: 'not-a-real-language' },
+        })}
+      />,
+    )
+    const pre = screen.getByTestId('transcript-tool-result-text')
+    expect(pre.querySelector('.tok-keyword')).toBeNull()
+    expect(pre.textContent).toBe('const x = 1')
   })
 
   it('shows truncated badge when result.truncated', () => {
