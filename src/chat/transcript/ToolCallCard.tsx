@@ -33,8 +33,8 @@ export function ToolCallCard({ call, result, defaultOpen = false, variant = 'sta
 
   const containerClass =
     variant === 'grouped'
-      ? 'bg-transparent overflow-hidden'
-      : 'rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 overflow-hidden'
+      ? 'bg-white dark:bg-slate-800 overflow-hidden'
+      : 'rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden'
 
   return (
     <div

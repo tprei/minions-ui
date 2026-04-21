@@ -177,7 +177,7 @@ function groupRows(rows: TranscriptRow[]): RenderItem[] {
 function ToolGroup({ items }: { items: ToolCallRow[] }) {
   return (
     <div
-      class="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 overflow-hidden divide-y divide-slate-200 dark:divide-slate-700"
+      class="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden"
       data-testid="transcript-tool-group"
     >
       {items.map((row) => (
