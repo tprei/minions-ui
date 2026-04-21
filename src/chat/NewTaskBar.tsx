@@ -227,40 +227,26 @@ export function NewTaskBar({
           </select>
         )}
 
-        <div
-          class="flex items-center gap-1.5 ml-auto"
-          role="group"
+        <select
+          value={variantCount.value}
+          onChange={(e) => {
+            variantCount.value = Number((e.currentTarget as HTMLSelectElement).value)
+          }}
+          disabled={sending.value}
+          title={canVariants ? 'How many parallel variants to spawn' : 'Parallel variants need library ≥ 1.111'}
           aria-label="Variant count"
           data-testid="variant-count"
+          class="ml-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-900 dark:text-slate-100 disabled:opacity-50"
         >
-          <span
-            class={`text-xs ${canVariants ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}
-            title={canVariants ? 'How many parallel variants to spawn' : 'Parallel variants need library ≥ 1.111'}
-          >
-            Variants
-          </span>
           {VARIANT_COUNTS.map((n) => {
-            const active = variantCount.value === n
             const gated = n > 1 && !canVariants
-            const btnClass = active
-              ? 'bg-indigo-600 text-white border-indigo-700'
-              : 'bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
             return (
-              <button
-                key={n}
-                type="button"
-                onClick={() => { variantCount.value = n }}
-                disabled={sending.value || gated}
-                title={gated ? 'Parallel variants need library ≥ 1.111' : n === 1 ? 'Single session' : `${n} parallel variants`}
-                data-testid={`variant-${n}`}
-                aria-pressed={active}
-                class={`h-7 min-w-7 rounded-full border px-2 text-xs font-medium transition-colors disabled:opacity-40 ${btnClass}`}
-              >
-                ×{n}
-              </button>
+              <option key={n} value={n} disabled={gated} data-testid={`variant-${n}`}>
+                {n === 1 ? '1 session' : `×${n} variants`}
+              </option>
             )
           })}
-        </div>
+        </select>
       </div>
 
       <div class="flex items-end gap-2">
