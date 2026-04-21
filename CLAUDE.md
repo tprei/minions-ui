@@ -117,17 +117,23 @@ The original Telegram Mini App lives at `/home/prei/telegram-minions/ui/`. If yo
 
 - Full-jitter exponential backoff: `delay = Math.floor(Math.random() * Math.min(30000, 500 * 2 ** attempt))`.
 - Every successful `open` triggers `onReconnect()` which refetches `/api/sessions` + `/api/dags` and replaces state. Events carry full snapshots — no merge logic.
-- Auth: `Authorization: Bearer <token>` on HTTP; `?token=<token>` on SSE (EventSource can't set headers). Document token rotation via `fly secrets set MINION_API_TOKEN=…`.
+- Auth: `Authorization: Bearer <token>` on HTTP; `?token=<token>` on SSE (EventSource can't set headers). Rotate `MINION_API_TOKEN` by updating `docker/.env` and restarting the engine (`docker compose up -d`).
 
 ## Deployment
 
-Cloudflare Pages via git integration. No deploy job in GitHub Actions — Pages picks up every push automatically. Minion deployments stay on fly.io.
+Cloudflare Pages via git integration. No deploy job in GitHub Actions — Pages picks up every push automatically. Engine runs via Docker Compose — see `docker/README.md`.
 
-Required fly secrets on each minion for PWA access:
+Required env vars for the engine (set in `docker/.env`):
 
 ```
 MINION_API_TOKEN=<rotate-me>
 CORS_ALLOWED_ORIGINS=https://<your>.pages.dev,http://localhost:5173
+```
+
+To start the engine locally:
+
+```sh
+cd docker && docker compose up --build
 ```
 
 ## Two-repo changes

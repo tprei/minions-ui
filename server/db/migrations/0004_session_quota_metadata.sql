@@ -1,0 +1,4 @@
+ALTER TABLE sessions ADD COLUMN quota_sleep_until INTEGER;
+ALTER TABLE sessions ADD COLUMN quota_retry_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE sessions ADD COLUMN pipeline_advancing INTEGER NOT NULL DEFAULT 0;

@@ -175,19 +175,33 @@ describe('ApiClient — getPr / getDiff / listScreenshots', () => {
 describe('ApiClient — fetchScreenshotBlob', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('returns a Blob and attaches Authorization header', async () => {
+  it('prepends baseUrl to relative URL and attaches Authorization header', async () => {
     const body = new Blob(['fake-png'], { type: 'image/png' })
     const fetchMock = vi.fn().mockResolvedValue(blobResponse(body))
     vi.stubGlobal('fetch', fetchMock)
 
     const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
-    const out = await client.fetchScreenshotBlob('sub/dir/file.png')
+    const relativeUrl = '/api/sessions/my-slug/screenshots/screen.png'
+    const out = await client.fetchScreenshotBlob(relativeUrl)
     expect(out).toBe(body)
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe(`${BASE_URL}/api/screenshots/${encodeURIComponent('sub/dir/file.png')}`)
+    expect(url).toBe(`${BASE_URL}${relativeUrl}`)
     expect((init.headers as Record<string, string>)['Authorization']).toBe(`Bearer ${TOKEN}`)
     expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined()
+  })
+
+  it('uses absolute URL as-is when provided', async () => {
+    const body = new Blob(['fake-png'], { type: 'image/png' })
+    const fetchMock = vi.fn().mockResolvedValue(blobResponse(body))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const absoluteUrl = 'https://other.example.com/api/sessions/x/screenshots/f.png'
+    await client.fetchScreenshotBlob(absoluteUrl)
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(absoluteUrl)
   })
 
   it('throws ApiError on non-2xx', async () => {
@@ -195,7 +209,7 @@ describe('ApiClient — fetchScreenshotBlob', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
-    await expect(client.fetchScreenshotBlob('missing.png')).rejects.toThrow(ApiError)
+    await expect(client.fetchScreenshotBlob('/api/sessions/x/screenshots/missing.png')).rejects.toThrow(ApiError)
   })
 })
 
@@ -245,5 +259,38 @@ describe('ApiClient — push', () => {
     expect(init.method).toBe('DELETE')
     const body = JSON.parse(init.body as string) as { endpoint: string }
     expect(body.endpoint).toBe('https://push.example.com/abc')
+  })
+})
+
+describe('ApiClient — sendMessage with images', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('sends images array in POST body to /api/messages', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { ok: true, sessionId: 's-1' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const images = [{ mediaType: 'image/png', dataBase64: 'abc123' }]
+    await client.sendMessage('look at this', 's-1', images)
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE_URL}/api/messages`)
+    expect(init.method).toBe('POST')
+    const body = JSON.parse(init.body as string) as { text: string; sessionId: string; images: typeof images }
+    expect(body.text).toBe('look at this')
+    expect(body.sessionId).toBe('s-1')
+    expect(body.images).toEqual(images)
+  })
+
+  it('omits images key when not provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { ok: true, sessionId: null } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.sendMessage('hello', 's-1')
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string) as { images?: unknown }
+    expect(body.images).toBeUndefined()
   })
 })

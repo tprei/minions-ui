@@ -1,0 +1,623 @@
+import { execFile as execFileCb } from "node:child_process"
+import { promisify } from "node:util"
+import { DagCycleError, DagSelfDependencyError, UnknownNodeError } from "./types"
+
+const execFile = promisify(execFileCb)
+
+export function nodeIndex(graph: DagGraph): Map<string, DagNode> {
+  return new Map(graph.nodes.map((n) => [n.id, n]))
+}
+
+function childrenIndex(graph: DagGraph): Map<string, DagNode[]> {
+  const children = new Map<string, DagNode[]>()
+  for (const node of graph.nodes) {
+    children.set(node.id, [])
+  }
+  for (const node of graph.nodes) {
+    for (const dep of node.dependsOn) {
+      children.get(dep)?.push(node)
+    }
+  }
+  return children
+}
+
+export type DagNodeStatus = "pending" | "ready" | "running" | "done" | "failed" | "skipped" | "ci-pending" | "ci-failed" | "landed"
+
+export interface DagNode {
+  id: string
+  title: string
+  description: string
+  dependsOn: string[]
+  status: DagNodeStatus
+  threadId?: number
+  branch?: string
+  prUrl?: string
+  error?: string
+  recoveryAttempted?: boolean
+  mergeBase?: string
+  baseSha?: string
+  headSha?: string
+  prCommentId?: number
+}
+
+export interface DagGraph {
+  id: string
+  nodes: DagNode[]
+  parentThreadId: number
+  repoUrl?: string
+  repo: string
+  createdAt: number
+}
+
+export interface DagInput {
+  id: string
+  title: string
+  description: string
+  dependsOn: string[]
+}
+
+function findCycle(nodes: DagNode[] | DagInput[]): string[] {
+  const visited = new Set<string>()
+  const recursionStack = new Set<string>()
+  const path: string[] = []
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]))
+
+  function dfs(nodeId: string): string[] | null {
+    if (recursionStack.has(nodeId)) {
+      const cycleStart = path.indexOf(nodeId)
+      return path.slice(cycleStart)
+    }
+    if (visited.has(nodeId)) return null
+
+    visited.add(nodeId)
+    recursionStack.add(nodeId)
+    path.push(nodeId)
+
+    const node = nodeMap.get(nodeId)
+    if (node) {
+      for (const dep of node.dependsOn) {
+        const cycle = dfs(dep)
+        if (cycle) return cycle
+      }
+    }
+
+    recursionStack.delete(nodeId)
+    path.pop()
+    return null
+  }
+
+  for (const node of nodes) {
+    if (!visited.has(node.id)) {
+      const cycle = dfs(node.id)
+      if (cycle) return cycle
+    }
+  }
+
+  return []
+}
+
+export function buildDag(
+  dagId: string,
+  items: DagInput[],
+  parentThreadId: number,
+  repo: string,
+  repoUrl?: string,
+): DagGraph {
+  const ids = new Set(items.map((i) => i.id))
+
+  for (const item of items) {
+    for (const dep of item.dependsOn) {
+      if (!ids.has(dep)) {
+        throw new UnknownNodeError(item.id, dep, Array.from(ids))
+      }
+    }
+    if (item.dependsOn.includes(item.id)) {
+      throw new DagSelfDependencyError(item.id)
+    }
+  }
+
+  const nodes: DagNode[] = items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    dependsOn: [...item.dependsOn],
+    status: "pending",
+  }))
+
+  const graph: DagGraph = {
+    id: dagId,
+    nodes,
+    parentThreadId,
+    repo,
+    repoUrl,
+    createdAt: Date.now(),
+  }
+
+  const sorted = topologicalSort(graph)
+  if (sorted.length !== nodes.length) {
+    const cycleNodes = findCycle(nodes)
+    throw new DagCycleError(cycleNodes)
+  }
+
+  for (const node of nodes) {
+    if (node.dependsOn.length === 0) {
+      node.status = "ready"
+    }
+  }
+
+  return graph
+}
+
+export function buildLinearDag(
+  dagId: string,
+  items: { title: string; description: string }[],
+  parentThreadId: number,
+  repo: string,
+  repoUrl?: string,
+): DagGraph {
+  const dagItems: DagInput[] = items.map((item, i) => ({
+    id: `step-${i}`,
+    title: item.title,
+    description: item.description,
+    dependsOn: i > 0 ? [`step-${i - 1}`] : [],
+  }))
+
+  return buildDag(dagId, dagItems, parentThreadId, repo, repoUrl)
+}
+
+export function topologicalSort(graph: DagGraph): string[] {
+  const inDegree = new Map<string, number>()
+  const adjacency = new Map<string, string[]>()
+
+  for (const node of graph.nodes) {
+    inDegree.set(node.id, node.dependsOn.length)
+    adjacency.set(node.id, [])
+  }
+
+  for (const node of graph.nodes) {
+    for (const dep of node.dependsOn) {
+      adjacency.get(dep)!.push(node.id)
+    }
+  }
+
+  const queue: string[] = []
+  for (const [id, degree] of inDegree) {
+    if (degree === 0) queue.push(id)
+  }
+
+  const sorted: string[] = []
+  let head = 0
+  while (head < queue.length) {
+    const id = queue[head++]!
+    sorted.push(id)
+    for (const neighbor of adjacency.get(id)!) {
+      const newDegree = inDegree.get(neighbor)! - 1
+      inDegree.set(neighbor, newDegree)
+      if (newDegree === 0) queue.push(neighbor)
+    }
+  }
+
+  return sorted
+}
+
+export function readyNodes(graph: DagGraph): DagNode[] {
+  return graph.nodes.filter((node) => node.status === "ready")
+}
+
+export function advanceDag(graph: DagGraph): DagNode[] {
+  const statusMap = new Map(graph.nodes.map((n) => [n.id, n.status]))
+  const newlyReady: DagNode[] = []
+
+  for (const node of graph.nodes) {
+    if (node.status !== "pending") continue
+
+    const allDepsDone = node.dependsOn.every((dep) => {
+      const s = statusMap.get(dep)
+      return s === "done" || s === "landed"
+    })
+    if (allDepsDone) {
+      node.status = "ready"
+      newlyReady.push(node)
+    }
+  }
+
+  return newlyReady
+}
+
+export function failNode(graph: DagGraph, nodeId: string): string[] {
+  const idx = nodeIndex(graph)
+  const node = idx.get(nodeId)
+  if (!node) return []
+
+  node.status = "failed"
+
+  const skipped: string[] = []
+  const toSkip = new Set<string>()
+  const children = childrenIndex(graph)
+
+  const queue = [nodeId]
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const child of children.get(current) ?? []) {
+      if (!toSkip.has(child.id) && child.status !== "done") {
+        toSkip.add(child.id)
+        child.status = "skipped"
+        child.error = `Skipped: upstream node "${nodeId}" failed`
+        skipped.push(child.id)
+        queue.push(child.id)
+      }
+    }
+  }
+
+  return skipped
+}
+
+export function resetFailedNode(graph: DagGraph, nodeId: string): string[] {
+  const idx = nodeIndex(graph)
+  const node = idx.get(nodeId)
+  if (!node || (node.status !== "failed" && node.status !== "ci-failed")) return []
+
+  node.status = "ready"
+  node.error = undefined
+  node.recoveryAttempted = false
+
+  const children = childrenIndex(graph)
+  const reset: string[] = []
+  const queue = [nodeId]
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const child of children.get(current) ?? []) {
+      if (child.status === "skipped") {
+        child.status = "pending"
+        child.error = undefined
+        reset.push(child.id)
+        queue.push(child.id)
+      }
+    }
+  }
+  return reset
+}
+
+export function isDagComplete(graph: DagGraph): boolean {
+  return graph.nodes.every((n) =>
+    n.status === "done" || n.status === "failed" || n.status === "skipped" || n.status === "ci-failed" || n.status === "landed",
+  )
+}
+
+export function getUpstreamBranches(graph: DagGraph, nodeId: string): string[] {
+  const idx = nodeIndex(graph)
+  const node = idx.get(nodeId)
+  if (!node) return []
+
+  return node.dependsOn
+    .map((depId) => idx.get(depId)?.branch)
+    .filter((b): b is string => b != null)
+}
+
+export function getDownstreamNodes(graph: DagGraph, nodeId: string): DagNode[] {
+  const children = childrenIndex(graph)
+  const downstream: DagNode[] = []
+  const visited = new Set<string>()
+  const queue = [nodeId]
+
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const child of children.get(current) ?? []) {
+      if (!visited.has(child.id)) {
+        visited.add(child.id)
+        downstream.push(child)
+        queue.push(child.id)
+      }
+    }
+  }
+
+  return downstream
+}
+
+export function criticalPathLength(graph: DagGraph): number {
+  const sorted = topologicalSort(graph)
+  const dist = new Map<string, number>()
+
+  const idx = nodeIndex(graph)
+  for (const id of sorted) {
+    const node = idx.get(id)!
+    const maxDepDist = node.dependsOn.length > 0
+      ? Math.max(...node.dependsOn.map((d) => dist.get(d) ?? 0))
+      : 0
+    dist.set(id, maxDepDist + 1)
+  }
+
+  return dist.size > 0 ? Math.max(...dist.values()) : 0
+}
+
+export function dagProgress(graph: DagGraph): {
+  total: number
+  done: number
+  running: number
+  ready: number
+  pending: number
+  failed: number
+  skipped: number
+  ciPending: number
+  ciFailed: number
+  landed: number
+} {
+  const counts = { total: 0, done: 0, running: 0, ready: 0, pending: 0, failed: 0, skipped: 0, ciPending: 0, ciFailed: 0, landed: 0 }
+  for (const node of graph.nodes) {
+    counts.total++
+    if (node.status === "ci-pending") counts.ciPending++
+    else if (node.status === "ci-failed") counts.ciFailed++
+    else if (node.status === "landed") counts.landed++
+    else counts[node.status]++
+  }
+  return counts
+}
+
+export function transitiveReduction(graph: DagGraph): void {
+  const ancestors = new Map<string, Set<string>>()
+
+  const sorted = topologicalSort(graph)
+  const idx = nodeIndex(graph)
+  for (const id of sorted) {
+    const node = idx.get(id)!
+    const myAncestors = new Set<string>()
+
+    for (const dep of node.dependsOn) {
+      myAncestors.add(dep)
+      const depAncestors = ancestors.get(dep)
+      if (depAncestors) {
+        for (const a of depAncestors) myAncestors.add(a)
+      }
+    }
+
+    ancestors.set(id, myAncestors)
+  }
+
+  for (const node of graph.nodes) {
+    if (node.dependsOn.length <= 1) continue
+
+    const toRemove: string[] = []
+    for (const dep of node.dependsOn) {
+      const otherDeps = node.dependsOn.filter((d) => d !== dep)
+      const isRedundant = otherDeps.some((other) => ancestors.get(other)?.has(dep))
+      if (isRedundant) toRemove.push(dep)
+    }
+
+    node.dependsOn = node.dependsOn.filter((d) => !toRemove.includes(d))
+  }
+}
+
+export function renderDagStatus(graph: DagGraph, isStack?: boolean): string {
+  const statusIcon: Record<DagNodeStatus, string> = {
+    pending: "⏳",
+    ready: "🔜",
+    running: "⚡",
+    done: "✅",
+    failed: "❌",
+    skipped: "⏭️",
+    "ci-pending": "🔄",
+    "ci-failed": "⚠️",
+    landed: "🏁",
+  }
+
+  const progress = dagProgress(graph)
+  const sorted = topologicalSort(graph)
+
+  const isLinearStack = isStack ?? (
+    !graph.nodes.some((n) => n.dependsOn.length > 1) &&
+    graph.nodes.every((n, i) => i === 0 || n.dependsOn.length === 1)
+  )
+  const title = isLinearStack ? "📚 Stack Status" : "🔗 DAG Status"
+  const lines: string[] = [`📊 <b>${title}</b>\n`]
+
+  const idx = nodeIndex(graph)
+  const depth = new Map<string, number>()
+  for (const id of sorted) {
+    const node = idx.get(id)!
+    const maxDepDepth = node.dependsOn.length > 0
+      ? Math.max(...node.dependsOn.map((d) => depth.get(d) ?? 0))
+      : -1
+    depth.set(id, maxDepDepth + 1)
+  }
+
+  for (const id of sorted) {
+    const node = idx.get(id)!
+    const d = depth.get(id) ?? 0
+    const indent = "  ".repeat(d)
+    const icon = statusIcon[node.status]
+    const prSuffix = node.prUrl ? ` (<a href="${node.prUrl}">PR</a>)` : ""
+    const depSuffix = node.dependsOn.length > 0
+      ? ` ← ${node.dependsOn.join(", ")}`
+      : ""
+
+    const title = escapeHtml(node.title)
+    const styledTitle = node.status === "done" || node.status === "skipped" || node.status === "landed"
+      ? `<s>${title}</s>`
+      : node.status === "running" || node.status === "failed"
+        ? `<b>${title}</b>`
+        : title
+    lines.push(`${indent}${icon} ${styledTitle}${prSuffix}${depSuffix}`)
+  }
+
+  lines.push("")
+  lines.push(
+    `Progress: ${progress.done}/${progress.total} complete` +
+    (progress.landed > 0 ? `, ${progress.landed} landed` : "") +
+    (progress.running > 0 ? `, ${progress.running} running` : "") +
+    (progress.ciPending > 0 ? `, ${progress.ciPending} awaiting CI` : "") +
+    (progress.failed > 0 ? `, ${progress.failed} failed` : "") +
+    (progress.ciFailed > 0 ? `, ${progress.ciFailed} CI failed` : "") +
+    (progress.skipped > 0 ? `, ${progress.skipped} skipped` : ""),
+  )
+
+  return lines.join("\n")
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+const DAG_STATUS_START = "<!-- dag-status-start -->"
+const DAG_STATUS_END = "<!-- dag-status-end -->"
+
+export { DAG_STATUS_START, DAG_STATUS_END }
+
+const statusEmoji: Record<DagNodeStatus, string> = {
+  pending: "⏳",
+  ready: "🔜",
+  running: "⚡",
+  done: "✅",
+  failed: "❌",
+  skipped: "⏭️",
+  "ci-pending": "🔄",
+  "ci-failed": "⚠️",
+  landed: "🏁",
+}
+
+const statusLabel: Record<DagNodeStatus, string> = {
+  pending: "Pending",
+  ready: "Ready",
+  running: "Running",
+  done: "Done",
+  failed: "Failed",
+  skipped: "Skipped",
+  "ci-pending": "CI Pending",
+  "ci-failed": "CI Failed",
+  landed: "Landed",
+}
+
+function mermaidId(id: string): string {
+  return id.replace(/[^a-zA-Z0-9-]/g, "_")
+}
+
+function mermaidLabel(text: string): string {
+  return text.replace(/"/g, "'")
+}
+
+export function renderDagForGitHub(graph: DagGraph, currentNodeId?: string): string {
+  if (graph.nodes.length === 0) {
+    return [DAG_STATUS_START, "", "_No tasks in DAG._", "", DAG_STATUS_END].join("\n")
+  }
+
+  const sorted = topologicalSort(graph)
+  const idx = nodeIndex(graph)
+  const lines: string[] = [DAG_STATUS_START, ""]
+
+  lines.push("```mermaid")
+  lines.push("flowchart TD")
+
+  lines.push("  classDef done fill:#2da44e,stroke:#1a7f37,color:#fff")
+  lines.push("  classDef running fill:#bf8700,stroke:#9a6700,color:#fff")
+  lines.push("  classDef pending fill:#656d76,stroke:#424a53,color:#fff")
+  lines.push("  classDef ready fill:#0969da,stroke:#0550ae,color:#fff")
+  lines.push("  classDef failed fill:#cf222e,stroke:#a40e26,color:#fff")
+  lines.push("  classDef skipped fill:#656d76,stroke:#424a53,color:#fff,stroke-dasharray: 5 5")
+  lines.push("  classDef ci-pending fill:#0969da,stroke:#0550ae,color:#fff,stroke-dasharray: 3 3")
+  lines.push("  classDef ci-failed fill:#bf8700,stroke:#9a6700,color:#fff")
+  lines.push("  classDef landed fill:#1a7f37,stroke:#116329,color:#fff")
+  lines.push("  classDef current stroke:#bf8700,stroke-width:3px")
+
+  for (const id of sorted) {
+    const node = idx.get(id)!
+    const mid = mermaidId(id)
+    const icon = statusEmoji[node.status]
+    const label = mermaidLabel(node.title)
+    lines.push(`  ${mid}["${icon} ${label}"]`)
+  }
+
+  for (const id of sorted) {
+    const node = idx.get(id)!
+    for (const dep of node.dependsOn) {
+      lines.push(`  ${mermaidId(dep)} --> ${mermaidId(id)}`)
+    }
+  }
+
+  for (const id of sorted) {
+    const node = idx.get(id)!
+    const mid = mermaidId(id)
+    lines.push(`  class ${mid} ${node.status}`)
+    if (currentNodeId && id === currentNodeId) {
+      lines.push(`  class ${mid} current`)
+    }
+  }
+
+  lines.push("```")
+  lines.push("")
+
+  lines.push("| # | Task | Status | PR |")
+  lines.push("|---|------|--------|----|")
+
+  for (let i = 0; i < sorted.length; i++) {
+    const id = sorted[i]!
+    const node = idx.get(id)!
+    const isCurrent = currentNodeId === id
+    const num = String(i + 1)
+    const title = isCurrent ? `**${node.title}** _(this PR)_` : node.title
+    const status = `${statusEmoji[node.status]} ${statusLabel[node.status]}`
+    const pr = node.prUrl ? `[PR](${node.prUrl})` : "—"
+    lines.push(`| ${num} | ${title} | ${status} | ${pr} |`)
+  }
+
+  const progress = dagProgress(graph)
+  lines.push("")
+  lines.push(
+    `**Progress:** ${progress.done}/${progress.total} complete` +
+    (progress.landed > 0 ? ` · ${progress.landed} landed` : "") +
+    (progress.running > 0 ? ` · ${progress.running} running` : "") +
+    (progress.ciPending > 0 ? ` · ${progress.ciPending} awaiting CI` : "") +
+    (progress.failed > 0 ? ` · ${progress.failed} failed` : "") +
+    (progress.ciFailed > 0 ? ` · ${progress.ciFailed} CI failed` : "") +
+    (progress.skipped > 0 ? ` · ${progress.skipped} skipped` : ""),
+  )
+
+  lines.push("")
+  lines.push(DAG_STATUS_END)
+
+  return lines.join("\n")
+}
+
+export function upsertDagSection(body: string, dagSection: string): string {
+  const startIdx = body.indexOf(DAG_STATUS_START)
+  const endIdx = body.indexOf(DAG_STATUS_END)
+
+  if (startIdx !== -1 && endIdx !== -1) {
+    return body.substring(0, startIdx) + dagSection + body.substring(endIdx + DAG_STATUS_END.length)
+  }
+
+  const separator = body.length > 0 && !body.endsWith("\n") ? "\n\n" : body.length > 0 ? "\n" : ""
+  return body + separator + dagSection
+}
+
+export interface BranchCleanupResult {
+  worktreeRemoved: boolean
+  remoteBranchDeleted: boolean
+}
+
+export async function cleanupMergedBranch(
+  branch: string,
+  worktreePath: string | undefined,
+  cwd: string,
+  opts?: { timeout?: number },
+): Promise<BranchCleanupResult> {
+  const timeout = opts?.timeout ?? 120_000
+  const execOpts = { timeout, cwd, encoding: "utf-8" as const, env: { ...process.env } }
+  const result: BranchCleanupResult = { worktreeRemoved: false, remoteBranchDeleted: false }
+
+  if (worktreePath) {
+    try {
+      await execFile("git", ["worktree", "remove", "--force", worktreePath], execOpts)
+      result.worktreeRemoved = true
+    } catch (e) {
+      void e
+    }
+  }
+
+  try {
+    await execFile("git", ["push", "origin", "--delete", branch], execOpts)
+    result.remoteBranchDeleted = true
+  } catch (e) {
+    void e
+  }
+
+  return result
+}

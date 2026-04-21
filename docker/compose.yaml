@@ -1,0 +1,39 @@
+services:
+  engine:
+    build:
+      context: ..
+      dockerfile: docker/engine.Dockerfile
+    image: minions-engine:local
+    restart: unless-stopped
+    ports:
+      - "${ENGINE_PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      WORKSPACE_ROOT: /workspace
+      HOME: /workspace/home
+      MINION_DB_PATH: /workspace/engine.db
+      DEFAULT_REPO: ${DEFAULT_REPO:-}
+      MINION_API_TOKEN: ${MINION_API_TOKEN:?set MINION_API_TOKEN in .env}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SUPABASE_ACCESS_TOKEN: ${SUPABASE_ACCESS_TOKEN:-}
+      ENABLE_BROWSER_MCP: ${ENABLE_BROWSER_MCP:-true}
+      ENABLE_GITHUB_MCP: ${ENABLE_GITHUB_MCP:-true}
+      ENABLE_CONTEXT7_MCP: ${ENABLE_CONTEXT7_MCP:-true}
+      ENABLE_SUPABASE_MCP: ${ENABLE_SUPABASE_MCP:-false}
+    volumes:
+      - workspace:/workspace
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - engine
+
+volumes:
+  workspace:

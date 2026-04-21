@@ -103,9 +103,11 @@ describe('mock-minion integration', () => {
 
     const list = await client.listScreenshots('s-1')
     expect(list.screenshots).toHaveLength(1)
-    expect(list.screenshots[0].file).toBe('shot-1.png')
+    const entry = list.screenshots[0]
+    expect(entry).toBeDefined()
+    expect(entry!.file).toBe('shot-1.png')
 
-    const blob = await client.fetchScreenshotBlob('shot-1.png')
+    const blob = await client.fetchScreenshotBlob(entry!.url)
     const buf = Buffer.from(await blob.arrayBuffer())
     expect(buf.equals(png)).toBe(true)
   })

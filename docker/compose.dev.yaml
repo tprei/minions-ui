@@ -1,0 +1,8 @@
+services:
+  engine:
+    image: minions-engine:test
+    volumes:
+      - /home/prei/minions/minions-ui:/hostrepo:ro
+      - ${HOME}/.claude:/workspace/home/.claude
+    environment:
+      DEFAULT_REPO: file:///hostrepo
