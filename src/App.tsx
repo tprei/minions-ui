@@ -132,11 +132,12 @@ function ConnectionStatusBadge({
 
   return (
     <span
-      class="flex items-center gap-1 sm:gap-1.5 text-xs text-slate-600 dark:text-slate-400 min-w-0"
+      class="flex items-center gap-1 sm:gap-1.5 text-xs text-slate-600 dark:text-slate-400 shrink-0"
       data-testid="connection-status-badge"
+      title={label}
     >
       <span class={`inline-block h-2 w-2 shrink-0 rounded-full ${color}`} />
-      <span class="truncate" data-testid="connection-status-label">{label}</span>
+      <span class="hidden sm:inline truncate" data-testid="connection-status-label">{label}</span>
     </span>
   )
 }
