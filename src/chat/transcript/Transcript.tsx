@@ -61,7 +61,7 @@ export function Transcript({ store }: Props) {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-1.5 bg-slate-50 dark:bg-slate-900"
+        class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-2.5 bg-slate-50 dark:bg-slate-900"
         data-testid="transcript"
       >
         {error && (
@@ -93,9 +93,13 @@ export function Transcript({ store }: Props) {
             No transcript activity yet.
           </div>
         )}
-        {rows.map((row) => (
-          <RowView key={rowKey(row)} row={row} />
-        ))}
+        {groupRows(rows).map((item) =>
+          item.kind === 'tool-group' ? (
+            <ToolGroup key={`tg:${item.items[0].call.call.toolUseId}`} items={item.items} />
+          ) : (
+            <RowView key={rowKey(item.row)} row={item.row} />
+          ),
+        )}
       </div>
       {!following && rows.length > 0 && (
         <button
@@ -142,6 +146,50 @@ function RowView({ row }: { row: TranscriptRow }) {
     case 'status':
       return <StatusBanner event={row.event} />
   }
+}
+
+type ToolCallRow = Extract<TranscriptRow, { kind: 'tool-call' }>
+type RenderItem =
+  | { kind: 'single'; row: TranscriptRow }
+  | { kind: 'tool-group'; items: ToolCallRow[] }
+
+function groupRows(rows: TranscriptRow[]): RenderItem[] {
+  const out: RenderItem[] = []
+  let buf: ToolCallRow[] = []
+  function flush() {
+    if (buf.length === 0) return
+    if (buf.length === 1) out.push({ kind: 'single', row: buf[0] })
+    else out.push({ kind: 'tool-group', items: buf })
+    buf = []
+  }
+  for (const row of rows) {
+    if (row.kind === 'tool-call') {
+      buf.push(row)
+      continue
+    }
+    flush()
+    out.push({ kind: 'single', row })
+  }
+  flush()
+  return out
+}
+
+function ToolGroup({ items }: { items: ToolCallRow[] }) {
+  return (
+    <div
+      class="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 overflow-hidden divide-y divide-slate-200 dark:divide-slate-700"
+      data-testid="transcript-tool-group"
+    >
+      {items.map((row) => (
+        <ToolCallCard
+          key={row.call.call.toolUseId}
+          call={row.call}
+          result={row.result}
+          variant="grouped"
+        />
+      ))}
+    </div>
+  )
 }
 
 function rowKey(row: TranscriptRow): string {

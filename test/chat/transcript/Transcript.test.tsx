@@ -132,6 +132,48 @@ describe('Transcript', () => {
     expect(screen.getByTestId('transcript-streaming-indicator')).toBeTruthy()
   })
 
+  it('wraps consecutive tool calls in a single grouped frame', async () => {
+    const calls: ToolCallEvent[] = [1, 2, 3].map((i) => ({
+      ...baseEvent(i),
+      type: 'tool_call',
+      call: {
+        toolUseId: `tu${i}`,
+        name: 'Bash',
+        kind: 'bash',
+        title: `cmd ${i}`,
+        input: {},
+      },
+    }))
+    const client = makeClient(snapshot(calls))
+    const store = createTranscriptStore({ client, slug: 's' })
+    render(<Transcript store={store} />)
+    await flush()
+    await waitFor(() => expect(screen.getAllByTestId('transcript-tool-call').length).toBe(3))
+    const groups = screen.getAllByTestId('transcript-tool-group')
+    expect(groups.length).toBe(1)
+    expect(groups[0].querySelectorAll('[data-testid="transcript-tool-call"]').length).toBe(3)
+  })
+
+  it('renders a lone tool call as a standalone card, not grouped', async () => {
+    const call: ToolCallEvent = {
+      ...baseEvent(1),
+      type: 'tool_call',
+      call: {
+        toolUseId: 'tu1',
+        name: 'Bash',
+        kind: 'bash',
+        title: 'echo',
+        input: {},
+      },
+    }
+    const client = makeClient(snapshot([call]))
+    const store = createTranscriptStore({ client, slug: 's' })
+    render(<Transcript store={store} />)
+    await flush()
+    await waitFor(() => expect(screen.getByTestId('transcript-tool-call')).toBeTruthy())
+    expect(screen.queryByTestId('transcript-tool-group')).toBeNull()
+  })
+
   it('renders an error banner when fetch fails and exposes Retry', async () => {
     let attempts = 0
     const client = {

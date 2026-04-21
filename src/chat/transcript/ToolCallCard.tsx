@@ -7,9 +7,10 @@ interface Props {
   call: ToolCallEvent
   result: ToolResultEvent | null
   defaultOpen?: boolean
+  variant?: 'standalone' | 'grouped'
 }
 
-export function ToolCallCard({ call, result, defaultOpen = false }: Props) {
+export function ToolCallCard({ call, result, defaultOpen = false, variant = 'standalone' }: Props) {
   const [open, setOpen] = useState(defaultOpen)
   const summary = call.call
 
@@ -30,9 +31,14 @@ export function ToolCallCard({ call, result, defaultOpen = false }: Props) {
     </span>
   )
 
+  const containerClass =
+    variant === 'grouped'
+      ? 'bg-transparent overflow-hidden'
+      : 'rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 overflow-hidden'
+
   return (
     <div
-      class="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 overflow-hidden"
+      class={containerClass}
       data-testid="transcript-tool-call"
       data-tool-kind={summary.kind}
       data-tool-status={status}
@@ -40,7 +46,7 @@ export function ToolCallCard({ call, result, defaultOpen = false }: Props) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        class="w-full flex flex-col items-stretch gap-0.5 px-3 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40"
+        class="w-full flex flex-col items-stretch gap-0.5 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40"
         aria-expanded={open}
         data-testid="transcript-tool-call-toggle"
       >
