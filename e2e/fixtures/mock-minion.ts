@@ -323,10 +323,10 @@ export async function createMockMinion(opts?: {
     notFound(res)
   })
 
-  await new Promise<void>((resolve) => server.listen(0, 'localhost', resolve))
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
 
   const addr = server.address() as { port: number }
-  const url = `http://localhost:${addr.port}`
+  const url = `http://127.0.0.1:${addr.port}`
 
   return {
     url,
