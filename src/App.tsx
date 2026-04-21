@@ -6,6 +6,8 @@ import { ConnectionSettings } from './connections/ConnectionSettings'
 import { ConnectionPicker } from './connections/ConnectionPicker'
 import { ConnectionsDrawer } from './connections/ConnectionsDrawer'
 import { ResourceChip } from './components/ResourceChip'
+import { RunningBadge } from './components/RunningBadge'
+import { countRunning } from './state/running'
 import { RuntimeConfigDrawer, type RuntimeTab } from './settings/RuntimeConfigDrawer'
 import { Transcript, TranscriptUpgradeNotice } from './chat/transcript'
 import { MessageInput } from './chat/MessageInput'
@@ -224,13 +226,21 @@ function ChatPane({
   const rootClass = mobileFullscreen
     ? 'fixed inset-0 z-40 flex flex-col bg-white dark:bg-slate-800'
     : 'flex flex-col flex-1 min-h-0 bg-white dark:bg-slate-800'
+  const statusTone =
+    session.status === 'running' || session.status === 'pending'
+      ? 'text-blue-700 dark:text-blue-300 font-semibold'
+      : session.status === 'failed'
+        ? 'text-red-700 dark:text-red-300 font-semibold'
+        : session.status === 'completed'
+          ? 'text-green-700 dark:text-green-300'
+          : 'text-slate-500 dark:text-slate-400'
 
   return (
     <div class={rootClass} data-testid="chat-pane" data-fullscreen={mobileFullscreen ? 'true' : 'false'}>
       <header class="flex items-center gap-2 px-4 py-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
         <span class={`inline-block h-2 w-2 rounded-full ${statusDot(session.status)}`} />
         <span class="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
-        <span class="text-xs text-slate-500 dark:text-slate-400">{session.status}</span>
+        <span class={`text-xs ${statusTone}`} data-testid="chat-pane-status">{session.status}</span>
         <span class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 ml-2">
           {session.mode}
         </span>
@@ -547,6 +557,15 @@ function ActiveView() {
     document.documentElement.style.setProperty('--accent', color)
   }, [conn?.color])
 
+  const runningCount = store ? countRunning(store.sessions.value) : 0
+  useEffect(() => {
+    const base = 'Minions UI'
+    document.title = runningCount > 0 ? `(${runningCount}) ${base}` : base
+    return () => {
+      document.title = base
+    }
+  }, [runningCount])
+
   useEffect(() => {
     if (route.name !== 'session') return
     const match = store?.sessions.value.find((s) => s.slug === route.sessionSlug)
@@ -693,6 +712,7 @@ function ActiveView() {
         {hasFeature(store, 'resource-metrics') && (
           <ResourceChip store={store} onOpen={() => { showRuntime.value = 'resources' }} />
         )}
+        <RunningBadge store={store} onSelect={handleOpenChat} />
         <div class="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
           <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />
           <ThemeToggle />
