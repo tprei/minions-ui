@@ -65,13 +65,13 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   }, [open.value, open])
 
   return (
-    <div class="relative min-w-0 shrink" ref={containerRef}>
+    <div class="relative min-w-0 flex-1 max-w-[14rem]" ref={containerRef}>
       <button
         data-testid="connection-picker-trigger"
         onClick={handleToggle}
         aria-haspopup="listbox"
         aria-expanded={open.value}
-        class="flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 sm:px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors min-w-0"
+        class="w-full flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 sm:px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors min-w-0"
       >
         {activeConn ? (
           <>
@@ -80,12 +80,12 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
               style={{ backgroundColor: activeConn.color }}
               data-testid="picker-active-dot"
             />
-            <span class="max-w-[80px] sm:max-w-[140px] truncate">{activeConn.label}</span>
+            <span class="flex-1 min-w-0 truncate text-left">{activeConn.label}</span>
           </>
         ) : (
-          <span class="text-slate-500">No connection</span>
+          <span class="flex-1 min-w-0 truncate text-left text-slate-500">No connection</span>
         )}
-        <span class="text-slate-400 text-xs">{open.value ? '▲' : '▼'}</span>
+        <span class="text-slate-400 text-xs shrink-0">{open.value ? '▲' : '▼'}</span>
       </button>
 
       {open.value && (
