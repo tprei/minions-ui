@@ -63,6 +63,8 @@ function makeStore(opts: {
       .fn<(cmd: MinionCommand) => Promise<CommandResult>>()
       .mockImplementation(opts.sendCommandImpl ?? (async () => ({ success: true }))),
     getTranscript: vi.fn(() => null),
+    applySessionCreated: vi.fn(),
+    applySessionDeleted: vi.fn(),
     dispose: vi.fn(),
   }
 }

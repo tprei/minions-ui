@@ -139,11 +139,12 @@ export function NewTaskBar({
         }
         navigate(formatRoute({ name: 'group', groupId }))
       } else {
-        await store.client.createSession({
+        const created = await store.client.createSession({
           prompt: p,
           mode: mode.value,
           repo: selectedRepo,
         })
+        store.applySessionCreated(created)
         prompt.value = ''
       }
     } catch (e) {

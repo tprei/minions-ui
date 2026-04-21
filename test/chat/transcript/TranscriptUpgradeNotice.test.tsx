@@ -21,6 +21,8 @@ function makeStore(version: VersionInfo | null): ConnectionStore {
     refresh: vi.fn(async () => {}),
     sendCommand: vi.fn(async () => ({ success: true })),
     getTranscript: vi.fn(() => null),
+    applySessionCreated: vi.fn(),
+    applySessionDeleted: vi.fn(),
     dispose: vi.fn(),
   }
 }

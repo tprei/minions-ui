@@ -12,6 +12,7 @@ export interface SseHandlers {
 
 export interface EventStreamHandle {
   close(): void
+  reconnect(): void
   status: Signal<SseStatus>
   reconnectAt: Signal<number | null>
 }
@@ -79,6 +80,18 @@ export function openEventStream(opts: {
   return {
     status,
     reconnectAt,
+    reconnect() {
+      if (closed) return
+      if (reconnectTimer !== null) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+      es?.close()
+      es = null
+      attempt = 0
+      reconnectAt.value = null
+      connect()
+    },
     close() {
       if (closed) return
       closed = true

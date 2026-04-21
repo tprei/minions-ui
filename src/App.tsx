@@ -573,6 +573,9 @@ function ActiveView() {
     async (cmd: MinionCommand) => {
       if (!store) return
       await store.sendCommand(cmd)
+      if (cmd.action === 'close') {
+        store.applySessionDeleted(cmd.sessionId)
+      }
     },
     [store]
   )
@@ -609,6 +612,7 @@ function ActiveView() {
       setIsActionLoading(true)
       try {
         await store.sendCommand({ action: 'close', sessionId: sid })
+        store.applySessionDeleted(sid)
       } finally {
         setIsActionLoading(false)
       }

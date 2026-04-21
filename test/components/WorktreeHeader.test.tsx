@@ -51,6 +51,8 @@ function makeStore(opts: {
     refresh: async () => {},
     sendCommand: async () => ({ success: true }),
     getTranscript: () => null,
+    applySessionCreated: () => {},
+    applySessionDeleted: () => {},
     dispose: () => {},
   }
 }
