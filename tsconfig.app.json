@@ -20,5 +20,5 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "test", "e2e/fixtures"]
+  "include": ["src", "test", "e2e/fixtures", "shared/**/*"]
 }

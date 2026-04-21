@@ -65,7 +65,7 @@ export function ScreenshotsTab({ sessionId, sessionUpdatedAt, client }: Screensh
     let cancelled = false
     for (const s of missing) {
       void client
-        .fetchScreenshotBlob(s.file)
+        .fetchScreenshotBlob(s.url)
         .then((blob) => {
           if (cancelled) return
           const existing = currentMap.get(s.file)

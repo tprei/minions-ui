@@ -12,3 +12,16 @@ vite.config.d.ts
 vite.config.js
 playwright.config.d.ts
 playwright.config.js
+/data/
+/server/data/
+/.minion-data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+.api-token
+.runtime-overrides.json
+.loops.json
+.vapid.json
+.gh-token
+docker/.env

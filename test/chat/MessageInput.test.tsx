@@ -32,7 +32,7 @@ const session: ApiSession = {
   conversation: [],
 }
 
-function Controlled({ onSend }: { onSend: (text: string) => Promise<void> }) {
+function Controlled({ onSend }: { onSend: (text: string, images?: Array<{ mediaType: string; dataBase64: string }>) => Promise<void> }) {
   const [text, setText] = useState('')
   return <MessageInput session={session} onSend={onSend} value={text} onValueChange={setText} />
 }
@@ -51,7 +51,7 @@ describe('MessageInput', () => {
     render(<Controlled onSend={onSend} />)
     fireEvent.input(getTextarea(), { target: { value: 'hello world' } })
     fireEvent.click(getSendBtn())
-    await waitFor(() => expect(onSend).toHaveBeenCalledWith('hello world'))
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('hello world', undefined))
   })
 
   it('calls onSend when Enter is pressed (no shift)', async () => {
@@ -59,7 +59,7 @@ describe('MessageInput', () => {
     render(<Controlled onSend={onSend} />)
     fireEvent.input(getTextarea(), { target: { value: 'enter test' } })
     fireEvent.keyDown(getTextarea(), { key: 'Enter', shiftKey: false })
-    await waitFor(() => expect(onSend).toHaveBeenCalledWith('enter test'))
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('enter test', undefined))
   })
 
   it('inserts newline on Shift+Enter without submitting', async () => {
@@ -107,7 +107,7 @@ describe('MessageInput', () => {
     await waitFor(() => expect(screen.getByTestId('retry-btn')).toBeTruthy())
     fireEvent.click(screen.getByTestId('retry-btn'))
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2))
-    expect(onSend).toHaveBeenNthCalledWith(2, 'retry me')
+    expect(onSend).toHaveBeenNthCalledWith(2, 'retry me', undefined)
   })
 
   it('renders the composer toolbar with kbd hints', () => {
@@ -252,5 +252,139 @@ describe('MessageInput · voice input', () => {
       rec.onresult?.call(rec, event)
     })
     await waitFor(() => expect(getTextarea().value).toBe('hello world'))
+  })
+})
+
+describe('MessageInput · image attachments', () => {
+  let createdUrls: string[]
+  let revokedUrls: string[]
+
+  beforeEach(() => {
+    createdUrls = []
+    revokedUrls = []
+    let counter = 0
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => {
+        const url = `blob:mock-${counter++}`
+        createdUrls.push(url)
+        return url
+      }),
+      revokeObjectURL: vi.fn((url: string) => {
+        revokedUrls.push(url)
+      }),
+    })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows paperclip attach button', () => {
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    expect(screen.getByTestId('attach-btn')).toBeTruthy()
+  })
+
+  it('paste event with image file queues attachment and shows thumbnail strip', async () => {
+    const fakeBlob = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' })
+    const fakeFile = new File([fakeBlob], 'paste.png', { type: 'image/png' })
+
+    interface FileReaderStub {
+      result: string | ArrayBuffer | null
+      onload: ((ev: ProgressEvent) => void) | null
+      onerror: ((ev: ProgressEvent) => void) | null
+    }
+    const readAsDataURLMock = vi.fn().mockImplementation(function (this: FileReaderStub) {
+      Promise.resolve().then(() => {
+        Object.defineProperty(this, 'result', { value: 'data:image/png;base64,abc123', configurable: true })
+        this.onload?.call(this, new ProgressEvent('load'))
+      })
+    })
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = readAsDataURLMock
+    })
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const dt = {
+      items: [
+        { kind: 'file', type: 'image/png', getAsFile: () => fakeFile },
+      ],
+    }
+    const textarea = screen.getByTestId('message-textarea')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+    expect(screen.getByTestId('remove-attachment-0')).toBeTruthy()
+  })
+
+  it('sends images with text when onSend is called', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    const fakeFile = new File([new Uint8Array([1, 2, 3])], 'img.png', { type: 'image/png' })
+
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,dGVzdA=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    render(<Controlled onSend={onSend} />)
+
+    const dt = {
+      items: [
+        { kind: 'file', type: 'image/png', getAsFile: () => fakeFile },
+      ],
+    }
+    const textarea = screen.getByTestId('message-textarea')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+
+    fireEvent.input(textarea, { target: { value: 'look at this' } })
+    fireEvent.click(screen.getByTestId('send-btn'))
+
+    await waitFor(() => expect(onSend).toHaveBeenCalled())
+    const [text, images] = onSend.mock.calls[0] as [string, Array<{ mediaType: string; dataBase64: string }>]
+    expect(text).toBe('look at this')
+    expect(Array.isArray(images)).toBe(true)
+    expect(images[0]).toMatchObject({ mediaType: 'image/png' })
+  })
+
+  it('remove button dismisses an attachment', async () => {
+    const fakeFile = new File([new Uint8Array([1])], 'img.png', { type: 'image/png' })
+
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,YQ=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const dt = {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
+    }
+    const textarea = screen.getByTestId('message-textarea')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('remove-attachment-0')).toBeTruthy())
+    fireEvent.click(screen.getByTestId('remove-attachment-0'))
+    await waitFor(() => expect(screen.queryByTestId('attachment-strip')).toBeNull())
+    expect(revokedUrls.length).toBeGreaterThan(0)
   })
 })

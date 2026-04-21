@@ -153,7 +153,7 @@ function ChatPane({
 }: {
   session: ApiSession
   store: ConnectionStore
-  onSend: (text: string, sessionId: string) => Promise<void>
+  onSend: (text: string, sessionId: string, images?: Array<{ mediaType: string; dataBase64: string }>) => Promise<void>
   onCommand: (cmd: MinionCommand) => Promise<void>
   onNavigate?: (sessionId: string) => void
 }) {
@@ -169,7 +169,7 @@ function ChatPane({
     setFullscreen(next)
     try { localStorage.setItem('minions-ui:chat-fullscreen', String(next)) } catch { /* ignore */ }
   }
-  const handleSend = (t: string) => onSend(t, session.id)
+  const handleSend = (t: string, images?: Array<{ mediaType: string; dataBase64: string }>) => onSend(t, session.id, images)
   const handleQuickAction = (action: QuickAction) => onSend(action.message, session.id)
 
   const handleSlashCommand = async (fullText: string, cmd: SlashCommand) => {
@@ -382,7 +382,7 @@ function DesktopBody({
   setSessionId: (id: string) => void
   selected: ApiSession | null
   store: ConnectionStore
-  onSend: (text: string, sid: string) => Promise<void>
+  onSend: (text: string, sid: string, images?: Array<{ mediaType: string; dataBase64: string }>) => Promise<void>
   onCommand: (cmd: MinionCommand) => Promise<void>
   attentionFilter: AttentionReason | null
   onAttentionSelect: (reason: AttentionReason | null, firstMatchId: string | null) => void
@@ -565,9 +565,9 @@ function ActiveView() {
   )
 
   const handleSendMessage = useCallback(
-    async (text: string, sid: string) => {
+    async (text: string, sid: string, images?: Array<{ mediaType: string; dataBase64: string }>) => {
       if (!store) return
-      await store.client.sendMessage(text, sid)
+      await store.client.sendMessage(text, sid, images)
     },
     [store]
   )

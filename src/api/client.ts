@@ -39,14 +39,14 @@ export interface ApiClient {
   getSessions(): Promise<ApiSession[]>
   getDags(): Promise<ApiDagGraph[]>
   sendCommand(cmd: MinionCommand): Promise<CommandResult>
-  sendMessage(text: string, sessionId?: string): Promise<{ ok: true; sessionId: string | null }>
+  sendMessage(text: string, sessionId?: string, images?: Array<{ mediaType: string; dataBase64: string }>): Promise<{ ok: true; sessionId: string | null }>
   createSession(req: CreateSessionRequest): Promise<ApiSession>
   createSessionVariants(req: CreateSessionVariantsRequest): Promise<CreateSessionVariantsResult>
   getPr(sessionId: string): Promise<PrPreview>
   getDiff(sessionId: string): Promise<WorkspaceDiff>
   getTranscript(slug: string, afterSeq?: number): Promise<TranscriptSnapshot>
   listScreenshots(sessionId: string): Promise<ScreenshotList>
-  fetchScreenshotBlob(file: string): Promise<Blob>
+  fetchScreenshotBlob(url: string): Promise<Blob>
   getVapidKey(): Promise<VapidPublicKey>
   subscribePush(sub: PushSubscriptionJSON): Promise<PushSubscribeAck>
   unsubscribePush(endpoint: string): Promise<{ ok: true }>
@@ -140,8 +140,8 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
       return post<CommandResult>('/api/commands', cmd)
     },
 
-    sendMessage(text: string, sessionId?: string) {
-      return post<{ ok: true; sessionId: string | null }>('/api/messages', { text, sessionId })
+    sendMessage(text: string, sessionId?: string, images?: Array<{ mediaType: string; dataBase64: string }>) {
+      return post<{ ok: true; sessionId: string | null }>('/api/messages', { text, sessionId, images })
     },
 
     createSession(req: CreateSessionRequest) {
@@ -176,8 +176,9 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
       return get<TranscriptSnapshot>(`/api/sessions/${encodeURIComponent(slug)}/transcript${query}`)
     },
 
-    async fetchScreenshotBlob(file: string): Promise<Blob> {
-      const res = await fetch(`${baseUrl}/api/screenshots/${encodeURIComponent(file)}`, {
+    async fetchScreenshotBlob(url: string): Promise<Blob> {
+      const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`
+      const res = await fetch(fullUrl, {
         headers: authHeadersOnly(),
       })
       if (!res.ok) {

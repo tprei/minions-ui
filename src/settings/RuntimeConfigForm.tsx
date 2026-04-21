@@ -250,7 +250,7 @@ function baseValueFor(field: OverrideField, config: RuntimeConfigResponse): Draf
 
 function overrideValueFor(field: OverrideField, config: RuntimeConfigResponse): DraftValue | undefined {
   const parts = field.key.split('.')
-  const v = getAtPath(config.overrides as unknown as Record<string, unknown>, parts)
+  const v = getAtPath(config.overrides, parts)
   if (v === undefined) return undefined
   if (field.type === 'boolean') return Boolean(v)
   return typeof v === 'number' ? v : undefined
@@ -293,13 +293,13 @@ function buildPatch(
     }
 
     if (value === base) continue
-    assignAtPath(patch as unknown as Record<string, unknown>, parts, value)
+    assignAtPath(patch, parts, value)
   }
   return patch
 }
 
-function getAtPath(root: Record<string, unknown> | undefined, parts: string[]): unknown {
-  let cursor: unknown = root
+function getAtPath(root: unknown, parts: string[]): unknown {
+  let cursor = root
   for (const p of parts) {
     if (!cursor || typeof cursor !== 'object') return undefined
     cursor = (cursor as Record<string, unknown>)[p]
@@ -307,16 +307,19 @@ function getAtPath(root: Record<string, unknown> | undefined, parts: string[]): 
   return cursor
 }
 
-function assignAtPath(
-  root: Record<string, unknown>,
-  parts: string[],
-  value: DraftValue,
-): void {
-  let cursor: Record<string, unknown> = root
+function assignAtPath(root: unknown, parts: string[], value: DraftValue): void {
+  if (!root || typeof root !== 'object') return
+  let cursor = root as Record<string, unknown>
   for (let i = 0; i < parts.length - 1; i++) {
     const p = parts[i]
-    if (!cursor[p] || typeof cursor[p] !== 'object') cursor[p] = {}
-    cursor = cursor[p] as Record<string, unknown>
+    const next = cursor[p]
+    if (!next || typeof next !== 'object') {
+      const fresh: Record<string, unknown> = {}
+      cursor[p] = fresh
+      cursor = fresh
+    } else {
+      cursor = next as Record<string, unknown>
+    }
   }
   cursor[parts[parts.length - 1]] = value
 }
