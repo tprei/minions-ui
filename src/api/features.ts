@@ -11,6 +11,8 @@ export type FeatureName =
   | 'web-push'
   | 'worktree-stats'
   | 'transcript'
+  | 'resource-metrics'
+  | 'runtime-config'
 
 export function hasFeature(
   source: ConnectionStore | VersionInfo | null | undefined,

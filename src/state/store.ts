@@ -1,6 +1,11 @@
 import { signal } from '@preact/signals'
 import type { ApiClient } from '../api/client'
-import type { SseEvent } from '../api/types'
+import type {
+  ResourceSnapshot,
+  RuntimeConfigResponse,
+  RuntimeOverrides,
+  SseEvent,
+} from '../api/types'
 import type { SseStatus } from '../api/sse'
 import type { ConnectionStore, DiffStats } from './types'
 import { loadSnapshot, saveSnapshot } from './persist'
@@ -16,6 +21,8 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
   const diffStatsBySessionId = signal<Map<string, DiffStats>>(new Map())
   const diffStatsInFlight = new Set<string>()
   const transcripts = new Map<string, TranscriptStore>()
+  const resourceSnapshot = signal<ResourceSnapshot | null>(null)
+  const runtimeConfig = signal<RuntimeConfigResponse | null>(null)
 
   function getTranscript(sessionId: string): TranscriptStore | null {
     const existing = transcripts.get(sessionId)
@@ -157,7 +164,23 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
         if (store) store.applyEvent(event.event)
         break
       }
+      case 'resource':
+        resourceSnapshot.value = event.snapshot
+        break
     }
+  }
+
+  async function refreshRuntimeConfig() {
+    try {
+      runtimeConfig.value = await client.getRuntimeConfig()
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('not enabled')) return
+      // Non-fatal — the drawer just won't open until this succeeds.
+    }
+  }
+
+  async function updateRuntimeConfig(patch: RuntimeOverrides): Promise<void> {
+    runtimeConfig.value = await client.patchRuntimeConfig(patch)
   }
 
   const handle = client.openEventStream({
@@ -220,6 +243,8 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     version,
     stale,
     diffStatsBySessionId,
+    resourceSnapshot,
+    runtimeConfig,
     loadDiffStats,
     refresh,
     sendCommand(cmd) {
@@ -228,6 +253,8 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     getTranscript,
     applySessionCreated,
     applySessionDeleted,
+    refreshRuntimeConfig,
+    updateRuntimeConfig,
     dispose() {
       if (snapshotTimer !== null) {
         clearTimeout(snapshotTimer)

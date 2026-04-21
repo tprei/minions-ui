@@ -47,12 +47,16 @@ function makeStore(opts: {
     version,
     stale: signal(false),
     diffStatsBySessionId,
+    resourceSnapshot: signal(null),
+    runtimeConfig: signal(null),
     loadDiffStats: opts.loadDiffStats ?? (async () => {}),
     refresh: async () => {},
     sendCommand: async () => ({ success: true }),
     getTranscript: () => null,
     applySessionCreated: () => {},
     applySessionDeleted: () => {},
+    refreshRuntimeConfig: async () => {},
+    updateRuntimeConfig: async () => {},
     dispose: () => {},
   }
 }
