@@ -98,6 +98,15 @@ function ResultText({ event }: { event: ToolResultEvent }) {
   if (langHint && resolveLanguage(langHint)) {
     return <CodeBlock text={text} lang={langHint} testId="transcript-tool-result-text" wrap />
   }
+  if (format === undefined) {
+    const detected = detectFormat(text)
+    if (detected === 'json') {
+      return <CodeBlock text={prettyJson(text)} lang="json" testId="transcript-tool-result-json" />
+    }
+    if (detected === 'diff') {
+      return <CodeBlock text={text} lang="diff" testId="transcript-tool-result-diff" />
+    }
+  }
   return (
     <pre
       class="px-3 py-2 max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-slate-700 dark:text-slate-300 leading-snug"
@@ -106,6 +115,30 @@ function ResultText({ event }: { event: ToolResultEvent }) {
       {text}
     </pre>
   )
+}
+
+function detectFormat(text: string): 'json' | 'diff' | undefined {
+  const trimmed = text.trim()
+  if (!trimmed) return undefined
+  if (
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    try {
+      JSON.parse(trimmed)
+      return 'json'
+    } catch {
+      // not JSON — fall through
+    }
+  }
+  if (
+    /^diff --git /m.test(text) ||
+    /^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/m.test(text) ||
+    (/^---[ \t]/m.test(text) && /^\+\+\+[ \t]/m.test(text))
+  ) {
+    return 'diff'
+  }
+  return undefined
 }
 
 function CodeBlock({
