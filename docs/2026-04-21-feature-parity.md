@@ -1,6 +1,6 @@
-# Feature parity audit — telegram-minions → minions-ui engine
+# Feature parity audit — legacy engine → monorepo engine
 
-Source: `/home/prei/minions/telegram-minions/src/api-server.ts` (1201 LOC) and the modules it consumes. Status column: **DONE** = shipped in this rewrite, **PARTIAL** = shipped but not full parity, **DROP** = intentionally removed.
+Source: `server/src/api-server.ts` and the modules it consumes. Status column: **DONE** = shipped in this rewrite, **PARTIAL** = shipped but not full parity, **DROP** = intentionally removed.
 
 Wave coverage: A1–A3 (DAG, ship, completion chain), B1–B3 (judge, GitHub, CI, loops), C1–C3 (PWA unblocking, config, slash commands). Wave 4 = integration + verification.
 

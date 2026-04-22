@@ -1,6 +1,6 @@
 # Workspace caching — old engine → new engine preservation plan
 
-Source: `/home/prei/minions/telegram-minions/src/session/session-manager.ts`, `src/session/session.ts`, `Dockerfile`, `docker-compose.yml`, meta/pixwise minion `Dockerfile` + `entrypoint.sh` + `fly.toml`.
+Source: `server/src/session/session-manager.ts`, `server/src/session/session.ts`, `Dockerfile`, `docker-compose.yml`, meta/pixwise minion `Dockerfile` + `entrypoint.sh` + `fly.toml`.
 
 ## 0. SECURITY — rotate immediately
 
@@ -56,14 +56,14 @@ Cold path: up to ~10 min of installs. Warm (hardlink): seconds.
 
 ### meta-minion
 - Dockerfile installs `@anthropic-ai/claude-code`, `@zed-industries/claude-agent-acp`, `@playwright/mcp`, `@upstash/context7-mcp`, `github-mcp-server`, `vitest`, `typescript`. Playwright at `/opt/pw-browsers`.
-- Depends on `@tprei/telegram-minions ^1.118.8` + `dotenv`. `type: module`.
+- Legacy: depended on engine as `@tprei/telegram-minions ^1.118.8`. Now uses monorepo `server/`.
 - `entrypoint.sh` copies `/app/agents`, `/app/.claude/settings.json`, `/app/.claude/CLAUDE.md` into `/workspace/home/.claude/`. Runs as `minion`.
 - Has `.npmrc` (committed, LEAKS TOKEN), `package-lock.json`. No `.nvmrc`, `.tool-versions`, `pyproject.toml`, `poetry.lock`, `uv.lock`, `bun.lock`.
 - Fly: `workspace_data` 10GB at `/workspace`, `HOME=/workspace/home`.
 
 ### pixwise-minion
 - Same Dockerfile shape minus `github-mcp-server` npm install (uses Go binary instead).
-- Depends on `@tprei/telegram-minions ^1.113.0`.
+- Legacy: depended on engine as `@tprei/telegram-minions ^1.113.0`. Now uses monorepo `server/`.
 - `entrypoint.sh` additionally writes `/workspace/home/.npmrc` and `/workspace/home/.git-credentials` at runtime from env. **This is the right pattern.**
 - Same version pin gaps.
 

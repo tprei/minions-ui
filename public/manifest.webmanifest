@@ -1,7 +1,7 @@
 {
   "name": "minions-ui",
   "short_name": "minions",
-  "description": "Standalone PWA for @tprei/telegram-minions",
+  "description": "Standalone PWA for the minions engine",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
