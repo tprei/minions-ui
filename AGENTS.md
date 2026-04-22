@@ -30,17 +30,9 @@ git worktree add ../minions-ui-<branch> <branch>
 
 Delete the worktree after the PR merges.
 
-## Coordinated PR workflow
+## Monorepo workflow
 
-When a feature spans `telegram-minions` + `minions-ui`:
-
-1. Library PR in `telegram-minions` lands first.
-2. Publish a new `@tprei/telegram-minions` version.
-3. Chain version-bump PRs through `meta-minion` and `pixwise-minion`.
-4. UI PR in `minions-ui` cites the library PR URL in its description.
-5. While mixed library versions are in the wild, gate the UI feature on `/api/version.features` rather than library version numbers.
-
-Full rules: `docs/two-repo-prs.md`.
+The engine lives in `server/`, the UI in `src/`. Changes spanning both should be done in a single PR. Legacy split-repo workflow is documented in `docs/two-repo-prs.md` for historical context.
 
 ## Available agents (global)
 

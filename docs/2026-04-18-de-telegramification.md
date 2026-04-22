@@ -1,17 +1,18 @@
 # De-Telegramification — plan
 
 Date: 2026-04-18
-Status: draft, awaiting user review
-Scope: turn `@tprei/telegram-minions` into a pure engine; make Telegram and the PWA peer connectors; grow the PWA toward a Conductor-shaped product.
+Status: **completed** — monorepo structure in place with `server/` (engine) and `src/` (PWA)
+Scope: turned the Telegram-first library into a pure engine with the PWA as a first-class client.
 
 ## Goal
 
-Today the library is Telegram-first with the PWA bolted on as a viewer of Telegram-shaped state. We want:
+**Historical context:** The library was Telegram-first with the PWA bolted on as a viewer of Telegram-shaped state. The goal was:
 
-- `@tprei/minions-core` — a headless **engine** that spawns, coordinates, and broadcasts sessions/DAGs. Knows nothing about chat.
-- **Connectors** that plug into the engine to expose it through a channel: `TelegramConnector`, `HttpConnector` (feeds the PWA), `CliConnector`, future `SlackConnector`, etc.
-- The PWA becomes a first-class client of the engine — able to create and drive sessions without any Telegram deployment.
-- Telegram stays working throughout. No day in which long-time Telegram users see regressions.
+- A headless **engine** (`server/`) that spawns, coordinates, and broadcasts sessions/DAGs. Knows nothing about chat transport.
+- **Connectors** that plug into the engine to expose it through a channel.
+- The PWA (`src/`) becomes a first-class client of the engine — able to create and drive sessions without any Telegram deployment.
+
+This structure is now in place as a monorepo.
 
 Inspiration: [conductor.build](https://conductor.build) — multiple parallel Claude Code workspaces, worktree-per-session, visual parallelism, rich diff/PR UI. Same muscles as what the engine already flexes; different front end.
 

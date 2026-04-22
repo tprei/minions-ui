@@ -1,6 +1,6 @@
 # Phase 2 source map — session runtime
 
-Source: `/home/prei/minions/telegram-minions/src/`. All citations below are file:line in that tree.
+Source: `server/src/`. All citations below are file:line in that tree.
 
 ## 1. `sdk-session.ts` spawn and lifecycle
 

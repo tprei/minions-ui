@@ -28,14 +28,10 @@ export function TranscriptUpgradeNotice({ store }: TranscriptUpgradeNoticeProps)
           </svg>
         </div>
         <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          This minion needs a library update
+          This minion needs an engine update
         </h2>
         <p class="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-          The conductor-style chat view needs a{' '}
-          <code class="font-mono text-slate-800 dark:text-slate-200">
-            @tprei/telegram-minions
-          </code>{' '}
-          build that advertises the{' '}
+          The conductor-style chat view needs an engine build that advertises the{' '}
           <code class="font-mono text-slate-800 dark:text-slate-200">transcript</code>{' '}
           feature on{' '}
           <code class="font-mono text-slate-800 dark:text-slate-200">/api/version</code>.
