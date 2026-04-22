@@ -184,8 +184,16 @@ function ChatPane({
       })
       if (!ok) return
     }
-    await onSend(fullText, session.id)
-    setText('')
+    try {
+      await onSend(fullText, session.id)
+      setText('')
+    } catch (e) {
+      await confirm({
+        title: `${cmd.cmd} failed`,
+        message: e instanceof Error ? e.message : String(e),
+        mode: 'alert',
+      })
+    }
   }
 
   const handleStop = async () => {
