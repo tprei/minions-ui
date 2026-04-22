@@ -1,13 +1,13 @@
-export type DiffLineType = 'context' | 'add' | 'del'
+type DiffLineType = 'context' | 'add' | 'del'
 
-export interface DiffLine {
+interface DiffLine {
   type: DiffLineType
   text: string
   oldLineNo?: number
   newLineNo?: number
 }
 
-export interface DiffHunk {
+interface DiffHunk {
   oldStart: number
   oldCount: number
   newStart: number
