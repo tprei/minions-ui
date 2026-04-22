@@ -221,7 +221,6 @@ function ChatPane({
   }
 
   const stoppable = session.status === 'running' || session.status === 'pending'
-  const closable = session.status !== 'completed' && session.status !== 'failed'
   const mobileFullscreen = !isDesktopPane.value && fullscreen
   const rootClass = mobileFullscreen
     ? 'fixed inset-0 z-40 flex flex-col bg-white dark:bg-slate-800'
@@ -280,8 +279,8 @@ function ChatPane({
           <button
             type="button"
             onClick={() => void handleClose()}
-            disabled={!closable || pending !== null}
-            title={closable ? 'Close this session permanently' : 'Session is already terminal'}
+            disabled={pending !== null}
+            title="Close this session permanently"
             class="rounded-md border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 px-2 py-1 text-xs font-medium hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-40 disabled:cursor-not-allowed"
             data-testid="chat-close-btn"
           >
