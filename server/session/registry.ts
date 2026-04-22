@@ -210,8 +210,8 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       await removeWorkspace(handle)
     }
 
-    prepared.updateSession(db(), { id: sessionId, status: 'completed', updated_at: Date.now() })
-    emitSnapshot(sessionId)
+    prepared.deleteSession(db(), sessionId)
+    bus.emit({ kind: 'session.deleted', sessionId })
   }
 
   async function resumeRuntime(
