@@ -1,4 +1,7 @@
 import type { CompletionHandler, HandlerCtx, SessionCompletedEvent } from './types'
+import { handleExecute } from '../commands/plan-actions'
+
+const SHIP_ADVANCE_MODES = new Set(['ship-think', 'ship-plan'])
 
 export const shipAdvanceHandler: CompletionHandler = {
   name: 'ship-advance',
@@ -15,21 +18,18 @@ export const shipAdvanceHandler: CompletionHandler = {
       )
       .get(ev.sessionId)
 
-    if (!row || !row.mode.startsWith('ship-')) return
+    if (!row || !SHIP_ADVANCE_MODES.has(row.mode)) return
     if (row.pipeline_advancing !== 0) return
 
-    ctx.db.run(
-      'UPDATE sessions SET pipeline_advancing = 1, updated_at = ? WHERE id = ?',
-      [Date.now(), ev.sessionId],
-    )
-
     try {
-      await ctx.scheduler.onSessionCompleted(ev.sessionId, ev.state)
-    } finally {
-      ctx.db.run(
-        'UPDATE sessions SET pipeline_advancing = 0, updated_at = ? WHERE id = ?',
-        [Date.now(), ev.sessionId],
-      )
+      await handleExecute(ev.sessionId, {
+        db: ctx.db,
+        registry: ctx.registry,
+        scheduler: ctx.scheduler,
+      })
+    } catch (err) {
+      console.error(`[ship-advance] failed to advance session ${ev.sessionId} (mode=${row.mode}):`, err)
+      throw err
     }
   },
 }
