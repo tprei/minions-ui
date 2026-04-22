@@ -40,11 +40,24 @@ Land changes in this order, one PR at a time:
 - Add the flag in the same PR as the feature. Never advertise a flag without implementing the behavior.
 - Remove deprecated flags only in a new `apiVersion` bump.
 
-## Current `features` advertised by the library (as of v1.110.x)
+## Current `features` advertised by the server
 
+The minions-ui server advertises these features via `GET /api/version`:
+
+- `sessions-create` — `POST /api/sessions` for creating sessions
 - `messages` — `POST /api/messages` with slash-command parsing
+- `transcript` — `GET /api/sessions/:slug/transcript` for paginated transcript events
 - `auth` — `Authorization: Bearer` + `?token=` query param
 - `cors-allowlist` — `CORS_ALLOWED_ORIGINS` env var echoes allowlisted origins
+- `dag` — DAG endpoints and SSE events
+- `ship-pipeline` — `/ship` mode with judge/verify stages
+- `variants` — `POST /api/sessions/variants` for parallel session creation
+- `push` — Web Push notifications via VAPID
+- `screenshots` — Playwright screenshot capture and retrieval
+- `diff` — `GET /api/sessions/:slug/diff` for workspace diffs
+- `pr-preview` — `GET /api/sessions/:slug/pr` for PR metadata
+- `resource-tracking` — CPU/memory/disk metrics via SSE
+- `runtime-config` — `GET/PATCH /api/config/runtime` for runtime overrides
 
 ## Library version bumps
 
