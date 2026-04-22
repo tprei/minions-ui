@@ -30,6 +30,8 @@ import { ResourceMonitor } from './metrics/resource'
 import { createDigestBuilder } from './digest/digest'
 import { ReplyQueue as DiskReplyQueue } from './session/reply-queue'
 import { startPushNotifier } from './push/notifier'
+import { startTokenProvider } from './github/token-provider'
+import { installAskpass } from './github/askpass'
 
 const PORT = Number(process.env['PORT'] ?? 8080)
 const WORKSPACE_ROOT = process.env['WORKSPACE_ROOT'] ?? '/tmp/minion-workspace'
@@ -41,6 +43,11 @@ app.use('*', corsMiddleware())
 
 const db = getDb()
 runMigrations(db)
+
+await startTokenProvider()
+const askpass = installAskpass()
+process.env['GIT_ASKPASS'] = askpass.envOverrides['GIT_ASKPASS']
+process.env['SSH_ASKPASS'] = askpass.envOverrides['SSH_ASKPASS']
 
 const registry = createSessionRegistry({ getDb: () => db })
 const bus = getEventBus()
