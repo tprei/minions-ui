@@ -166,10 +166,10 @@ Wave coverage: A1–A3 (DAG, ship, completion chain), B1–B3 (judge, GitHub, CI
 
 ## Remaining TODO seams
 
-1. **`GET /api/dags` and `GET /api/dags/:id`** — `server/dag/store.ts` (`listDags`, `loadDag`) exists and is tested, but `server/api/routes.ts` still returns stub `[]` / 404. Wire `listDags` and `loadDag` to these routes + emit `dag_created`/`dag_updated` via `dagToApi` mapper.
-2. **`session_needs_attention` over SSE** — `server/session/attention-emit.ts` emits attention reasons and triggers push, but the `session_needs_attention` SSE event type is not yet forwarded to connected SSE clients. Low impact since `session_updated` carries `needsAttention: true`.
-3. **`/judge`, `/land`, `/retry`, `/force` slash commands** — wired through `POST /api/messages` but not yet listed in `SLASH_MODES` (they call into their own handler modules directly). Confirmed functional via handler unit tests.
-4. **`SENTRY_DSN`** — decided DROP for now; platform error reporting is out of scope for this rewrite.
+1. ~~**`GET /api/dags` and `GET /api/dags/:id`**~~ — **DONE** (routes.ts:617-632)
+2. **`session_needs_attention` over SSE** — `server/session/attention-emit.ts` emits attention reasons and triggers push, but the `session_needs_attention` SSE event type is not yet forwarded to connected SSE clients. Low impact since `session_updated` carries `needsAttention: true`. Tracked in #67.
+3. ~~**`/judge`, `/land`, `/retry`, `/force` slash commands**~~ — **DONE** (routes.ts:387-425, index.ts:61-62)
+4. **`SENTRY_DSN`** — **DROPPED** (platform error reporting is out of scope)
 
 ## How to measure parity end-to-end
 

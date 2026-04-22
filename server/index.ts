@@ -30,6 +30,8 @@ import { ResourceMonitor } from './metrics/resource'
 import { createDigestBuilder } from './digest/digest'
 import { ReplyQueue as DiskReplyQueue } from './session/reply-queue'
 import { startPushNotifier } from './push/notifier'
+import { createJudgeOrchestrator } from './judge/orchestrator'
+import { createLandingManager } from './dag/landing'
 
 const PORT = Number(process.env['PORT'] ?? 8080)
 const WORKSPACE_ROOT = process.env['WORKSPACE_ROOT'] ?? '/tmp/minion-workspace'
@@ -57,6 +59,8 @@ const reconciled = reconciledRows?.count ?? 0
 console.log(`[minion] engine on :${PORT}, ${reconciled} sessions resumed`)
 
 const scheduler = createDagScheduler({ registry, db, bus, workspace: WORKSPACE_ROOT })
+const judgeOrchestrator = createJudgeOrchestrator()
+const landingManager = createLandingManager({ bus })
 
 const loopScheduler = new LoopScheduler({
   db,
@@ -118,7 +122,7 @@ resourceMonitor.start()
 
 startPushNotifier(bus)
 
-registerApiRoutes(app, registry, () => db, scheduler)
+registerApiRoutes(app, registry, () => db, scheduler, judgeOrchestrator, landingManager)
 registerSseRoute(app, () => db)
 
 export default { port: PORT, fetch: app.fetch, idleTimeout: 0 }

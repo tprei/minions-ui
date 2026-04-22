@@ -21,7 +21,7 @@ import { dagToApi, eventRowToTranscript, sessionRowToApi } from './wire-mappers'
 import { fetchPrPreview } from '../github/pr-preview'
 import { computeWorkspaceDiff } from '../workspace/diff'
 import { handleExecute, handleSplit, handleStack, handleDag } from '../commands/plan-actions'
-import type { PlanScheduler } from '../commands/plan-actions'
+import type { DagScheduler } from '../dag/scheduler'
 import { loadOverrides, saveOverrides } from '../config/runtime-overrides'
 import { applyOverrides } from '../config/apply'
 import { RuntimeOverridesSchema } from '../config/schema'
@@ -39,6 +39,12 @@ import { handleConfigCommand } from '../commands/config'
 import { handleLoopsCommand } from '../commands/loops'
 import { handleDoneCommand } from '../commands/done'
 import { handleDoctorCommand } from '../commands/doctor'
+import { handleJudgeCommand } from '../commands/judge'
+import type { JudgeOrchestrator } from '../judge/orchestrator'
+import { handleLandCommand } from '../commands/land'
+import type { LandingManager } from '../dag/landing'
+import { handleRetryCommand } from '../commands/retry'
+import { handleForceCommand } from '../commands/force'
 
 const API_VERSION = '2.0.0'
 const LIBRARY_VERSION = '0.1.0'
@@ -112,7 +118,9 @@ export function registerApiRoutes(
   app: Hono,
   registry: SessionRegistry,
   dbProvider?: () => Database,
-  scheduler?: PlanScheduler,
+  scheduler?: DagScheduler,
+  judgeOrchestrator?: JudgeOrchestrator,
+  landingManager?: LandingManager,
 ): void {
   const resolveDb = dbProvider ?? getDb
 
@@ -379,6 +387,44 @@ export function registerApiRoutes(
       if (command === 'doctor') {
         const result = await handleDoctorCommand()
         return c.json({ data: result })
+      }
+
+      if (command === 'judge') {
+        if (!sessionId) return c.json({ error: 'sessionId required for /judge' }, 400)
+        if (!judgeOrchestrator) return c.json({ error: 'judge orchestrator not configured' }, 503)
+        const result = await handleJudgeCommand(rest, sessionId, { db: resolveDb(), judgeOrchestrator })
+        if (!result.ok) return c.json({ error: result.error ?? '/judge failed' }, 422)
+        return c.json({ data: { ok: true, winnerIdx: result.winnerIdx, rationale: result.rationale } })
+      }
+
+      if (command === 'retry') {
+        if (!scheduler) return c.json({ error: 'no scheduler configured' }, 503)
+        const parts = rest.trim().split(/\s+/)
+        const nodeId = parts[0] ?? ''
+        const dagId = parts[1] ?? ''
+        const result = await handleRetryCommand(nodeId, dagId, { scheduler })
+        if (!result.ok) return c.json({ error: result.error ?? '/retry failed' }, 422)
+        return c.json({ data: { ok: true } })
+      }
+
+      if (command === 'force') {
+        if (!scheduler) return c.json({ error: 'no scheduler configured' }, 503)
+        const parts = rest.trim().split(/\s+/)
+        const nodeId = parts[0] ?? ''
+        const dagId = parts[1] ?? ''
+        const result = await handleForceCommand(nodeId, dagId, { scheduler })
+        if (!result.ok) return c.json({ error: result.error ?? '/force failed' }, 422)
+        return c.json({ data: { ok: true } })
+      }
+
+      if (command === 'land') {
+        if (!landingManager) return c.json({ error: 'landing manager not configured' }, 503)
+        const parts = rest.trim().split(/\s+/)
+        const nodeId = parts[0] ?? ''
+        const dagId = parts[1] ?? ''
+        const result = await handleLandCommand(nodeId, dagId, { landingManager, db: resolveDb() })
+        if (!result.ok) return c.json({ error: result.error ?? '/land failed' }, 422)
+        return c.json({ data: { ok: true, prUrl: result.prUrl } })
       }
 
       const modeEntry = SLASH_MODES.get(command as Parameters<typeof SLASH_MODES.get>[0])
