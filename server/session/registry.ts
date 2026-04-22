@@ -214,13 +214,65 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
     emitSnapshot(sessionId)
   }
 
+  async function resumeRuntime(
+    row: SessionRow,
+    initialPrompt: string,
+    initialImages?: Array<{ mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; dataBase64: string }>,
+  ): Promise<SessionRuntime> {
+    if (!row.claude_session_id) {
+      throw new Error(`Session ${row.id} has no claude_session_id to resume from`)
+    }
+    if (!row.workspace_root || !row.bare_dir || !row.branch) {
+      throw new Error(`Session ${row.id} is missing workspace metadata required to resume`)
+    }
+
+    const cwd = path.join(row.workspace_root, row.slug)
+    const handle: WorkspaceHandle = {
+      slug: row.slug,
+      cwd,
+      bareDir: row.bare_dir,
+      branch: row.branch,
+      baseRef: row.branch.replace(/^minion\//, ''),
+    }
+
+    if (row.repo) {
+      const repoName = extractRepoName(row.repo)
+      await rebootstrapIfMissing(cwd, repoName, row.workspace_root)
+    }
+
+    const runtime = makeRuntime({
+      sessionId: row.id,
+      mode: row.mode as CreateSessionMode,
+      cwd,
+      initialPrompt,
+      initialImages,
+      resumeClaudeSessionId: row.claude_session_id,
+    })
+
+    handles.set(row.id, handle)
+    runtimes.set(row.id, runtime)
+    wireCompletionHandler(row.id)
+
+    return runtime
+  }
+
   async function reply(
     sessionId: string,
     text: string,
     images?: Array<{ mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; dataBase64: string }>,
   ): Promise<boolean> {
-    const runtime = runtimes.get(sessionId)
-    if (!runtime) throw new Error(`No runtime for session ${sessionId}`)
+    let runtime = runtimes.get(sessionId)
+    if (!runtime) {
+      const row = prepared.getSession(db(), sessionId)
+      if (!row) throw new Error(`Session ${sessionId} not found`)
+      if (!row.claude_session_id) {
+        throw new Error(`Session ${sessionId} has no claude_session_id to resume from`)
+      }
+      runtime = await resumeRuntime(row, text, images)
+      void runtime.start()
+      prepared.updateSession(db(), { id: sessionId, updated_at: Date.now() })
+      return true
+    }
     const ok = await runtime.injectInput(text, images)
     prepared.updateSession(db(), { id: sessionId, updated_at: Date.now() })
     return ok
@@ -228,54 +280,23 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
 
   async function reconcileOnBoot(): Promise<void> {
     const rows = db()
-      .query<{ id: string; slug: string; status: string; claude_session_id: string | null; workspace_root: string | null; repo: string | null; branch: string | null; bare_dir: string | null; command: string; mode: string }, []>(
-        "SELECT id, slug, status, claude_session_id, workspace_root, repo, branch, bare_dir, command, mode FROM sessions WHERE status IN ('running','waiting_input') ORDER BY updated_at",
+      .query<{ id: string }, []>(
+        "SELECT id FROM sessions WHERE status IN ('running','waiting_input') ORDER BY updated_at",
       )
       .all()
 
-    for (const row of rows) {
-      const { id, slug, claude_session_id, workspace_root, repo, branch, bare_dir, command, mode } = row
+    for (const { id } of rows) {
+      const row = prepared.getSession(db(), id)
+      if (!row) continue
 
-      if (!claude_session_id) {
+      if (!row.claude_session_id || !row.workspace_root || !row.bare_dir || !row.branch) {
         prepared.updateSession(db(), { id, status: 'failed', updated_at: Date.now() })
         emitSnapshot(id)
         continue
       }
 
-      if (!workspace_root || !bare_dir || !branch) {
-        prepared.updateSession(db(), { id, status: 'failed', updated_at: Date.now() })
-        emitSnapshot(id)
-        continue
-      }
-
-      const cwd = path.join(workspace_root, slug)
-      const handle: WorkspaceHandle = {
-        slug,
-        cwd,
-        bareDir: bare_dir,
-        branch,
-        baseRef: branch.replace(/^minion\//, ''),
-      }
-
-      if (repo) {
-        const repoName = extractRepoName(repo)
-        await rebootstrapIfMissing(cwd, repoName, workspace_root)
-      }
-
-      const runtime = makeRuntime({
-        sessionId: id,
-        mode: mode as CreateSessionMode,
-        cwd,
-        initialPrompt: command,
-        resumeClaudeSessionId: claude_session_id,
-      })
-
-      handles.set(id, handle)
-      runtimes.set(id, runtime)
-      wireCompletionHandler(id)
-
+      const runtime = await resumeRuntime(row, row.command)
       void runtime.start()
-
       emitSnapshot(id)
     }
   }

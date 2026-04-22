@@ -242,10 +242,64 @@ describe('SessionRegistry', () => {
   })
 
   describe('reply', () => {
-    test('throws when runtime not found', async () => {
+    test('throws when session does not exist', async () => {
       const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
-      await expect(registry.reply('missing-id', 'hello')).rejects.toThrow('No runtime for session missing-id')
+      await expect(registry.reply('missing-id', 'hello')).rejects.toThrow('Session missing-id not found')
     })
+
+    test('throws when session has no claude_session_id to resume from', async () => {
+      const now = Date.now()
+      db.run(
+        `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation)
+         VALUES ('reply-no-claude', 'reply-no-claude-slug', 'running', 'task', 'task', null, null, null, null, null, null, null, null, ?, ?, 0, '[]', '[]', '[]')`,
+        [now, now],
+      )
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
+      await expect(registry.reply('reply-no-claude', 'hello')).rejects.toThrow('has no claude_session_id to resume from')
+    })
+
+    test('resumes a dead session via --resume when runtime is missing', async () => {
+      const bare = trackedDir('bare-reply-resume')
+      const work = trackedDir('work-reply-resume')
+      const workspaceRoot = trackedDir('ws-reply-resume')
+      await initLocalBareRepo(bare, work)
+
+      const repoName = path.basename(bare).replace(/\.git$/, '')
+      const bareDir = path.join(workspaceRoot, '.repos', `${repoName}.git`)
+
+      const handle = await import('../workspace/prepare').then((m) =>
+        m.prepareWorkspace({ slug: 'reply-resume-slug', repoUrl: bare, workspaceRoot, bootstrap: false }),
+      )
+
+      const now = Date.now()
+      db.run(
+        `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation)
+         VALUES ('reply-resume', 'reply-resume-slug', 'running', 'original prompt', 'task', ?, ?, ?, null, null, null, 'claude-abc', ?, ?, ?, 0, '[]', '[]', '[]')`,
+        [bare, handle.branch, bareDir, workspaceRoot, now, now],
+      )
+
+      let capturedArgs: string[] = []
+      const capturingSpawn: SpawnFn = (argv, opts) => {
+        capturedArgs = argv
+        return makeNoopSpawnFn()(argv, opts)
+      }
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: capturingSpawn })
+
+      expect(registry.get('reply-resume')).toBeUndefined()
+
+      const ok = await registry.reply('reply-resume', 'the new user reply')
+      expect(ok).toBe(true)
+
+      await new Promise<void>((r) => setTimeout(r, 200))
+
+      expect(capturedArgs).toContain('--resume')
+      const resumeIdx = capturedArgs.indexOf('--resume')
+      expect(capturedArgs[resumeIdx + 1]).toBe('claude-abc')
+
+      expect(registry.get('reply-resume')).toBeDefined()
+    }, 60_000)
 
     test('returns false when runtime proc has already exited', async () => {
       const bare = trackedDir('bare-reply')
