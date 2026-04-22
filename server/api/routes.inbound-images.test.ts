@@ -170,7 +170,7 @@ describe('POST /api/messages — inbound images', () => {
 
     expect(res.status).toBe(500)
     const body = await json<{ error: string }>(res)
-    expect(body.error).toContain('No runtime for session no-such-session')
+    expect(body.error).toContain('Session no-such-session not found')
   })
 
   test('serializeUserMessage includes image content blocks', () => {
