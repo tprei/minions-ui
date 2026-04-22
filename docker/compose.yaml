@@ -22,6 +22,7 @@ services:
       ENABLE_GITHUB_MCP: ${ENABLE_GITHUB_MCP:-true}
       ENABLE_CONTEXT7_MCP: ${ENABLE_CONTEXT7_MCP:-true}
       ENABLE_SUPABASE_MCP: ${ENABLE_SUPABASE_MCP:-false}
+      ENABLE_LOOPS: ${ENABLE_LOOPS:-false}
     volumes:
       - workspace:/workspace
 

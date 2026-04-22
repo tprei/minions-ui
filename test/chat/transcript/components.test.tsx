@@ -379,7 +379,7 @@ describe('ToolResultOrphan', () => {
 })
 
 describe('StatusBanner', () => {
-  it('renders kind and message and severity attribute', () => {
+  it('renders title-cased kind and message and severity attribute', () => {
     const event: StatusEvent = {
       ...baseEvent(1),
       type: 'status',
@@ -390,8 +390,22 @@ describe('StatusBanner', () => {
     render(<StatusBanner event={event} />)
     const banner = screen.getByTestId('transcript-status')
     expect(banner.getAttribute('data-severity')).toBe('warn')
-    expect(banner.textContent).toContain('rate_limit')
+    expect(banner.getAttribute('data-kind')).toBe('rate_limit')
+    expect(banner.textContent).toContain('Rate Limit')
     expect(banner.textContent).toContain('API rate limit approaching')
+  })
+
+  it('uses friendly label for known kinds', () => {
+    const event: StatusEvent = {
+      ...baseEvent(1),
+      type: 'status',
+      severity: 'error',
+      kind: 'session_interrupted',
+      message: 'Engine restarted',
+    }
+    render(<StatusBanner event={event} />)
+    const banner = screen.getByTestId('transcript-status')
+    expect(banner.textContent).toContain('Session interrupted')
   })
 })
 
