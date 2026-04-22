@@ -221,7 +221,7 @@ describe('SessionRegistry', () => {
   })
 
   describe('close', () => {
-    test('removes workspace directory and runtime from map', async () => {
+    test('removes workspace directory, runtime from map, and deletes the DB row', async () => {
       const bare = trackedDir('bare-close')
       const work = trackedDir('work-close')
       const workspaceRoot = trackedDir('ws-close')
@@ -238,6 +238,27 @@ describe('SessionRegistry', () => {
 
       expect(registry.get(session.id)).toBeUndefined()
       expect(fs.existsSync(workDir)).toBe(false)
+
+      const row = db.query<{ id: string }, [string]>('SELECT id FROM sessions WHERE id = ?').get(session.id)
+      expect(row).toBeNull()
+    }, 30_000)
+
+    test('emits session.deleted event', async () => {
+      const bare = trackedDir('bare-close-evt')
+      const work = trackedDir('work-close-evt')
+      const workspaceRoot = trackedDir('ws-close-evt')
+      await initLocalBareRepo(bare, work)
+
+      const bus = getEventBus()
+      const deleted: string[] = []
+      bus.onKind('session.deleted', (e) => { deleted.push(e.sessionId) })
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
+      const { session } = await registry.create({ mode: 'task', prompt: 'evt', repo: bare, workspaceRoot })
+
+      await registry.close(session.id)
+
+      expect(deleted).toContain(session.id)
     }, 30_000)
   })
 
