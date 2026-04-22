@@ -226,7 +226,7 @@ describe('SessionRuntime', () => {
         )
         .all(SESS_ID)
 
-      const types = rows.map((r) => r.type)
+      const types = rows.map((r: { type: string; seq: number }) => r.type)
       expect(types).toContain('assistant_text')
     })
   })

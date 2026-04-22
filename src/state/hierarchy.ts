@@ -129,8 +129,10 @@ export function findTreeRoot(
   excluded: Set<string> = new Set(),
 ): ApiSession {
   let root = session
-  while (root.parentId && sessionById.has(root.parentId) && !excluded.has(root.parentId)) {
-    root = sessionById.get(root.parentId)!
+  while (root.parentId && !excluded.has(root.parentId)) {
+    const parent = sessionById.get(root.parentId)
+    if (!parent) break
+    root = parent
   }
   return root
 }
@@ -141,8 +143,9 @@ export function findShipRoot(
   excluded: Set<string> = new Set(),
 ): ApiSession {
   let root = session
-  while (root.parentId && sessionById.has(root.parentId) && !excluded.has(root.parentId)) {
-    const parent = sessionById.get(root.parentId)!
+  while (root.parentId && !excluded.has(root.parentId)) {
+    const parent = sessionById.get(root.parentId)
+    if (!parent) break
     if (!isShipMode(parent.mode)) break
     root = parent
   }
@@ -232,9 +235,9 @@ export function classifySessions(
   for (const s of sessions) {
     if (excluded.has(s.id) || parentChildMembers.has(s.id)) continue
 
-    if (s.parentId && sessionById.has(s.parentId)) {
-      const parent = sessionById.get(s.parentId)!
-      if (parent.childIds.includes(s.id) && !excluded.has(parent.id)) {
+    if (s.parentId) {
+      const parent = sessionById.get(s.parentId)
+      if (parent && parent.childIds.includes(s.id) && !excluded.has(parent.id)) {
         const root = findTreeRoot(parent, sessionById, excluded)
         if (!parentChildMembers.has(root.id) && !excluded.has(root.id)) {
           parentChildRoots.push(root)

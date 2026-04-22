@@ -31,7 +31,7 @@ test('opening a new DB creates all expected tables', () => {
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
     )
     .all()
-    .map((r) => r.name)
+    .map((r: { name: string }) => r.name)
 
   expect(tables).toContain('sessions')
   expect(tables).toContain('session_events')
