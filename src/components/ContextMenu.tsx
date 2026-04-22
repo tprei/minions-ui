@@ -209,25 +209,25 @@ export function ContextMenu({ session, position, actions, onClose, dagContext }:
     }
   }
 
-  if (isRunning || isActive) {
+  if (isRunning) {
     if (items.length > 0) items.push('divider')
-    if (isRunning) {
-      items.push({
-        label: 'Stop Minion',
-        emoji: '⏹',
-        variant: 'danger',
-        onClick: handleStopClick,
-        disabled: actions.isActionLoading,
-      })
-    }
     items.push({
-      label: 'Close Session',
-      emoji: '✕',
+      label: 'Stop Minion',
+      emoji: '⏹',
       variant: 'danger',
-      onClick: handleCloseClick,
+      onClick: handleStopClick,
       disabled: actions.isActionLoading,
     })
   }
+
+  if (items.length > 0) items.push('divider')
+  items.push({
+    label: 'Close Session',
+    emoji: '✕',
+    variant: 'danger',
+    onClick: handleCloseClick,
+    disabled: actions.isActionLoading,
+  })
 
   const itemCount = items.filter((i) => i !== 'divider').length
   const dividerCount = items.filter((i) => i === 'divider').length
