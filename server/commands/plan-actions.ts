@@ -44,7 +44,10 @@ function getConversationMessages(db: Database, sessionId: string): Array<{ role:
     }
     const text = typeof payload.text === "string" ? payload.text : ""
     if (!text) continue
-    if (row.type === "assistant_message" || row.type === "assistant") {
+    if (row.type === "assistant_text") {
+      if (payload.final !== true) continue
+      messages.push({ role: "assistant", text })
+    } else if (row.type === "assistant_message" || row.type === "assistant") {
       messages.push({ role: "assistant", text })
     } else if (row.type === "user_message" || row.type === "user") {
       messages.push({ role: "user", text })
@@ -55,13 +58,14 @@ function getConversationMessages(db: Database, sessionId: string): Array<{ role:
 
 function getLastAssistantMessage(db: Database, sessionId: string): string {
   const rows = db
-    .query<{ payload: string }, [string]>(
-      "SELECT payload FROM session_events WHERE session_id = ? AND type IN ('assistant_message','assistant') ORDER BY seq DESC LIMIT 1",
+    .query<{ type: string; payload: string }, [string]>(
+      "SELECT type, payload FROM session_events WHERE session_id = ? AND type IN ('assistant_text','assistant_message','assistant') ORDER BY seq DESC",
     )
     .all(sessionId)
   for (const row of rows) {
     try {
       const payload = JSON.parse(row.payload) as Record<string, unknown>
+      if (row.type === "assistant_text" && payload.final !== true) continue
       if (typeof payload.text === "string" && payload.text.length > 0) return payload.text
     } catch {
       continue

@@ -182,6 +182,68 @@ describe("plan-actions gating", () => {
     expect(result.reason).toBe("no items extracted")
     expect(startedDagIds).toHaveLength(0)
   })
+
+  it("includes assistant_text events (final:true) in the extraction conversation", async () => {
+    const sessionId = insertSession(db)
+    const now = Date.now()
+    prepared.insertEvent(db, {
+      session_id: sessionId,
+      seq: 1,
+      turn: 0,
+      type: "user_message",
+      timestamp: now,
+      payload: { text: "please plan the work" },
+    })
+    prepared.insertEvent(db, {
+      session_id: sessionId,
+      seq: 2,
+      turn: 1,
+      type: "assistant_text",
+      timestamp: now + 1,
+      payload: { text: "DELTA_CHUNK_do_not_include", final: false },
+    })
+    prepared.insertEvent(db, {
+      session_id: sessionId,
+      seq: 3,
+      turn: 1,
+      type: "assistant_text",
+      timestamp: now + 2,
+      payload: { text: "FINAL_PLAN_build_the_schema", final: true },
+    })
+
+    const stdinWrites: string[] = []
+    mockSpawn.mockImplementation(() => ({
+      stdout: {
+        on: vi.fn((event: string, cb: (data: Buffer) => void) => {
+          if (event === "data") cb(Buffer.from("[]"))
+        }),
+      },
+      stderr: { on: vi.fn() },
+      stdin: {
+        write: vi.fn((data: string) => { stdinWrites.push(data) }),
+        end: vi.fn(),
+      },
+      on: vi.fn((event: string, cb: (code: number) => void) => {
+        if (event === "close") cb(0)
+      }),
+      kill: vi.fn(),
+    }))
+
+    const stopCalls: string[] = []
+    const startedDagIds: string[] = []
+    const ctx: PlanActionCtx = {
+      db,
+      registry: makeRegistry(stopCalls),
+      scheduler: makeScheduler(startedDagIds),
+    }
+
+    await handleExecute(sessionId, ctx)
+
+    const combined = stdinWrites.join("")
+    expect(combined).toContain("please plan the work")
+    expect(combined).toContain("FINAL_PLAN_build_the_schema")
+    expect(combined).not.toContain("DELTA_CHUNK_do_not_include")
+  })
 })
 
 describe("handleSplit", () => {
