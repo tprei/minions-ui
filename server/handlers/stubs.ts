@@ -18,6 +18,7 @@ import type { Database } from 'bun:sqlite'
 export function createNoopDagScheduler(): DagScheduler {
   return {
     async onSessionCompleted(): Promise<void> {},
+    async start(): Promise<void> {},
   }
 }
 
