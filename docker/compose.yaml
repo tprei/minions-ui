@@ -35,5 +35,13 @@ services:
     depends_on:
       - engine
 
+  cloudflared-quick:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: ["quick-tunnel"]
+    command: tunnel --no-autoupdate --url http://engine:8080
+    depends_on:
+      - engine
+
 volumes:
   workspace:

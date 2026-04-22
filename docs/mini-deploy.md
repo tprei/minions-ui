@@ -39,13 +39,32 @@ services:
 
 This lets the in-container claude CLI reuse your host login instead of needing an `ANTHROPIC_API_KEY`.
 
-### 4. Create a Cloudflare Tunnel
+### 4. Expose the engine
+
+Two options — pick one.
+
+#### 4a. Quick tunnel (free, no domain, random URL)
+
+Uses Cloudflare's `*.trycloudflare.com`. No account, no domain, no token. The URL rotates on every container restart, so you re-paste it into the PWA each time.
+
+```sh
+cd ~/meta-minion
+docker build -f docker/engine.Dockerfile -t minions-engine:local .
+docker compose -f docker/compose.yaml -f docker/compose.mini.yaml --profile quick-tunnel up -d
+docker compose -f docker/compose.yaml -f docker/compose.mini.yaml logs cloudflared-quick | grep trycloudflare.com
+```
+
+The last command prints the random `https://<words>.trycloudflare.com` URL.
+
+#### 4b. Named tunnel (needs a domain on Cloudflare, stable URL)
 
 - Open https://one.dash.cloudflare.com → Networks → Tunnels → **Create a tunnel** → *Cloudflared* → name it (e.g. `minions-engine`).
 - Cloudflare shows a token on the next screen. Copy it, paste into `docker/.env` as `CLOUDFLARE_TUNNEL_TOKEN=<token>`.
-- In the tunnel's **Public Hostnames** tab, add: `Type=HTTP`, `URL=engine:8080`, `Hostname=minions.<your-domain>` (or any subdomain). Save.
+- In the tunnel's **Public Hostnames** tab, add: `Type=HTTP`, `URL=engine:8080`, `Hostname=minions.<your-domain>`. Save.
 
 ### 5. Build + start
+
+If you used 4a, you already ran this. For 4b:
 
 ```sh
 cd ~/meta-minion
