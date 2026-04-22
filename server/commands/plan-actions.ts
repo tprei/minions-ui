@@ -100,11 +100,39 @@ async function buildAndStartDag(
   return { ok: true, dagId }
 }
 
+async function handoffShipPhase(
+  sessionId: string,
+  nextMode: "ship-plan" | "ship-verify",
+  ctx: PlanActionCtx,
+): Promise<PlanActionResult> {
+  const sessionRow = prepared.getSession(ctx.db, sessionId)
+  if (!sessionRow) return { ok: false, reason: "session not found" }
+
+  const design = getLastAssistantMessage(ctx.db, sessionId)
+  if (!design) return { ok: false, reason: "no design output from previous phase to hand off" }
+
+  const { session } = await ctx.registry.create({
+    mode: nextMode,
+    prompt: design,
+    repo: sessionRow.repo ?? "",
+    parentId: sessionId,
+  })
+
+  return { ok: true, dagId: session.id }
+}
+
 export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Promise<PlanActionResult> {
   const rejection = await gate(sessionId, ctx)
   if (rejection) return { ok: false, reason: rejection }
 
+  const row = prepared.getSession(ctx.db, sessionId)
+  const mode = row?.mode
+
   await killAndWait(sessionId, ctx)
+
+  if (mode === "ship-think") {
+    return handoffShipPhase(sessionId, "ship-plan", ctx)
+  }
 
   const conversation = getConversationMessages(ctx.db, sessionId)
   const typedConversation = conversation.map((m) => ({

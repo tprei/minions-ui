@@ -15,7 +15,7 @@ export const shipAdvanceHandler: CompletionHandler = {
       )
       .get(ev.sessionId)
 
-    if (!row || row.mode !== 'ship') return
+    if (!row || !row.mode.startsWith('ship-')) return
     if (row.pipeline_advancing !== 0) return
 
     ctx.db.run(

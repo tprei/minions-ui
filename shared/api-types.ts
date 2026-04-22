@@ -197,7 +197,14 @@ export interface VersionInfo {
   repos?: RepoEntry[]
 }
 
-export type CreateSessionMode = 'task' | 'plan' | 'think' | 'review' | 'ship-think'
+export type CreateSessionMode =
+  | 'task'
+  | 'plan'
+  | 'think'
+  | 'review'
+  | 'ship-think'
+  | 'ship-plan'
+  | 'ship-verify'
 
 export interface CreateSessionRequest {
   prompt: string

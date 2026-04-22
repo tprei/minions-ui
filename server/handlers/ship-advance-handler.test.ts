@@ -71,7 +71,7 @@ describe('shipAdvanceHandler', () => {
   })
 
   test('calls scheduler for ship mode sessions', async () => {
-    seedSession(db, 'sess-ship', 'ship')
+    seedSession(db, 'sess-ship', 'ship-think')
     const calls: string[] = []
     const ctx = makeCtx(db, calls)
 
@@ -93,7 +93,7 @@ describe('shipAdvanceHandler', () => {
   })
 
   test('skips when pipeline_advancing is already set', async () => {
-    seedSession(db, 'sess-advancing', 'ship', true)
+    seedSession(db, 'sess-advancing', 'ship-think', true)
     const calls: string[] = []
     const ctx = makeCtx(db, calls)
 
@@ -104,7 +104,7 @@ describe('shipAdvanceHandler', () => {
   })
 
   test('clears pipeline_advancing flag after scheduler call', async () => {
-    seedSession(db, 'sess-flag', 'ship')
+    seedSession(db, 'sess-flag', 'ship-think')
     const calls: string[] = []
     const ctx = makeCtx(db, calls)
 
@@ -116,7 +116,7 @@ describe('shipAdvanceHandler', () => {
   })
 
   test('clears pipeline_advancing even when scheduler throws', async () => {
-    seedSession(db, 'sess-err', 'ship')
+    seedSession(db, 'sess-err', 'ship-think')
     const calls: string[] = []
     const bus = new EngineEventBus()
     const ctx: HandlerCtx = {
