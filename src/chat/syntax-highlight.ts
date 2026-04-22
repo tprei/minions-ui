@@ -272,7 +272,7 @@ const LANGS: Record<string, LangSpec> = {
 export function detectLanguage(path: string): string | null {
   if (!path) return null
   const match = path.toLowerCase().match(/\.([a-z0-9]+)$/)
-  if (!match) return null
+  if (!match || !match[1]) return null
   return EXT_TO_LANG[match[1]] ?? null
 }
 
@@ -322,6 +322,7 @@ export function highlightLine(text: string, lang: string | null): SyntaxToken[] 
     }
 
     const c = text[i]
+    if (!c) break
 
     if (spec.strings.includes(c)) {
       const quote = c

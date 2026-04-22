@@ -54,12 +54,16 @@ export function parseUnifiedDiff(patch: string): DiffFile[] {
 
   while (i < lines.length) {
     const line = lines[i]
+    if (!line) {
+      i++
+      continue
+    }
 
     if (line.startsWith('diff --git ')) {
       pushFile()
       const match = line.match(/^diff --git (\S+) (\S+)$/)
-      const oldP = match ? stripPrefix(match[1]) : ''
-      const newP = match ? stripPrefix(match[2]) : ''
+      const oldP = match ? stripPrefix(match[1]!) : ''
+      const newP = match ? stripPrefix(match[2]!) : ''
       current = {
         oldPath: oldP,
         newPath: newP,
@@ -132,9 +136,9 @@ export function parseUnifiedDiff(patch: string): DiffFile[] {
     const hunkMatch = line.match(HUNK_HEADER_RE)
     if (hunkMatch) {
       if (currentHunk) current.hunks.push(currentHunk)
-      const oldStart = parseInt(hunkMatch[1], 10)
+      const oldStart = parseInt(hunkMatch[1]!, 10)
       const oldCount = hunkMatch[2] ? parseInt(hunkMatch[2], 10) : 1
-      const newStart = parseInt(hunkMatch[3], 10)
+      const newStart = parseInt(hunkMatch[3]!, 10)
       const newCount = hunkMatch[4] ? parseInt(hunkMatch[4], 10) : 1
       currentHunk = {
         oldStart,

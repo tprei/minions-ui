@@ -218,8 +218,8 @@ export async function createMockMinion(opts?: {
 
     const sessionSubMatch = path.match(/^\/api\/sessions\/([^/]+)\/(pr|diff|screenshots)$/)
     if (sessionSubMatch && req.method === 'GET') {
-      const sessionId = decodeURIComponent(sessionSubMatch[1])
-      const kind = sessionSubMatch[2]
+      const sessionId = decodeURIComponent(sessionSubMatch[1]!)
+      const kind = sessionSubMatch[2]!
       if (kind === 'pr') {
         if (!hasFeature('pr-preview')) return featureDisabled(res, 'pr-preview')
         const pr = prBySession.get(sessionId)
@@ -242,7 +242,7 @@ export async function createMockMinion(opts?: {
     const screenshotMatch = path.match(/^\/api\/screenshots\/(.+)$/)
     if (screenshotMatch && req.method === 'GET') {
       if (!hasFeature('screenshots-http')) return featureDisabled(res, 'screenshots-http')
-      const file = decodeURIComponent(screenshotMatch[1])
+      const file = decodeURIComponent(screenshotMatch[1]!)
       const blob = screenshotBlobs.get(file)
       if (!blob) return notFound(res)
       res.writeHead(200, { 'Content-Type': blob.contentType, 'Content-Length': String(blob.body.length) })

@@ -66,7 +66,7 @@ export function NewTaskBar({
   const version = store.version.value
   const repos = version?.repos ?? []
   if (repos.length > 0 && !repo.value) {
-    repo.value = repos[0].alias
+    repo.value = repos[0]!.alias
   }
 
   const canCreate = hasFeature(store, 'sessions-create')
