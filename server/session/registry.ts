@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import type { ApiSession, CreateSessionMode, QuickAction } from '../../shared/api-types'
+import type { ApiSession, CreateSessionMode, QuickAction, TranscriptEvent } from '../../shared/api-types'
 import { SessionRuntime, type StartOpts as RuntimeStartOpts, type SpawnFn } from './runtime'
 import { prepareWorkspace, removeWorkspace, rebootstrapIfMissing } from '../workspace/prepare'
 import type { WorkspaceHandle } from '../workspace/types'
@@ -289,16 +289,64 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       const row = prepared.getSession(db(), id)
       if (!row) continue
 
-      if (!row.claude_session_id || !row.workspace_root || !row.bare_dir || !row.branch) {
-        prepared.updateSession(db(), { id, status: 'failed', updated_at: Date.now() })
-        emitSnapshot(id)
-        continue
-      }
+      const now = Date.now()
+      const seq = prepared.nextSeq(db(), id)
+      const turn = currentTurn(id)
 
-      const runtime = await resumeRuntime(row, row.command)
-      void runtime.start()
+      const interrupted: TranscriptEvent = {
+        seq,
+        id: randomUUID(),
+        sessionId: id,
+        turn,
+        timestamp: now,
+        type: 'status',
+        severity: 'error',
+        kind: 'session_interrupted',
+        message: 'Session was interrupted by an engine restart and could not be resumed. Start a new session to continue.',
+      }
+      prepared.insertEvent(db(), {
+        session_id: id,
+        seq,
+        turn,
+        type: 'status',
+        timestamp: now,
+        payload: { ...interrupted },
+      })
+
+      const closeSeq = seq + 1
+      const closeEvt: TranscriptEvent = {
+        seq: closeSeq,
+        id: randomUUID(),
+        sessionId: id,
+        turn,
+        timestamp: now,
+        type: 'turn_completed',
+        durationMs: 0,
+        errored: true,
+      }
+      prepared.insertEvent(db(), {
+        session_id: id,
+        seq: closeSeq,
+        turn,
+        type: 'turn_completed',
+        timestamp: now,
+        payload: { ...closeEvt },
+      })
+
+      prepared.updateSession(db(), { id, status: 'failed', updated_at: now })
+      bus.emit({ kind: 'session.stream', sessionId: id, event: interrupted })
+      bus.emit({ kind: 'session.stream', sessionId: id, event: closeEvt })
       emitSnapshot(id)
     }
+  }
+
+  function currentTurn(sessionId: string): number {
+    const row = db()
+      .query<{ max_turn: number | null }, [string]>(
+        'SELECT MAX(turn) as max_turn FROM session_events WHERE session_id = ?',
+      )
+      .get(sessionId)
+    return row?.max_turn ?? 1
   }
 
   async function scheduleQuotaResume(sessionId: string, resetAt: number): Promise<void> {

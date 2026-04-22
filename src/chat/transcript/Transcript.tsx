@@ -21,6 +21,8 @@ export function Transcript({ store }: Props) {
   const events = store.events.value
   const loading = store.loading.value
   const error = store.error.value
+  const sessionInfo = store.session.value
+  const sessionTerminal = sessionInfo?.active === false
   const rows = useMemo(() => buildTranscriptRows(events).rows, [events])
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -97,9 +99,13 @@ export function Transcript({ store }: Props) {
         )}
         {groupRows(rows).map((item) =>
           item.kind === 'tool-group' ? (
-            <ToolGroup key={`tg:${item.items[0].call.call.toolUseId}`} items={item.items} />
+            <ToolGroup
+              key={`tg:${item.items[0].call.call.toolUseId}`}
+              items={item.items}
+              sessionTerminal={sessionTerminal}
+            />
           ) : (
-            <RowView key={rowKey(item.row)} row={item.row} />
+            <RowView key={rowKey(item.row)} row={item.row} sessionTerminal={sessionTerminal} />
           ),
         )}
       </div>
@@ -121,7 +127,7 @@ export function Transcript({ store }: Props) {
   )
 }
 
-function RowView({ row }: { row: TranscriptRow }) {
+function RowView({ row, sessionTerminal }: { row: TranscriptRow; sessionTerminal: boolean }) {
   switch (row.kind) {
     case 'turn-separator':
       return <TurnSeparator turn={row.turn} started={row.started} completed={row.completed} />
@@ -132,7 +138,7 @@ function RowView({ row }: { row: TranscriptRow }) {
     case 'thinking':
       return <ThinkingBlock event={row.event} />
     case 'tool-call':
-      return <ToolCallCard call={row.call} result={row.result} />
+      return <ToolCallCard call={row.call} result={row.result} sessionTerminal={sessionTerminal} />
     case 'tool-result-orphan':
       return <ToolResultOrphan event={row.event} />
 
@@ -167,15 +173,18 @@ function groupRows(rows: TranscriptRow[]): RenderItem[] {
   return out
 }
 
-function ToolGroup({ items }: { items: ToolCallRow[] }) {
+function ToolGroup({ items, sessionTerminal }: { items: ToolCallRow[]; sessionTerminal: boolean }) {
   const [open, setOpen] = useState(items.length <= TOOL_GROUP_COLLAPSE_THRESHOLD)
 
   let pending = 0
+  let aborted = 0
   let errors = 0
   for (const row of items) {
     const status = row.result?.result.status ?? 'pending'
-    if (status === 'pending') pending++
-    else if (status === 'error') errors++
+    if (status === 'pending') {
+      if (sessionTerminal) aborted++
+      else pending++
+    } else if (status === 'error') errors++
   }
 
   const label = `${items.length} tool ${items.length === 1 ? 'call' : 'calls'}`
@@ -203,6 +212,14 @@ function ToolGroup({ items }: { items: ToolCallRow[] }) {
             {pending} pending
           </span>
         )}
+        {aborted > 0 && (
+          <span
+            class="text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
+            data-testid="transcript-tool-group-aborted"
+          >
+            {aborted} aborted
+          </span>
+        )}
         {errors > 0 && (
           <span
             class="text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300"
@@ -220,6 +237,7 @@ function ToolGroup({ items }: { items: ToolCallRow[] }) {
               call={row.call}
               result={row.result}
               variant="grouped"
+              sessionTerminal={sessionTerminal}
             />
           ))}
         </div>

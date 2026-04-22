@@ -118,7 +118,13 @@ dispatcher.register(digestHandler)
 dispatcher.register(ciBabysitHandler)
 dispatcher.register(parentNotifyHandler)
 
-loopScheduler.start()
+const loopsEnabled = (process.env['ENABLE_LOOPS'] ?? 'false').toLowerCase() === 'true'
+if (loopsEnabled) {
+  loopScheduler.start()
+  console.log('[minion] loop scheduler started')
+} else {
+  console.log('[minion] loop scheduler disabled (set ENABLE_LOOPS=true to enable)')
+}
 
 const resourceMonitor = new ResourceMonitor(bus)
 resourceMonitor.start()
