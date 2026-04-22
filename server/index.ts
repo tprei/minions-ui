@@ -71,7 +71,7 @@ const loopScheduler = new LoopScheduler({
 const replyQueueFactory: ReplyQueueFactory = {
   forSession: (sessionId: string): ReplyQueue => {
     const cwd = path.join(WORKSPACE_ROOT, sessionId)
-    const disk = new DiskReplyQueue(sessionId, cwd)
+    const disk = new DiskReplyQueue(cwd)
     return {
       async pending(): Promise<string[]> {
         return disk.pending().map((q) => q.text)

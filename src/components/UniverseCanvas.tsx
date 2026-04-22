@@ -290,7 +290,7 @@ function UniverseCanvasInner({
   )
 
   const handleViewInDag = useCallback(
-    (dagId: string, _sessionId: string) => {
+    (dagId: string) => {
       const dagNodes = layoutNodes.filter((n) => {
         const data = n.data as { groupId?: string } | undefined
         return data?.groupId === `dag-${dagId}`

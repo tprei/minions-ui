@@ -29,7 +29,7 @@ afterEach(() => {
 describe('ReplyQueue', () => {
   test('push returns entry with monotonically increasing seq', () => {
     const cwd = trackedDir()
-    const q = new ReplyQueue('sess-1', cwd)
+    const q = new ReplyQueue(cwd)
 
     const a = q.push('hello')
     const b = q.push('world')
@@ -42,7 +42,7 @@ describe('ReplyQueue', () => {
 
   test('pending returns un-delivered entries in seq order', () => {
     const cwd = trackedDir()
-    const q = new ReplyQueue('sess-2', cwd)
+    const q = new ReplyQueue(cwd)
 
     const a = q.push('first')
     const b = q.push('second')
@@ -54,7 +54,7 @@ describe('ReplyQueue', () => {
 
   test('markDelivered removes entry from pending', () => {
     const cwd = trackedDir()
-    const q = new ReplyQueue('sess-3', cwd)
+    const q = new ReplyQueue(cwd)
 
     const a = q.push('alpha')
     const b = q.push('beta')
@@ -68,10 +68,10 @@ describe('ReplyQueue', () => {
 
   test('pending survives re-instantiation (crash recovery)', () => {
     const cwd = trackedDir()
-    const q1 = new ReplyQueue('sess-4', cwd)
+    const q1 = new ReplyQueue(cwd)
     const entry = q1.push('survive me')
 
-    const q2 = new ReplyQueue('sess-4', cwd)
+    const q2 = new ReplyQueue(cwd)
     const pending = q2.pending()
     expect(pending).toHaveLength(1)
     expect(pending[0]!.text).toBe('survive me')
@@ -80,17 +80,17 @@ describe('ReplyQueue', () => {
 
   test('markDelivered survives re-instantiation', () => {
     const cwd = trackedDir()
-    const q1 = new ReplyQueue('sess-5', cwd)
+    const q1 = new ReplyQueue(cwd)
     const entry = q1.push('deliver me')
     q1.markDelivered(entry.seq)
 
-    const q2 = new ReplyQueue('sess-5', cwd)
+    const q2 = new ReplyQueue(cwd)
     expect(q2.pending()).toHaveLength(0)
   })
 
   test('push stores images', () => {
     const cwd = trackedDir()
-    const q = new ReplyQueue('sess-6', cwd)
+    const q = new ReplyQueue(cwd)
     const images = [{ mediaType: 'image/png' as const, dataBase64: 'abc123' }]
     const entry = q.push('with image', images)
 
@@ -101,7 +101,7 @@ describe('ReplyQueue', () => {
 
   test('torn write (truncated file) is skipped in pending', () => {
     const cwd = trackedDir()
-    const q = new ReplyQueue('sess-7', cwd)
+    const q = new ReplyQueue(cwd)
     const good = q.push('valid')
 
     const queueDir = path.join(cwd, '.minion', 'reply-queue')
@@ -114,7 +114,7 @@ describe('ReplyQueue', () => {
 
   test('clear removes all entries', () => {
     const cwd = trackedDir()
-    const q = new ReplyQueue('sess-8', cwd)
+    const q = new ReplyQueue(cwd)
     q.push('a')
     q.push('b')
     q.clear()
@@ -123,7 +123,7 @@ describe('ReplyQueue', () => {
 
   test('clearDelivered removes only delivered entry files', () => {
     const cwd = trackedDir()
-    const q = new ReplyQueue('sess-9', cwd)
+    const q = new ReplyQueue(cwd)
     const a = q.push('a')
     const b = q.push('b')
     q.markDelivered(a.seq)

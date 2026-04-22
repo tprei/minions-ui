@@ -14,7 +14,7 @@ export interface ContextMenuActions {
   onCloseSession: (sessionId: string) => Promise<void>
   onOpenThread: (session: ApiSession) => void
   onOpenParent?: (parentId: string) => void
-  onViewInDag?: (dagId: string, sessionId: string) => void
+  onViewInDag?: (dagId: string) => void
   isActionLoading: boolean
 }
 
@@ -117,10 +117,10 @@ export function ContextMenu({ session, position, actions, onClose, dagContext }:
 
   const handleViewInDag = useCallback(() => {
     if (dagContext && actions.onViewInDag) {
-      actions.onViewInDag(dagContext.dagId, session.id)
+      actions.onViewInDag(dagContext.dagId)
     }
     onClose()
-  }, [dagContext, actions, session.id, onClose])
+  }, [dagContext, actions, onClose])
 
   const handleRetry = useCallback(() => {
     onClose()

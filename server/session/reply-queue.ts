@@ -24,10 +24,7 @@ function atomicWrite(filePath: string, data: string): void {
 export class ReplyQueue {
   private readonly queueDir: string
 
-  constructor(
-    private readonly sessionId: string,
-    cwd: string,
-  ) {
+  constructor(cwd: string) {
     this.queueDir = path.join(cwd, '.minion', 'reply-queue')
     fs.mkdirSync(this.queueDir, { recursive: true })
   }
@@ -122,7 +119,7 @@ export class ReplyQueueFactory {
   get(sessionId: string): ReplyQueue {
     const existing = this.queues.get(sessionId)
     if (existing) return existing
-    const q = new ReplyQueue(sessionId, this.cwd(sessionId))
+    const q = new ReplyQueue(this.cwd(sessionId))
     this.queues.set(sessionId, q)
     return q
   }

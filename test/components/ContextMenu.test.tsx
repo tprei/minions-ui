@@ -405,7 +405,7 @@ describe('ContextMenu', () => {
     )
 
     fireEvent.click(screen.getByText('View in DAG'))
-    expect(mockActions.onViewInDag).toHaveBeenCalledWith('dag-7', 'session-1')
+    expect(mockActions.onViewInDag).toHaveBeenCalledWith('dag-7')
     expect(mockOnClose).toHaveBeenCalled()
   })
 

@@ -97,7 +97,7 @@ const SLASH_MODES = new Map([
 
 type SlashMode = 'task' | 'plan' | 'think' | 'review' | 'ship-think'
 
-function resolveSessionBySlug(slug: string, registry: SessionRegistry, dbProvider: () => Database): ApiSession | null {
+function resolveSessionBySlug(slug: string, dbProvider: () => Database): ApiSession | null {
   const db = dbProvider()
   const rows = prepared.listSessions(db)
   const row = rows.find((r) => r.slug === slug)
@@ -135,7 +135,7 @@ export function registerApiRoutes(
 
   app.get('/api/sessions/:slug', (c) => {
     const { slug } = c.req.param()
-    const session = resolveSessionBySlug(slug, registry, resolveDb)
+    const session = resolveSessionBySlug(slug, resolveDb)
     if (!session) return c.json({ data: null, error: 'Session not found' }, 404)
     const body: ApiResponse<ApiSession> = { data: session }
     return c.json(body)
@@ -414,7 +414,7 @@ export function registerApiRoutes(
 
   app.delete('/api/sessions/:slug', async (c) => {
     const { slug } = c.req.param()
-    const session = resolveSessionBySlug(slug, registry, resolveDb)
+    const session = resolveSessionBySlug(slug, resolveDb)
     if (!session) return c.json({ data: null, error: 'Session not found' }, 404)
     await registry.close(session.id)
     return c.json({ data: { ok: true } })

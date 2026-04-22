@@ -1,6 +1,6 @@
 import crypto from "node:crypto"
-import type { EngineContext, TopicSession, SessionMeta, DagGraph, SessionConfig, SessionPort, SessionDoneState, SessionState } from "./types"
-import { buildCompletenessReviewPrompt, parseCompletenessResult } from "./verification"
+import type { EngineContext, TopicSession, SessionMeta, DagGraph, SessionPort, SessionDoneState, SessionState } from "./types"
+import { buildCompletenessReviewPrompt } from "./verification"
 import { extractDagItems } from "./dag-extract"
 import { buildConversationText } from "./claude-extract"
 import { JudgeOrchestrator } from "./judge-orchestrator"
@@ -8,14 +8,7 @@ import { JudgeOrchestrator } from "./judge-orchestrator"
 const log = { info: console.log, warn: console.warn, error: console.error, debug: console.debug }
 
 class SessionHandle implements SessionPort {
-  constructor(
-    readonly meta: SessionMeta,
-    private readonly onEvent: (event: Record<string, unknown>) => void,
-    private readonly onDone: (meta: SessionMeta, state: SessionDoneState) => void,
-    private readonly timeoutMs: number,
-    private readonly inactivityTimeoutMs: number,
-    private readonly sessionConfig: SessionConfig,
-  ) {}
+  constructor(readonly meta: SessionMeta) {}
 
   start(): void {}
   injectReply(): boolean { return false }
@@ -199,7 +192,7 @@ export class ShipPipeline {
     const verifyStartedAt = Date.now()
 
     for (const node of completedNodes) {
-      const childSession = this.findChildSession(topicSession, node.threadId)
+      const childSession = this.findChildSession(node.threadId)
       if (!childSession) {
         failed++
         nodeResults.set(node.id, false)
@@ -232,52 +225,8 @@ export class ShipPipeline {
         this.ctx.pushToConversation(childSession, { role: "assistant", text })
       }
 
-      const childProfile = childSession.profileId ? this.ctx.profileStore.get(childSession.profileId) : undefined
-      const sessionConfig: SessionConfig = {
-        claude: this.ctx.config.claude,
-        mcp: this.ctx.config.mcp,
-        profile: childProfile,
-        sessionEnvPassthrough: this.ctx.config.sessionEnvPassthrough,
-        agentDefs: this.ctx.config.agentDefs,
-      }
-
       await new Promise<void>((resolve) => {
-        const handle = new SessionHandle(
-          meta,
-          (event) => {
-            this.ctx.observer.onEvent(meta, event).catch((err) => {
-              log.error({ err, sessionId }, "verify onEvent error")
-            })
-          },
-          async (m, state) => {
-            if (childSession.activeSessionId !== m.sessionId) { failed++; nodeResults.set(node.id, false); resolve(); return }
-            this.ctx.sessions.delete(childSession.threadId)
-            childSession.activeSessionId = undefined
-
-            const durationMs = Date.now() - m.startedAt
-            await this.ctx.observer.onSessionComplete(m, state, durationMs).catch(() => {})
-
-            const output = childSession.conversation
-              .filter((msg) => msg.role === "assistant")
-              .map((msg) => msg.text)
-              .join("\n")
-            const result = parseCompletenessResult(output)
-
-            if (result.passed) {
-              nodeResults.set(node.id, true)
-            } else {
-              failed++
-              nodeResults.set(node.id, false)
-            }
-
-            this.ctx.postStatus(topicSession, `${result.passed ? "✅" : "❌"} Verification ${result.passed ? "passed" : "failed"}: <b>${esc(node.title)}</b>`).catch(() => {})
-
-            resolve()
-          },
-          this.ctx.config.workspace.sessionTimeoutMs,
-          this.ctx.config.workspace.sessionInactivityTimeoutMs,
-          sessionConfig,
-        )
+        const handle = new SessionHandle(meta)
 
         this.ctx.sessions.set(childSession.threadId, { handle, meta, task: verifyTask })
         const onDeadThread = () => this.ctx.handleDeadThread(childSession, meta.threadId)
@@ -312,7 +261,7 @@ export class ShipPipeline {
     await this.shipFinalize(topicSession)
   }
 
-  private findChildSession(parent: TopicSession, threadId?: number): TopicSession | undefined {
+  private findChildSession(threadId?: number): TopicSession | undefined {
     if (!threadId) return undefined
     return this.ctx.topicSessions.get(threadId)
   }
