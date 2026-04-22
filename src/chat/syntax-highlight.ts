@@ -1,4 +1,4 @@
-export type TokenType =
+type TokenType =
   | 'plain'
   | 'keyword'
   | 'string'
@@ -7,7 +7,7 @@ export type TokenType =
   | 'builtin'
   | 'regex'
 
-export interface SyntaxToken {
+interface SyntaxToken {
   type: TokenType
   text: string
 }
