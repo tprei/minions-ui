@@ -6,7 +6,7 @@ Standalone PWA that replaces the Telegram Mini App frontend for [`@tprei/telegra
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start the dev server at http://localhost:5173 |
+| `npm run dev` | Start the dev server (UI + server) at http://localhost:3000 |
 | `npm run build` | Type-check and produce a production build in `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm run typecheck` | Run `tsc --noEmit` |
@@ -17,7 +17,7 @@ Standalone PWA that replaces the Telegram Mini App frontend for [`@tprei/telegra
 
 ## Dev proxy
 
-In development, requests to `/api/*` are proxied to `http://localhost:8080` — the default port for `telegram-minions`.
+In development, the `npm run dev` command starts both the Vite dev server (UI on port 3000) and the backend server (API on port 8080). The Vite dev server proxies `/api/*` requests to `http://localhost:8080`.
 
 ## Architecture
 

@@ -26,8 +26,8 @@ Wave coverage: A1–A3 (DAG, ship, completion chain), B1–B3 (judge, GitHub, CI
 | GET | `/api/sessions/:slug/screenshots/:filename` | `server/api/routes.ts` | **DONE** | |
 | GET | `/api/sessions/:slug/transcript?after=<seq>` | `server/api/routes.ts` | **DONE** | SQLite-backed |
 | GET | `/api/sessions/:slug/pr` | `server/api/routes.ts` | **DONE** | `server/github/pr-preview.ts` |
-| GET | `/api/dags` | `server/api/routes.ts` | **PARTIAL** | returns `[]`; real DAG list via `server/dag/store.ts` not wired to HTTP yet |
-| GET | `/api/dags/:id` | `server/api/routes.ts` | **PARTIAL** | always 404; store exists |
+| GET | `/api/dags` | `server/api/routes.ts` | **DONE** | wired to `server/dag/store.ts` |
+| GET | `/api/dags/:id` | `server/api/routes.ts` | **DONE** | wired to `server/dag/store.ts` |
 | POST | `/api/commands` | `server/api/routes.ts` | **DONE** | reply/stop/close/plan_action |
 | POST | `/api/messages` | `server/api/routes.ts` | **DONE** | 25 slash commands + plain reply |
 | GET | `/api/events` | `server/api/sse.ts` | **DONE** | SSE stream with keepalive |
@@ -166,10 +166,9 @@ Wave coverage: A1–A3 (DAG, ship, completion chain), B1–B3 (judge, GitHub, CI
 
 ## Remaining TODO seams
 
-1. **`GET /api/dags` and `GET /api/dags/:id`** — `server/dag/store.ts` (`listDags`, `loadDag`) exists and is tested, but `server/api/routes.ts` still returns stub `[]` / 404. Wire `listDags` and `loadDag` to these routes + emit `dag_created`/`dag_updated` via `dagToApi` mapper.
-2. **`session_needs_attention` over SSE** — `server/session/attention-emit.ts` emits attention reasons and triggers push, but the `session_needs_attention` SSE event type is not yet forwarded to connected SSE clients. Low impact since `session_updated` carries `needsAttention: true`.
-3. **`/judge`, `/land`, `/retry`, `/force` slash commands** — wired through `POST /api/messages` but not yet listed in `SLASH_MODES` (they call into their own handler modules directly). Confirmed functional via handler unit tests.
-4. **`SENTRY_DSN`** — decided DROP for now; platform error reporting is out of scope for this rewrite.
+1. **`session_needs_attention` over SSE** — `server/session/attention-emit.ts` emits attention reasons and triggers push, but the `session_needs_attention` SSE event type is not yet forwarded to connected SSE clients. Low impact since `session_updated` carries `needsAttention: true`.
+2. **`/judge`, `/land`, `/retry`, `/force` slash commands** — wired through `POST /api/messages` but not yet listed in `SLASH_MODES` (they call into their own handler modules directly). Confirmed functional via handler unit tests.
+3. **`SENTRY_DSN`** — decided DROP for now; platform error reporting is out of scope for this rewrite.
 
 ## How to measure parity end-to-end
 
