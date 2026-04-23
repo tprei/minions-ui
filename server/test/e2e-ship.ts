@@ -226,7 +226,7 @@ describe.skipIf(process.env['E2E'] !== '1')('e2e /ship pipeline', () => {
       expect(body.data.features).toContain('screenshots')
       expect(body.data.features).toContain('diff')
       expect(body.data.features).toContain('pr-preview')
-      expect(body.data.features).toContain('resource-tracking')
+      expect(body.data.features).toContain('resource-metrics')
       expect(body.data.features).toContain('runtime-config')
     } finally {
       stop()

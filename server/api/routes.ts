@@ -9,6 +9,8 @@ import type {
   CommandResult,
   CreateSessionVariantsResult,
   MinionCommand,
+  OverrideField,
+  ResourceSnapshot,
   RuntimeConfigResponse,
   ScreenshotList,
   TranscriptSnapshot,
@@ -29,6 +31,8 @@ import { topologicalSort, nodeIndex } from '../dag/dag'
 import type { DagGraph } from '../dag/dag'
 import { loadOverrides, saveOverrides } from '../config/runtime-overrides'
 import { applyOverrides } from '../config/apply'
+import type { LoopRuntime } from '../config/apply'
+import type { ResourceMonitor } from '../metrics/resource'
 import { RuntimeOverridesSchema } from '../config/schema'
 import { DEFAULT_LOOPS } from '../loops/definitions'
 import { createSessionVariants } from '../session/variants'
@@ -61,7 +65,7 @@ const FEATURES = [
   'screenshots',
   'diff',
   'pr-preview',
-  'resource-tracking',
+  'resource-metrics',
   'runtime-config',
 ]
 
@@ -144,12 +148,34 @@ function formatZod(issues: Array<{ path: Array<string | number>; message: string
   return issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')
 }
 
+export interface RuntimeBaseConfig {
+  maxConcurrentSessions: number
+  maxConcurrentLoops: number
+  reservedInteractiveSlots: number
+  retryMax: number
+  defaultSleepMs: number
+  mcp: {
+    browserEnabled: boolean
+    githubEnabled: boolean
+    context7Enabled: boolean
+    supabaseEnabled: boolean
+  }
+  loops: Array<{ id: string; enabled: boolean; intervalMs: number }>
+}
+
+export interface RuntimeContext {
+  loopRuntime?: LoopRuntime
+  resourceMonitor?: ResourceMonitor
+  getBaseConfig?: () => RuntimeBaseConfig
+}
+
 export function registerApiRoutes(
   app: Hono,
   registry: SessionRegistry,
   dbProvider?: () => Database,
   scheduler?: PlanScheduler,
   landingManager?: LandingManager,
+  runtimeCtx?: RuntimeContext,
 ): void {
   const resolveDb = dbProvider ?? getDb
 
@@ -534,20 +560,140 @@ export function registerApiRoutes(
   app.get('/api/config/runtime', (c) => {
     const overrides = loadOverrides()
     const applied = applyOverrides(overrides)
-    const schemaPayload: RuntimeConfigResponse['schema'] = {
-      fields: [],
-      loops: DEFAULT_LOOPS.map((l) => ({
+    const base = runtimeCtx?.getBaseConfig?.() ?? null
+    const fields: OverrideField[] = [
+      {
+        key: 'workspace.maxConcurrentSessions',
+        label: 'Max concurrent sessions',
+        type: 'number',
+        category: 'concurrency',
+        apply: 'live',
+        integer: true,
+        min: 1,
+        max: 256,
+        description: 'Total sessions the engine will run at once. Applied live to the scheduler.',
+      },
+      {
+        key: 'loopsConfig.maxConcurrentLoops',
+        label: 'Max concurrent loops',
+        type: 'number',
+        category: 'concurrency',
+        apply: 'restart',
+        integer: true,
+        min: 1,
+        max: 64,
+        description: 'Upper bound on autonomous loop sessions running in parallel.',
+      },
+      {
+        key: 'loopsConfig.reservedInteractiveSlots',
+        label: 'Reserved interactive slots',
+        type: 'number',
+        category: 'concurrency',
+        apply: 'restart',
+        integer: true,
+        min: 0,
+        max: 64,
+        description: 'Sessions held back from loops so interactive tasks can always start.',
+      },
+      {
+        key: 'quota.retryMax',
+        label: 'Quota retry max',
+        type: 'number',
+        category: 'concurrency',
+        apply: 'restart',
+        integer: true,
+        min: 0,
+        max: 32,
+        description: 'How many times the engine will resume a session after a quota sleep.',
+      },
+      {
+        key: 'quota.defaultSleepMs',
+        label: 'Default quota sleep (ms)',
+        type: 'number',
+        category: 'concurrency',
+        apply: 'restart',
+        integer: true,
+        min: 1000,
+        description: 'Fallback sleep when an Anthropic quota error omits a reset time.',
+      },
+      {
+        key: 'mcp.browserEnabled',
+        label: 'Browser MCP (Playwright)',
+        type: 'boolean',
+        category: 'features',
+        apply: 'restart',
+      },
+      {
+        key: 'mcp.githubEnabled',
+        label: 'GitHub MCP',
+        type: 'boolean',
+        category: 'features',
+        apply: 'restart',
+      },
+      {
+        key: 'mcp.context7Enabled',
+        label: 'Context7 MCP',
+        type: 'boolean',
+        category: 'features',
+        apply: 'restart',
+      },
+      {
+        key: 'mcp.supabaseEnabled',
+        label: 'Supabase MCP',
+        type: 'boolean',
+        category: 'features',
+        apply: 'restart',
+      },
+    ]
+    for (const l of DEFAULT_LOOPS) {
+      fields.push(
+        {
+          key: `loops.${l.id}.enabled`,
+          label: `${l.title} — enabled`,
+          type: 'boolean',
+          category: 'loops',
+          apply: 'live',
+        },
+        {
+          key: `loops.${l.id}.intervalMs`,
+          label: `${l.title} — interval (ms)`,
+          type: 'number',
+          category: 'loops',
+          apply: 'live',
+          integer: true,
+          min: 60_000,
+          description: l.description,
+        },
+      )
+    }
+    const loopMeta = DEFAULT_LOOPS.map((l) => {
+      const live = base?.loops.find((x) => x.id === l.id)
+      return {
         id: l.id,
         name: l.title,
-        defaultIntervalMs: l.intervalMs,
-        defaultEnabled: true,
-      })),
-    }
+        defaultIntervalMs: live?.intervalMs ?? l.intervalMs,
+        defaultEnabled: live?.enabled ?? true,
+      }
+    })
+    const baseDoc: Record<string, unknown> = base
+      ? {
+          workspace: { maxConcurrentSessions: base.maxConcurrentSessions },
+          loopsConfig: {
+            maxConcurrentLoops: base.maxConcurrentLoops,
+            reservedInteractiveSlots: base.reservedInteractiveSlots,
+          },
+          quota: { retryMax: base.retryMax, defaultSleepMs: base.defaultSleepMs },
+          mcp: { ...base.mcp },
+          loops: Object.fromEntries(
+            base.loops.map((l) => [l.id, { enabled: l.enabled, intervalMs: l.intervalMs }]),
+          ),
+        }
+      : {}
     const body: ApiResponse<RuntimeConfigResponse> = {
       data: {
-        base: {},
+        base: baseDoc,
         overrides,
-        schema: schemaPayload,
+        schema: { fields, loops: loopMeta },
         requiresRestart: applied.requiresRestart,
       },
     }
@@ -561,9 +707,14 @@ export function registerApiRoutes(
       return c.json({ error: formatZod(parsed.error.issues) }, 400)
     }
     const merged = saveOverrides(parsed.data)
-    const applied = applyOverrides(merged)
-    const body: ApiResponse<{ applied: true; requiresRestart: string[] }> = {
-      data: { applied: true, requiresRestart: applied.requiresRestart },
+    const applied = applyOverrides(merged, runtimeCtx?.loopRuntime)
+    const body: ApiResponse<RuntimeConfigResponse> = {
+      data: {
+        base: {},
+        overrides: merged,
+        schema: { fields: [], loops: [] },
+        requiresRestart: applied.requiresRestart,
+      },
     }
     return c.json(body)
   })
@@ -802,40 +953,28 @@ export function registerApiRoutes(
   })
 
   app.get('/api/metrics', (c) => {
-    const db = resolveDb()
-    const memUsage = process.memoryUsage()
-    const cpuUsage = process.cpuUsage()
-
-    interface ActiveRow { count: number }
-    const activeSessions = (db.query<ActiveRow, []>(
-      "SELECT COUNT(*) as count FROM sessions WHERE status IN ('running','waiting_input')",
-    ).get()?.count) ?? 0
-
-    const activeDags = (db.query<ActiveRow, []>(
-      "SELECT COUNT(*) as count FROM dags WHERE status IN ('pending','running')",
-    ).get()?.count) ?? 0
-
-    let dbSizeBytes = 0
-    const dbPath = process.env['MINION_DB_PATH'] ?? 'data/engine.db'
-    try {
-      dbSizeBytes = fs.statSync(dbPath).size
-    } catch {
-      // not critical
+    const monitor = runtimeCtx?.resourceMonitor
+    if (monitor) {
+      const snapshot: ResourceSnapshot = monitor.sample(Date.now())
+      const body: ApiResponse<ResourceSnapshot> = { data: snapshot }
+      return c.json(body)
     }
-
-    const uptimeSec = Math.floor(process.uptime())
-    const processCpuPct = Math.round((cpuUsage.user + cpuUsage.system) / 1e4) / 100
-
-    return c.json({
-      data: {
-        processMemBytes: memUsage.rss,
-        processCpuPct,
-        dbSizeBytes,
-        activeSessions,
-        activeDags,
-        uptimeSec,
+    const memUsage = process.memoryUsage()
+    const snapshot: ResourceSnapshot = {
+      ts: Date.now(),
+      cpu: { usagePercent: 0, cpuCount: 1, source: 'host' },
+      memory: {
+        usedBytes: memUsage.rss,
+        limitBytes: memUsage.rss,
+        rssBytes: memUsage.rss,
+        source: 'host',
       },
-    })
+      disk: { path: '/', usedBytes: 0, totalBytes: 0 },
+      eventLoopLagMs: 0,
+      counts: { activeSessions: 0, maxSessions: 0, activeLoops: 0, maxLoops: 0 },
+    }
+    const body: ApiResponse<ResourceSnapshot> = { data: snapshot }
+    return c.json(body)
   })
 
   app.get('/api/push/vapid-public-key', (c) => {

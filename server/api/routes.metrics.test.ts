@@ -6,6 +6,7 @@ import { createSessionRegistry } from '../session/registry'
 import { resetEventBus } from '../events/bus'
 import { runMigrations } from '../db/sqlite'
 import { registerApiRoutes } from './routes'
+import type { ResourceSnapshot } from '../../shared/api-types'
 
 function setupTestDb(): Database {
   const db = new Database(':memory:')
@@ -66,38 +67,27 @@ afterEach(() => {
 })
 
 describe('GET /api/metrics', () => {
-  test('returns metrics structure', async () => {
+  test('returns a ResourceSnapshot structure', async () => {
     const app = makeApp(testDb)
     const res = await app.fetch(new Request('http://localhost/api/metrics'))
     expect(res.status).toBe(200)
-    const body = await res.json() as { data: Record<string, unknown> }
+    const body = await res.json() as { data: ResourceSnapshot }
     expect(body.data).toBeDefined()
-    expect(typeof body.data['processMemBytes']).toBe('number')
-    expect(typeof body.data['processCpuPct']).toBe('number')
-    expect(typeof body.data['dbSizeBytes']).toBe('number')
-    expect(typeof body.data['activeSessions']).toBe('number')
-    expect(typeof body.data['activeDags']).toBe('number')
-    expect(typeof body.data['uptimeSec']).toBe('number')
+    expect(typeof body.data.ts).toBe('number')
+    expect(typeof body.data.cpu.usagePercent).toBe('number')
+    expect(typeof body.data.cpu.cpuCount).toBe('number')
+    expect(typeof body.data.memory.usedBytes).toBe('number')
+    expect(typeof body.data.memory.limitBytes).toBe('number')
+    expect(typeof body.data.memory.rssBytes).toBe('number')
+    expect(typeof body.data.disk.path).toBe('string')
+    expect(typeof body.data.eventLoopLagMs).toBe('number')
+    expect(typeof body.data.counts.activeSessions).toBe('number')
   })
 
-  test('processMemBytes is positive', async () => {
+  test('memory rssBytes is positive', async () => {
     const app = makeApp(testDb)
     const res = await app.fetch(new Request('http://localhost/api/metrics'))
-    const body = await res.json() as { data: { processMemBytes: number } }
-    expect(body.data.processMemBytes).toBeGreaterThan(0)
-  })
-
-  test('uptimeSec is non-negative', async () => {
-    const app = makeApp(testDb)
-    const res = await app.fetch(new Request('http://localhost/api/metrics'))
-    const body = await res.json() as { data: { uptimeSec: number } }
-    expect(body.data.uptimeSec).toBeGreaterThanOrEqual(0)
-  })
-
-  test('activeSessions is 0 with empty db', async () => {
-    const app = makeApp(testDb)
-    const res = await app.fetch(new Request('http://localhost/api/metrics'))
-    const body = await res.json() as { data: { activeSessions: number } }
-    expect(body.data.activeSessions).toBe(0)
+    const body = await res.json() as { data: ResourceSnapshot }
+    expect(body.data.memory.rssBytes).toBeGreaterThan(0)
   })
 })

@@ -27,7 +27,11 @@ import {
 import { createDagScheduler } from './dag/scheduler'
 import { createLandingManager } from './dag/landing'
 import { LoopScheduler } from './loops/scheduler'
+import { DEFAULT_LOOPS } from './loops/definitions'
+import { listLoops } from './loops/store'
 import { ResourceMonitor } from './metrics/resource'
+import { loadOverrides } from './config/runtime-overrides'
+import { applyOverrides } from './config/apply'
 import { createDigestBuilder } from './digest/digest'
 import { ReplyQueue as DiskReplyQueue } from './session/reply-queue'
 import { startPushNotifier } from './push/notifier'
@@ -38,6 +42,11 @@ const PORT = Number(process.env['PORT'] ?? 8080)
 const WORKSPACE_ROOT = process.env['WORKSPACE_ROOT'] ?? '/tmp/minion-workspace'
 const DEFAULT_REPO = process.env['DEFAULT_REPO'] ?? ''
 const MAX_CONCURRENT_SESSIONS = Number(process.env['MAX_CONCURRENT_SESSIONS'] ?? 10)
+const MAX_CONCURRENT_LOOPS = Number(process.env['MAX_CONCURRENT_LOOPS'] ?? 3)
+const RESERVED_INTERACTIVE_SLOTS = Number(process.env['RESERVED_INTERACTIVE_SLOTS'] ?? 2)
+const QUOTA_RETRY_MAX = Number(process.env['QUOTA_RETRY_MAX'] ?? 3)
+const QUOTA_DEFAULT_SLEEP_MS = Number(process.env['QUOTA_DEFAULT_SLEEP_MS'] ?? 5 * 60 * 1000)
+const DISK_PATH = process.env['METRICS_DISK_PATH'] ?? WORKSPACE_ROOT
 
 const app = new Hono()
 app.use('*', corsMiddleware())
@@ -128,13 +137,63 @@ if (loopsEnabled) {
   console.log('[minion] loop scheduler disabled (set ENABLE_LOOPS=true to enable)')
 }
 
-const resourceMonitor = new ResourceMonitor(bus)
+const countsProvider = (): import('../shared/api-types').CountsSnapshot => {
+  const sessions = registry.list()
+  return {
+    activeSessions: sessions.length,
+    maxSessions: MAX_CONCURRENT_SESSIONS,
+    activeLoops: sessions.filter((s) => s.mode === 'loop').length,
+    maxLoops: MAX_CONCURRENT_LOOPS,
+  }
+}
+
+const resourceMonitor = new ResourceMonitor(bus, {
+  intervalMs: 2000,
+  diskPath: DISK_PATH,
+  countsProvider,
+})
 resourceMonitor.start()
+
+// Re-apply persisted overrides at boot so interval / enabled flags survive restart.
+try {
+  applyOverrides(loadOverrides(), loopScheduler)
+} catch (err) {
+  console.warn('[minion] applyOverrides on boot failed:', err)
+}
 
 startPushNotifier(bus)
 
 const landingManager = createLandingManager({ bus })
-registerApiRoutes(app, registry, () => db, scheduler, landingManager)
+registerApiRoutes(app, registry, () => db, scheduler, landingManager, {
+  loopRuntime: loopScheduler,
+  resourceMonitor,
+  getBaseConfig: () => {
+    const rows = listLoops(db)
+    const defaults = new Map(DEFAULT_LOOPS.map((l) => [l.id, l]))
+    return {
+      maxConcurrentSessions: MAX_CONCURRENT_SESSIONS,
+      maxConcurrentLoops: MAX_CONCURRENT_LOOPS,
+      reservedInteractiveSlots: RESERVED_INTERACTIVE_SLOTS,
+      retryMax: QUOTA_RETRY_MAX,
+      defaultSleepMs: QUOTA_DEFAULT_SLEEP_MS,
+      mcp: {
+        browserEnabled: process.env['ENABLE_BROWSER_MCP'] !== 'false',
+        githubEnabled:
+          process.env['ENABLE_GITHUB_MCP'] !== 'false' &&
+          Boolean(process.env['GITHUB_TOKEN'] ?? process.env['GITHUB_PERSONAL_ACCESS_TOKEN']),
+        context7Enabled: process.env['ENABLE_CONTEXT7_MCP'] !== 'false',
+        supabaseEnabled:
+          process.env['ENABLE_SUPABASE_MCP'] !== 'false' &&
+          Boolean(process.env['SUPABASE_ACCESS_TOKEN']),
+      },
+      loops: rows.map((r) => ({
+        id: r.id,
+        enabled: r.enabled,
+        intervalMs: r.interval_ms || (defaults.get(r.id)?.intervalMs ?? 60_000),
+      })),
+    }
+  },
+})
 registerSseRoute(app, () => db)
 
 export default { port: PORT, fetch: app.fetch, idleTimeout: 0 }
