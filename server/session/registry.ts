@@ -273,6 +273,7 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       runtime = await resumeRuntime(row, text, images)
       void runtime.start()
       prepared.updateSession(db(), { id: sessionId, status: 'running', updated_at: Date.now() })
+      bus.emit({ kind: 'session.resumed', sessionId, retryCount: 0 })
       emitSnapshot(sessionId)
       return true
     }

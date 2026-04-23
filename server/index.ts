@@ -76,6 +76,9 @@ console.log(`[minion] engine on :${PORT}, ${reconciled} sessions resumed`)
 const scheduler = createDagScheduler({ registry, db, bus, workspace: WORKSPACE_ROOT })
 await scheduler.reconcileOnBoot()
 
+bus.onKind('session.resumed', (ev) => { void scheduler.onSessionResumed(ev.sessionId) })
+bus.onKind('session.reply_injected', (ev) => { void scheduler.onSessionResumed(ev.sessionId) })
+
 const loopScheduler = new LoopScheduler({
   db,
   registry,

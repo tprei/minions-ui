@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite"
 import { readyNodes, advanceDag, failNode, resetFailedNode, nodeIndex, getUpstreamBranches, isDagComplete } from "./dag"
 import type { DagGraph, DagNode, DagInput } from "./dag"
 import { saveDag, loadDag, listDags } from "./store"
+import { prepared } from "../db/sqlite"
 import { updateStackComment } from "./stack-comment"
 import { buildDagChildPrompt } from "./dag-extract"
 import type { TopicMessage } from "./types"
@@ -105,6 +106,7 @@ export interface DagSchedulerOpts {
 export interface DagScheduler {
   start(dagId: string): Promise<void>
   onSessionCompleted(sessionId: string, state: SessionRunState): Promise<void>
+  onSessionResumed(sessionId: string): Promise<void>
   cancel(dagId: string): Promise<void>
   status(dagId: string): DagStatusSnapshot
   retryNode(nodeId: string, dagId: string): Promise<void>
@@ -341,6 +343,36 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     await tickGraph(graph)
   }
 
+  async function onSessionResumed(sessionId: string): Promise<void> {
+    const row = prepared.getSession(db, sessionId)
+    if (!row) return
+    const meta = row.metadata as { dagId?: string; dagNodeId?: string }
+    if (!meta.dagId || !meta.dagNodeId) return
+
+    let graph = activeGraphs.get(meta.dagId)
+    if (!graph) {
+      const stored = loadDag(meta.dagId, db)
+      if (!stored) return
+      graph = stored
+      activeGraphs.set(meta.dagId, graph)
+      cancelledDags.delete(meta.dagId)
+    }
+
+    const idx = nodeIndex(graph)
+    const node = idx.get(meta.dagNodeId)
+    if (!node) return
+    if (node.status !== "failed" && node.status !== "ci-failed") return
+
+    node.status = "running"
+    node.error = undefined
+    node.sessionId = sessionId
+    nodeToSession.set(node.id, sessionId)
+    nodeToGraph.set(sessionId, graph.id)
+
+    persist(graph)
+    await commentUpdater(graph).catch(() => {})
+  }
+
   async function reconcileOnBoot(): Promise<void> {
     const graphs = listDags(db)
     for (const graph of graphs) {
@@ -421,5 +453,5 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     await tickGraph(graph)
   }
 
-  return { start, onSessionCompleted, cancel, status, retryNode, forceNodeLanded, reconcileOnBoot }
+  return { start, onSessionCompleted, onSessionResumed, cancel, status, retryNode, forceNodeLanded, reconcileOnBoot }
 }

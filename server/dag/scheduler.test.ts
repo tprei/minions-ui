@@ -368,4 +368,78 @@ describe("DagScheduler", () => {
 
     expect(stackCommentCallCount).toBeGreaterThan(0)
   })
+
+  it("onSessionResumed resets a failed DAG node back to running", async () => {
+    const graph = buildDag("dag-resume", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const id = `session-${sessions.length}`
+      const session = makeSession(id, db)
+      sessions.push(session.id)
+      prepared.updateSession(db, {
+        id: session.id,
+        updated_at: Date.now(),
+        metadata: { dagId: "dag-resume", dagNodeId: "a" },
+      })
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-resume")
+
+    const sessionId = sessions[0]!
+    await scheduler.onSessionCompleted(sessionId, "errored")
+
+    const afterFail = scheduler.status("dag-resume")
+    expect(afterFail.nodes.find((n) => n.id === "a")?.status).toBe("failed")
+    expect(afterFail.nodes.find((n) => n.id === "b")?.status).toBe("skipped")
+
+    await scheduler.onSessionResumed(sessionId)
+
+    const afterResume = scheduler.status("dag-resume")
+    expect(afterResume.nodes.find((n) => n.id === "a")?.status).toBe("running")
+    expect(afterResume.nodes.find((n) => n.id === "a")?.sessionId).toBe(sessionId)
+  })
+
+  it("onSessionResumed is a no-op when session is not part of a DAG", async () => {
+    const scheduler = makeScheduler(makeRegistry(db))
+    const session = makeSession("loner", db)
+    await expect(scheduler.onSessionResumed(session.id)).resolves.toBeUndefined()
+  })
+
+  it("onSessionResumed is a no-op when node is not in failed state", async () => {
+    const graph = buildDag("dag-resume-noop", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const id = `session-${sessions.length}`
+      const session = makeSession(id, db)
+      sessions.push(session.id)
+      prepared.updateSession(db, {
+        id: session.id,
+        updated_at: Date.now(),
+        metadata: { dagId: "dag-resume-noop", dagNodeId: "a" },
+      })
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-resume-noop")
+
+    const before = scheduler.status("dag-resume-noop")
+    expect(before.nodes[0]?.status).toBe("running")
+
+    await scheduler.onSessionResumed(sessions[0]!)
+
+    const after = scheduler.status("dag-resume-noop")
+    expect(after.nodes[0]?.status).toBe("running")
+  })
 })
