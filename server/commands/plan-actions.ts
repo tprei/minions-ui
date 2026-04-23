@@ -145,6 +145,19 @@ async function handoffShipPhase(
   return { ok: true, dagId: session.id }
 }
 
+const EXECUTE_DIRECTIVE = [
+  "Implement your plan now, in this session — do NOT wait for another turn.",
+  "",
+  "1. Write the code.",
+  "2. Run the unit/integration tests (NOT e2e or browser tests — too expensive).",
+  "3. `git add -A && git commit -m \"<descriptive message>\"`.",
+  "4. `git push -u origin HEAD`. Auth is preconfigured via GIT_ASKPASS.",
+  "5. `gh pr create` targeting `main` (no --draft, no --no-verify). Include a short summary and a test plan.",
+  "6. End your turn with a single trailing line: `PR: <url>` — so the orchestrator can link the PR.",
+  "",
+  "If blocked, end with `BLOCKED: <one-line reason>` instead of stopping silently.",
+].join("\n")
+
 export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Promise<PlanActionResult> {
   const rejection = await gate(sessionId, ctx)
   if (rejection) return { ok: false, reason: rejection }
@@ -152,35 +165,26 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
   const row = prepared.getSession(ctx.db, sessionId)
   const mode = row?.mode
 
-  setPipelineAdvancing(ctx, sessionId, true)
-
-  let result: PlanActionResult
-  try {
-    await killAndWait(sessionId, ctx)
-
-    if (mode === "ship-think") {
-      result = await handoffShipPhase(sessionId, "ship-plan", ctx)
-    } else {
-      const conversation = getConversationMessages(ctx.db, sessionId)
-      const typedConversation = conversation.map((m) => ({
-        role: m.role as "user" | "assistant",
-        text: m.text,
-      }))
-
-      const extraction = await extractDagItems(typedConversation)
-      if (extraction.error) {
-        result = { ok: false, reason: extraction.errorMessage ?? extraction.error }
-      } else {
-        result = await buildAndStartDag(extraction.items, sessionId, ctx)
-      }
+  if (mode === "ship-think") {
+    setPipelineAdvancing(ctx, sessionId, true)
+    try {
+      await killAndWait(sessionId, ctx)
+      const result = await handoffShipPhase(sessionId, "ship-plan", ctx)
+      if (!result.ok) setPipelineAdvancing(ctx, sessionId, false)
+      return result
+    } catch (err) {
+      setPipelineAdvancing(ctx, sessionId, false)
+      throw err
     }
-  } catch (err) {
-    setPipelineAdvancing(ctx, sessionId, false)
-    throw err
   }
 
-  if (!result.ok) setPipelineAdvancing(ctx, sessionId, false)
-  return result
+  try {
+    const ok = await ctx.registry.reply(sessionId, EXECUTE_DIRECTIVE)
+    if (!ok) return { ok: false, reason: "could not inject execute directive into session" }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 export async function handleSplit(sessionId: string, ctx: PlanActionCtx): Promise<PlanActionResult> {

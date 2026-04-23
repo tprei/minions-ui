@@ -13,7 +13,7 @@ import { Transcript, TranscriptUpgradeNotice } from './chat/transcript'
 import { MessageInput } from './chat/MessageInput'
 import { NewTaskBar } from './chat/NewTaskBar'
 import { QuickActionsBar } from './chat/QuickActionsBar'
-import { SlashCommandMenu, type SlashCommand } from './chat/SlashCommandMenu'
+import { SlashCommandMenu } from './chat/SlashCommandMenu'
 import { SessionTabs, type SessionTabId } from './chat/SessionTabs'
 import { DiffTab } from './chat/DiffTab'
 import { ScreenshotsTab } from './chat/ScreenshotsTab'
@@ -174,26 +174,8 @@ function ChatPane({
   const handleSend = (t: string, images?: Array<{ mediaType: string; dataBase64: string }>) => onSend(t, session.id, images)
   const handleQuickAction = (action: QuickAction) => onSend(action.message, session.id)
 
-  const handleSlashCommand = async (fullText: string, cmd: SlashCommand) => {
-    if (cmd.destructive) {
-      const ok = await confirm({
-        title: `Run ${cmd.cmd}?`,
-        message: cmd.hint,
-        destructive: true,
-        confirmLabel: cmd.cmd,
-      })
-      if (!ok) return
-    }
-    try {
-      await onSend(fullText, session.id)
-      setText('')
-    } catch (e) {
-      await confirm({
-        title: `${cmd.cmd} failed`,
-        message: e instanceof Error ? e.message : String(e),
-        mode: 'alert',
-      })
-    }
+  const handlePrefillCommand = (fullText: string) => {
+    setText(fullText)
   }
 
   const handleStop = async () => {
@@ -352,7 +334,7 @@ function ChatPane({
             )}
             <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
               <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />
-              <SlashCommandMenu session={session} context={text} onCommand={handleSlashCommand} />
+              <SlashCommandMenu session={session} context={text} onPrefill={handlePrefillCommand} />
               <MessageInput session={session} store={store} value={text} onValueChange={setText} onSend={handleSend} />
             </div>
           </>

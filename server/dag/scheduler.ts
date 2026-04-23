@@ -1,12 +1,49 @@
 import type { Database } from "bun:sqlite"
 import { readyNodes, advanceDag, failNode, resetFailedNode, nodeIndex, getUpstreamBranches, isDagComplete } from "./dag"
-import type { DagGraph, DagNode } from "./dag"
+import type { DagGraph, DagNode, DagInput } from "./dag"
 import { saveDag, loadDag, listDags } from "./store"
 import { updateStackComment } from "./stack-comment"
+import { buildDagChildPrompt } from "./dag-extract"
+import type { TopicMessage } from "./types"
 import type { SessionRegistry } from "../session/registry"
 import type { EngineEventBus } from "../events/bus"
 import type { SessionRunState } from "../events/types"
 import type { ApiDagNode, ApiDagGraph } from "../../shared/api-types"
+
+function fetchRootConversation(db: Database, rootSessionId: string): TopicMessage[] {
+  const rows = db
+    .query<{ type: string; payload: string }, [string]>(
+      "SELECT type, payload FROM session_events WHERE session_id = ? AND type IN ('user_message','assistant_text') ORDER BY seq ASC",
+    )
+    .all(rootSessionId)
+
+  const messages: TopicMessage[] = []
+  for (const row of rows) {
+    let payload: Record<string, unknown>
+    try {
+      payload = JSON.parse(row.payload) as Record<string, unknown>
+    } catch {
+      continue
+    }
+    const text = typeof payload.text === "string" ? payload.text : ""
+    if (!text) continue
+    if (row.type === "user_message") {
+      messages.push({ role: "user", text })
+    } else if (row.type === "assistant_text" && payload.final === true) {
+      messages.push({ role: "assistant", text })
+    }
+  }
+  return messages
+}
+
+function nodesToDagInputs(nodes: DagNode[]): DagInput[] {
+  return nodes.map((n) => ({
+    id: n.id,
+    title: n.title,
+    description: n.description,
+    dependsOn: n.dependsOn,
+  }))
+}
 
 const PR_URL_REGEX = /https:\/\/github\.com\/[^\s)]+\/pull\/\d+/
 
@@ -130,13 +167,14 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     node.status = "running"
 
     const upstreamBranches = getUpstreamBranches(graph, node.id)
-
-    let prompt = `${node.title}\n\n${node.description}`
-
-    if (upstreamBranches.length > 0) {
-      const cherryPickInfo = upstreamBranches.join(", ")
-      prompt = `${prompt}\n\nUpstream branches to incorporate: ${cherryPickInfo}`
-    }
+    const parentConversation = fetchRootConversation(db, graph.rootSessionId)
+    const prompt = buildDagChildPrompt(
+      parentConversation,
+      { id: node.id, title: node.title, description: node.description, dependsOn: node.dependsOn },
+      nodesToDagInputs(graph.nodes),
+      upstreamBranches,
+      false,
+    )
 
     try {
       const { session } = await registry.create({

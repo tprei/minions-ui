@@ -149,100 +149,49 @@ describe("plan-actions gating", () => {
     expect(result.reason).toBe("session not found")
   })
 
-  it("calls registry.stop before extracting items", async () => {
-    const sessionId = insertSession(db)
+  it("replies to the session (no kill, no DAG) for non-ship modes", async () => {
+    const sessionId = insertSession(db, { mode: "think" })
     const stopCalls: string[] = []
+    const replyCalls: Array<{ sessionId: string; text: string }> = []
     const startedDagIds: string[] = []
+    const registry = {
+      ...makeRegistry(stopCalls),
+      reply: async (sid: string, text: string) => {
+        replyCalls.push({ sessionId: sid, text })
+        return true
+      },
+    }
     const ctx: PlanActionCtx = {
       db,
-      registry: makeRegistry(stopCalls),
+      registry,
       scheduler: makeScheduler(startedDagIds),
     }
-
-    await handleExecute(sessionId, ctx)
-
-    expect(stopCalls).toContain(sessionId)
-  })
-
-  it("returns ok:false with no items when extraction returns empty array", async () => {
-    const sessionId = insertSession(db)
-    const stopCalls: string[] = []
-    const startedDagIds: string[] = []
-    const ctx: PlanActionCtx = {
-      db,
-      registry: makeRegistry(stopCalls),
-      scheduler: makeScheduler(startedDagIds),
-    }
-
-    mockSpawn.mockImplementation(() => makeEmptyChild())
 
     const result = await handleExecute(sessionId, ctx)
 
-    expect(result.ok).toBe(false)
-    expect(result.reason).toBe("no items extracted")
+    expect(result.ok).toBe(true)
+    expect(stopCalls).toHaveLength(0)
     expect(startedDagIds).toHaveLength(0)
+    expect(replyCalls).toHaveLength(1)
+    expect(replyCalls[0]?.sessionId).toBe(sessionId)
+    expect(replyCalls[0]?.text).toMatch(/PR: <url>/)
+    expect(replyCalls[0]?.text).toMatch(/gh pr create/)
   })
 
-  it("includes assistant_text events (final:true) in the extraction conversation", async () => {
-    const sessionId = insertSession(db)
-    const now = Date.now()
-    prepared.insertEvent(db, {
-      session_id: sessionId,
-      seq: 1,
-      turn: 0,
-      type: "user_message",
-      timestamp: now,
-      payload: { text: "please plan the work" },
-    })
-    prepared.insertEvent(db, {
-      session_id: sessionId,
-      seq: 2,
-      turn: 1,
-      type: "assistant_text",
-      timestamp: now + 1,
-      payload: { text: "DELTA_CHUNK_do_not_include", final: false },
-    })
-    prepared.insertEvent(db, {
-      session_id: sessionId,
-      seq: 3,
-      turn: 1,
-      type: "assistant_text",
-      timestamp: now + 2,
-      payload: { text: "FINAL_PLAN_build_the_schema", final: true },
-    })
-
-    const stdinWrites: string[] = []
-    mockSpawn.mockImplementation(() => ({
-      stdout: {
-        on: vi.fn((event: string, cb: (data: Buffer) => void) => {
-          if (event === "data") cb(Buffer.from("[]"))
-        }),
-      },
-      stderr: { on: vi.fn() },
-      stdin: {
-        write: vi.fn((data: string) => { stdinWrites.push(data) }),
-        end: vi.fn(),
-      },
-      on: vi.fn((event: string, cb: (code: number) => void) => {
-        if (event === "close") cb(0)
-      }),
-      kill: vi.fn(),
-    }))
-
-    const stopCalls: string[] = []
-    const startedDagIds: string[] = []
+  it("returns ok:false when reply fails to inject", async () => {
+    const sessionId = insertSession(db, { mode: "plan" })
+    const registry = {
+      ...makeRegistry([]),
+      reply: async () => false,
+    }
     const ctx: PlanActionCtx = {
       db,
-      registry: makeRegistry(stopCalls),
-      scheduler: makeScheduler(startedDagIds),
+      registry,
+      scheduler: makeScheduler([]),
     }
 
-    await handleExecute(sessionId, ctx)
-
-    const combined = stdinWrites.join("")
-    expect(combined).toContain("please plan the work")
-    expect(combined).toContain("FINAL_PLAN_build_the_schema")
-    expect(combined).not.toContain("DELTA_CHUNK_do_not_include")
+    const result = await handleExecute(sessionId, ctx)
+    expect(result.ok).toBe(false)
   })
 })
 
