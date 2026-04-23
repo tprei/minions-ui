@@ -25,7 +25,7 @@ function graphToRows(graph: DagGraph): { dagRow: Parameters<typeof prepared.inse
       id: node.id,
       slug: node.id,
       status: mapNodeStatus(node.status),
-      session_id: null,
+      session_id: node.sessionId ?? null,
       dependencies: node.dependsOn,
       dependents,
       payload: nodeToPayload(node),
@@ -111,6 +111,7 @@ export function loadDag(id: string, db?: Database): DagGraph | null {
       headSha: fields.headSha,
       prCommentId: fields.prCommentId,
       threadId: fields.threadId,
+      sessionId: row.session_id ?? undefined,
     }
   })
 

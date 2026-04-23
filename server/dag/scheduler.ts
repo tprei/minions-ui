@@ -102,13 +102,15 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
 
     try {
       const { session } = await registry.create({
-        mode: "task",
+        mode: "dag-task",
         prompt,
         repo: graph.repoUrl ?? graph.repo,
         startRef: upstreamBranches[upstreamBranches.length - 1],
+        metadata: { dagId: graph.id, dagNodeId: node.id },
       })
 
       node.status = "running"
+      node.sessionId = session.id
       nodeToSession.set(node.id, session.id)
       nodeToGraph.set(session.id, graph.id)
 
