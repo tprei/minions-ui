@@ -1,9 +1,34 @@
 import { useSignal, useComputed } from '@preact/signals'
+import { useRef, useCallback, useEffect, useState } from 'preact/hooks'
 import type { ConnectionStore } from '../state/types'
 import type { CreateSessionMode } from '../api/types'
 import { hasFeature } from '../api/features'
 import { formatRoute } from '../routing/route'
 import { recordVariantGroup } from '../groups/store'
+
+const VALID_IMAGE_TYPES = new Set<string>(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
+
+export interface ImageAttachment {
+  mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
+  dataBase64: string
+  objectUrl: string
+}
+
+function readFileAsBase64(file: File): Promise<{ mediaType: string; dataBase64: string; objectUrl: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const comma = result.indexOf(',')
+      if (comma === -1) { reject(new Error('Invalid data URL')); return }
+      const dataBase64 = result.slice(comma + 1)
+      const objectUrl = URL.createObjectURL(file)
+      resolve({ mediaType: file.type, dataBase64, objectUrl })
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('FileReader error'))
+    reader.readAsDataURL(file)
+  })
+}
 
 const COLLAPSE_KEY = 'minions-ui:newtaskbar-collapsed'
 
@@ -62,6 +87,50 @@ export function NewTaskBar({
   const variantCount = useSignal(1)
   const sending = useSignal(false)
   const error = useSignal<string | null>(null)
+  const [attachments, setAttachments] = useState<ImageAttachment[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const addFiles = useCallback(async (files: File[]) => {
+    const valid = files.filter((f) => VALID_IMAGE_TYPES.has(f.type))
+    if (valid.length === 0) return
+    const results = await Promise.all(valid.map(readFileAsBase64))
+    setAttachments((prev) => [
+      ...prev,
+      ...results.map((r) => ({
+        mediaType: r.mediaType as ImageAttachment['mediaType'],
+        dataBase64: r.dataBase64,
+        objectUrl: r.objectUrl,
+      })),
+    ])
+  }, [])
+
+  const handleFileChange = useCallback(
+    (e: Event) => {
+      const input = e.target as HTMLInputElement
+      if (!input.files) return
+      void addFiles(Array.from(input.files))
+      input.value = ''
+    },
+    [addFiles],
+  )
+
+  const removeAttachment = useCallback((idx: number) => {
+    setAttachments((prev) => {
+      const next = [...prev]
+      const removed = next.splice(idx, 1)
+      for (const r of removed) URL.revokeObjectURL(r.objectUrl)
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      setAttachments((prev) => {
+        for (const a of prev) URL.revokeObjectURL(a.objectUrl)
+        return []
+      })
+    }
+  }, [])
 
   const version = store.version.value
   const repos = version?.repos ?? []
@@ -134,6 +203,8 @@ export function NewTaskBar({
           createdAt: new Date().toISOString(),
         })
         prompt.value = ''
+        for (const a of attachments) URL.revokeObjectURL(a.objectUrl)
+        setAttachments([])
         if (errors.length > 0) {
           error.value = `${errors.length} variant${errors.length > 1 ? 's' : ''} failed to launch`
         }
@@ -146,6 +217,8 @@ export function NewTaskBar({
         })
         store.applySessionCreated(created)
         prompt.value = ''
+        for (const a of attachments) URL.revokeObjectURL(a.objectUrl)
+        setAttachments([])
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Send failed'
@@ -250,7 +323,53 @@ export function NewTaskBar({
         </select>
       </div>
 
+      {attachments.length > 0 && (
+        <div class="flex flex-wrap gap-2" data-testid="new-task-attachments">
+          {attachments.map((a, idx) => (
+            <div
+              key={a.objectUrl}
+              class="relative w-16 h-16 rounded-md overflow-hidden border border-slate-200 dark:border-slate-700 flex-shrink-0"
+            >
+              <img
+                src={a.objectUrl}
+                alt={`attachment ${idx + 1}`}
+                class="w-full h-full object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => removeAttachment(idx)}
+                class="absolute top-0 right-0 w-5 h-5 flex items-center justify-center bg-black/60 text-white text-[10px] rounded-bl"
+                aria-label={`Remove attachment ${idx + 1}`}
+                data-testid={`remove-attachment-${idx}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div class="flex items-end gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          class="hidden"
+          onChange={handleFileChange}
+          data-testid="new-task-file-input"
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={sending.value}
+          aria-label="Attach image"
+          title="Attach image"
+          class="shrink-0 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors border shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600"
+          data-testid="new-task-attach-btn"
+        >
+          <PaperclipIcon />
+        </button>
         <textarea
           value={prompt.value}
           onInput={(e) => { prompt.value = (e.currentTarget as HTMLTextAreaElement).value }}
@@ -293,5 +412,17 @@ export function NewTaskBar({
         </div>
       )}
     </div>
+  )
+}
+
+function PaperclipIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M15.621 4.379a3 3 0 0 0-4.242 0l-7 7a1.5 1.5 0 0 0 2.122 2.122l6.5-6.5a.75.75 0 0 1 1.06 1.06l-6.5 6.5a3 3 0 0 1-4.242-4.243l7-7a4.5 4.5 0 0 1 6.364 6.364l-7 7a6 6 0 0 1-8.485-8.486l5.5-5.5a.75.75 0 0 1 1.06 1.061l-5.5 5.5a4.5 4.5 0 0 0 6.365 6.364l7-7a3 3 0 0 0 0-4.243Z"
+        clipRule="evenodd"
+      />
+    </svg>
   )
 }
