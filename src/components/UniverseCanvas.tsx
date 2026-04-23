@@ -164,6 +164,7 @@ export interface UniverseCanvasProps {
   isActionLoading: boolean
   onNodeSelect?: (session: ApiSession) => void
   onOpenChat?: (sessionId: string) => void
+  onViewLogs?: (sessionId: string) => void
   accentColor?: string
 }
 
@@ -186,6 +187,7 @@ function UniverseCanvasInner({
   isActionLoading,
   onNodeSelect,
   onOpenChat,
+  onViewLogs,
 }: UniverseCanvasProps) {
   const theme = useTheme()
   const isDark = theme.value === 'dark'
@@ -407,6 +409,7 @@ function UniverseCanvasInner({
           session={detailSession}
           onClose={() => setDetailSession(null)}
           onOpenChat={onOpenChat}
+          onViewLogs={onViewLogs}
           sessions={sessions}
           dags={dags}
           onSelectSession={(s) => setDetailSession(s)}

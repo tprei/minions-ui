@@ -20,6 +20,7 @@ import { ScreenshotsTab } from './chat/ScreenshotsTab'
 import { PrPreviewCard } from './components/PrPreviewCard'
 import { AttentionBar, filterSessionsByReason } from './components/AttentionBar'
 import { UniverseCanvas } from './components/UniverseCanvas'
+import { SessionLogsPopup } from './components/SessionLogsPopup'
 import { ShipPipelineView } from './components/ShipPipeline'
 import { hasFeature } from './api/features'
 import type { ConnectionStore } from './state/types'
@@ -567,6 +568,7 @@ function ActiveView() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [attentionFilter, setAttentionFilter] = useState<AttentionReason | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
+  const [logsSessionId, setLogsSessionId] = useState<string | null>(null)
   const isOnline = useOnlineStatus()
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const route = currentRoute.value
@@ -667,6 +669,10 @@ function ActiveView() {
     viewMode.value = 'list'
   }, [])
 
+  const handleOpenLogs = useCallback((sid: string) => {
+    setLogsSessionId(sid)
+  }, [])
+
   const [cleaning, setCleaning] = useState(false)
   const handleClean = useCallback(async () => {
     if (!store) return
@@ -721,6 +727,7 @@ function ActiveView() {
     onCloseSession: handleCanvasClose,
     onOpenThread: () => {},
     onOpenChat: handleOpenChat,
+    onViewLogs: handleOpenLogs,
     isActionLoading,
     accentColor: conn.color,
   }
@@ -933,6 +940,18 @@ function ActiveView() {
           onClose={() => { showRuntime.value = null }}
         />
       )}
+      {logsSessionId !== null && (() => {
+        const logsSession = sessions.find((s) => s.id === logsSessionId)
+        const transcript = logsSession ? store.getTranscript(logsSession.id) : null
+        if (!logsSession || !transcript) return null
+        return (
+          <SessionLogsPopup
+            sessionSlug={logsSession.slug}
+            transcript={transcript}
+            onClose={() => setLogsSessionId(null)}
+          />
+        )
+      })()}
     </div>
   )
 }
