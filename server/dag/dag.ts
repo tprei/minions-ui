@@ -30,6 +30,7 @@ export interface DagNode {
   dependsOn: string[]
   status: DagNodeStatus
   threadId?: number
+  sessionId?: string
   branch?: string
   prUrl?: string
   error?: string

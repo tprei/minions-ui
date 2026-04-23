@@ -199,6 +199,7 @@ export interface VersionInfo {
 
 export type CreateSessionMode =
   | 'task'
+  | 'dag-task'
   | 'plan'
   | 'think'
   | 'review'

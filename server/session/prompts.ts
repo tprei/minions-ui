@@ -32,6 +32,12 @@ export const MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
     disallowedTools: [],
     autoExitOnComplete: false,
   },
+  'dag-task': {
+    systemPrompt: DEFAULT_TASK_PROMPT,
+    model: envModel('CLAUDE_TASK_MODEL', 'claude-sonnet-4-5-20250929'),
+    disallowedTools: [],
+    autoExitOnComplete: true,
+  },
   plan: {
     systemPrompt: DEFAULT_PLAN_PROMPT,
     model: envModel('CLAUDE_PLAN_MODEL', 'claude-opus-4-1-20250805'),

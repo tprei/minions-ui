@@ -59,6 +59,7 @@ export interface CreateSessionOpts {
   workspaceRoot?: string
   startRef?: string
   initialImages?: Array<{ mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; dataBase64: string }>
+  metadata?: Record<string, unknown>
 }
 
 export interface SessionRegistry {
@@ -140,7 +141,7 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       conversation: [],
       quota_sleep_until: null,
       quota_retry_count: 0,
-      metadata: {},
+      metadata: createOpts.metadata ?? {},
       pipeline_advancing: false,
     }
 
