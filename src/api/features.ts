@@ -4,6 +4,7 @@ import type { VersionInfo } from './types'
 export type FeatureName =
   | 'messages'
   | 'sessions-create'
+  | 'sessions-create-images'
   | 'sessions-variants'
   | 'pr-preview'
   | 'diff-viewer'
