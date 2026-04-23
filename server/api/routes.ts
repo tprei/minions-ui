@@ -24,6 +24,9 @@ import { handleExecute, handleSplit, handleStack, handleDag } from '../commands/
 import type { PlanScheduler } from '../commands/plan-actions'
 import { handleLandCommand } from '../commands/land'
 import type { LandingManager } from '../dag/landing'
+import { listDags } from '../dag/store'
+import { topologicalSort, nodeIndex } from '../dag/dag'
+import type { DagGraph } from '../dag/dag'
 import { loadOverrides, saveOverrides } from '../config/runtime-overrides'
 import { applyOverrides } from '../config/apply'
 import { RuntimeOverridesSchema } from '../config/schema'
@@ -126,6 +129,15 @@ function resolveSessionBySlug(slug: string, registry: SessionRegistry, dbProvide
   const rows = prepared.listSessions(db)
   const row = rows.find((r) => r.slug === slug)
   return row ? sessionRowToApi(row) : null
+}
+
+function findDagForSession(db: Database, sessionId: string): DagGraph | null {
+  const graphs = listDags(db)
+  for (const g of graphs) {
+    if (g.rootSessionId === sessionId) return g
+    if (g.nodes.some((n) => n.sessionId === sessionId)) return g
+  }
+  return null
 }
 
 function formatZod(issues: Array<{ path: Array<string | number>; message: string }>): string {
@@ -437,6 +449,47 @@ export function registerApiRoutes(
       if (command === 'doctor') {
         const result = await handleDoctorCommand()
         return c.json({ data: result })
+      }
+
+      if (command === 'land') {
+        if (!sessionId) return c.json({ error: 'sessionId required for /land' }, 400)
+        if (!landingManager) return c.json({ error: 'landing is not configured on this engine' }, 503)
+        const db = resolveDb()
+        const graph = findDagForSession(db, sessionId)
+        if (!graph) return c.json({ error: 'no DAG associated with this session' }, 422)
+
+        const idx = nodeIndex(graph)
+        const order = topologicalSort(graph)
+        const landable = order
+          .map((id) => idx.get(id))
+          .filter((n): n is NonNullable<typeof n> => !!n && n.status === 'done' && !!n.prUrl)
+
+        if (landable.length === 0) {
+          return c.json({ error: 'no nodes with a PR URL are ready to land' }, 422)
+        }
+
+        const landed: Array<{ nodeId: string; prUrl?: string }> = []
+        const failed: Array<{ nodeId: string; error: string }> = []
+        for (const node of landable) {
+          const result = await landingManager.landNode(node.id, graph)
+          if (result.ok) {
+            landed.push({ nodeId: node.id, prUrl: result.prUrl })
+          } else {
+            failed.push({ nodeId: node.id, error: result.error ?? 'unknown error' })
+            break
+          }
+        }
+
+        return c.json({
+          data: {
+            ok: failed.length === 0,
+            sessionId,
+            dagId: graph.id,
+            landed: landed.length,
+            failed: failed.length,
+            details: { landed, failed },
+          },
+        })
       }
 
       const modeEntry = SLASH_MODES.get(command as Parameters<typeof SLASH_MODES.get>[0])

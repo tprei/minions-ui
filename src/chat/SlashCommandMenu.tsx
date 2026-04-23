@@ -41,11 +41,11 @@ function commandsForMode(mode: string): SlashCommand[] {
 interface SlashCommandMenuProps {
   session: ApiSession
   context: string
-  onCommand: (fullText: string, command: SlashCommand) => void | Promise<void>
+  onPrefill: (fullText: string) => void
   disabled?: boolean
 }
 
-export function SlashCommandMenu({ session, context, onCommand, disabled }: SlashCommandMenuProps) {
+export function SlashCommandMenu({ session, context, onPrefill, disabled }: SlashCommandMenuProps) {
   const commands = commandsForMode(session.mode)
   const trimmed = context.trim()
   const hasContext = trimmed.length > 0
@@ -65,8 +65,8 @@ export function SlashCommandMenu({ session, context, onCommand, disabled }: Slas
             key={c.cmd}
             type="button"
             disabled={disabled}
-            onClick={() => void onCommand(full, c)}
-            title={hasContext ? `${full}` : `${c.cmd} — ${c.hint}`}
+            onClick={() => onPrefill(full)}
+            title={`${c.cmd} — ${c.hint} (prefills the chat; click Send to run)`}
             class={`rounded-full border px-3 py-1 text-xs font-mono transition-colors disabled:opacity-50 ${btnClass}`}
             data-testid={`slash-cmd-${c.cmd.replace('/', '')}`}
           >
