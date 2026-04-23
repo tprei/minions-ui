@@ -1,5 +1,18 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 
+function findScrollableParent(element: HTMLElement, stopAt: HTMLElement): HTMLElement | null {
+  let current: HTMLElement | null = element
+  while (current && current !== stopAt) {
+    const overflowY = window.getComputedStyle(current).overflowY
+    const isScrollable = overflowY === 'auto' || overflowY === 'scroll'
+    if (isScrollable && current.scrollHeight > current.clientHeight) {
+      return current
+    }
+    current = current.parentElement
+  }
+  return null
+}
+
 interface PullToRefreshOptions {
   onRefresh: () => void | Promise<void>
   threshold?: number
@@ -34,6 +47,13 @@ export function usePullToRefresh({
     if (!enabled || isRefreshing) return
     const container = containerRef.current
     if (!container) return
+
+    const target = e.target as HTMLElement
+    const scrollableParent = findScrollableParent(target, container)
+    if (scrollableParent && scrollableParent !== container) {
+      return
+    }
+
     scrollTopAtStart.current = container.scrollTop
     if (scrollTopAtStart.current === 0) {
       touchStartY.current = e.touches[0].clientY
@@ -44,6 +64,14 @@ export function usePullToRefresh({
     if (!enabled || isRefreshing || touchStartY.current === null) return
     const container = containerRef.current
     if (!container || container.scrollTop > 0) {
+      touchStartY.current = null
+      setPullDistance(0)
+      return
+    }
+
+    const target = e.target as HTMLElement
+    const scrollableParent = findScrollableParent(target, container)
+    if (scrollableParent && scrollableParent !== container) {
       touchStartY.current = null
       setPullDistance(0)
       return
