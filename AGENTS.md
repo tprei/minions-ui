@@ -18,7 +18,7 @@ If an implementation agent encounters ambiguity, unresolved design questions, or
 - One feature per branch. Open a PR; land via squash-merge.
 - Commit messages follow conventional commits: `feat(ui): ...`, `fix(api): ...`.
 - Never add "Generated with Claude Code" / co-author tags / "committed by agent" verbiage.
-- PR description: what changed, why, how to validate. Link to any cross-repo PR (see `docs/two-repo-prs.md`).
+- PR description: what changed, why, how to validate.
 
 ## Worktree hygiene
 
@@ -32,7 +32,7 @@ Delete the worktree after the PR merges.
 
 ## Monorepo workflow
 
-The engine lives in `server/`, the UI in `src/`. Changes spanning both should be done in a single PR. Legacy split-repo workflow is documented in `docs/two-repo-prs.md` for historical context.
+The engine lives in `server/`, the UI in `src/`. Changes spanning both go in a single PR — there is no separate `telegram-minions` repo to coordinate with.
 
 ## Available agents (global)
 

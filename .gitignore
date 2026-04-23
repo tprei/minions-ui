@@ -25,3 +25,5 @@ playwright.config.js
 .vapid.json
 .gh-token
 docker/.env
+.home/
+.claude/
