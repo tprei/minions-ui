@@ -4,6 +4,16 @@ import type { ApiDagGraph, ApiDagNode, ApiSession } from '../api/types'
 import type { ConnectionStore } from '../state/types'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
+const COLLAPSE_STORAGE_KEY = 'dag-panel-collapsed'
+
+function readInitialCollapsed(isDesktop: boolean): boolean {
+  if (typeof localStorage === 'undefined') return !isDesktop
+  const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY)
+  if (raw === 'true') return true
+  if (raw === 'false') return false
+  return !isDesktop
+}
+
 interface DagStatusPanelProps {
   session: ApiSession
   store: ConnectionStore
@@ -77,7 +87,7 @@ const DAG_NODE_LABELS: Record<ApiDagNode['status'], string> = {
 
 export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
-  const collapsed = useSignal(!isDesktop.value)
+  const collapsed = useSignal(readInitialCollapsed(isDesktop.value))
 
   const dag = useComputed(() => findDagForSession(store.dags.value, session))
   const parentSession = useComputed(() => {
@@ -86,8 +96,9 @@ export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps
   })
 
   useEffect(() => {
-    collapsed.value = !isDesktop.value
-  }, [session.id, isDesktop.value, collapsed])
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(COLLAPSE_STORAGE_KEY, String(collapsed.value))
+  }, [collapsed.value])
 
   const graph = dag.value
   if (!graph) return null
