@@ -101,7 +101,7 @@ afterEach(() => {
 })
 
 describe('POST /api/messages — inbound images', () => {
-  test('valid payload produces multi-block message with images then text', () => {
+  test('valid payload produces multi-block message with text then images', () => {
     const images = [
       { mediaType: 'image/png' as const, dataBase64: 'pngData123' },
       { mediaType: 'image/jpeg' as const, dataBase64: 'jpegData456' },
@@ -119,15 +119,15 @@ describe('POST /api/messages — inbound images', () => {
     const content = parsed.message.content
 
     expect(content).toHaveLength(3)
-    expect(content[0]?.type).toBe('image')
-    expect(content[0]?.source?.type).toBe('base64')
-    expect(content[0]?.source?.media_type).toBe('image/png')
-    expect(content[0]?.source?.data).toBe('pngData123')
+    expect(content[0]?.type).toBe('text')
+    expect(content[0]?.text).toBe('check these screenshots')
     expect(content[1]?.type).toBe('image')
-    expect(content[1]?.source?.media_type).toBe('image/jpeg')
-    expect(content[1]?.source?.data).toBe('jpegData456')
-    expect(content[2]?.type).toBe('text')
-    expect(content[2]?.text).toBe('check these screenshots')
+    expect(content[1]?.source?.type).toBe('base64')
+    expect(content[1]?.source?.media_type).toBe('image/png')
+    expect(content[1]?.source?.data).toBe('pngData123')
+    expect(content[2]?.type).toBe('image')
+    expect(content[2]?.source?.media_type).toBe('image/jpeg')
+    expect(content[2]?.source?.data).toBe('jpegData456')
   })
 
   test('rejects image exceeding 5 MB with 400', async () => {
