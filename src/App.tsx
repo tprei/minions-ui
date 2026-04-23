@@ -212,6 +212,10 @@ function ChatPane({
     }
   }
 
+  const handleLand = async (dagId: string, nodeId: string): Promise<void> => {
+    await onCommand({ action: 'land', dagId, nodeId })
+  }
+
   const handleClose = async () => {
     const ok = await confirm({
       title: `Close ${session.slug}?`,
@@ -322,7 +326,7 @@ function ChatPane({
         </div>
       </header>
       <WorktreeHeader session={session} store={store} />
-      <DagStatusPanel session={session} store={store} onSelect={onNavigate} />
+      <DagStatusPanel session={session} store={store} onSelect={onNavigate} onLand={handleLand} />
       <SessionTabs
         tabs={[
           { id: 'chat', label: 'Chat', available: true },

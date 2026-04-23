@@ -184,6 +184,7 @@ export type MinionCommand =
   | { action: 'stop'; sessionId: string }
   | { action: 'close'; sessionId: string }
   | { action: 'plan_action'; sessionId: string; planAction: PlanActionType; markdown?: string }
+  | { action: 'land'; dagId: string; nodeId: string }
 
 export interface RepoEntry {
   alias: string

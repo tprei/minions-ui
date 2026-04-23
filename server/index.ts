@@ -25,6 +25,7 @@ import {
   createDefaultConfig,
 } from './handlers/stubs'
 import { createDagScheduler } from './dag/scheduler'
+import { createLandingManager } from './dag/landing'
 import { LoopScheduler } from './loops/scheduler'
 import { ResourceMonitor } from './metrics/resource'
 import { createDigestBuilder } from './digest/digest'
@@ -132,7 +133,8 @@ resourceMonitor.start()
 
 startPushNotifier(bus)
 
-registerApiRoutes(app, registry, () => db, scheduler)
+const landingManager = createLandingManager({ bus })
+registerApiRoutes(app, registry, () => db, scheduler, landingManager)
 registerSseRoute(app, () => db)
 
 export default { port: PORT, fetch: app.fetch, idleTimeout: 0 }
