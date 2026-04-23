@@ -110,8 +110,8 @@ describe("DagScheduler", () => {
 
     const created: string[] = []
     const registry = makeRegistry(db, async (opts) => {
-      const session = makeSession(`session-${opts.prompt.split("\n")[0]}`, db)
-      created.push(opts.prompt.split("\n")[0]!)
+      const session = makeSession(`session-${created.length}`, db)
+      created.push(opts.prompt.slice(0, 40))
       return { session, runtime: {} as never }
     })
 
