@@ -12,7 +12,6 @@ export interface SplitOpts {
   db: Database
   scheduler: SplitScheduler
   repo?: string
-  parentThreadId?: number
 }
 
 export interface SplitResult {
@@ -25,14 +24,11 @@ export async function startSplit(
   opts: SplitOpts,
 ): Promise<SplitResult> {
   const dagId = randomUUID()
-  const parentThreadId = opts.parentThreadId ?? 0
   const repo = opts.repo ?? ""
 
   const parallelItems: DagInput[] = items.map((item) => ({ ...item, dependsOn: [] }))
 
-  const graph = buildDag(dagId, parallelItems, parentThreadId, repo)
-
-  void rootSessionId
+  const graph = buildDag(dagId, parallelItems, rootSessionId, repo)
 
   saveDag(graph, opts.db)
   await opts.scheduler.start(dagId)

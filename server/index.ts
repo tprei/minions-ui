@@ -64,6 +64,7 @@ const reconciled = reconciledRows?.count ?? 0
 console.log(`[minion] engine on :${PORT}, ${reconciled} sessions resumed`)
 
 const scheduler = createDagScheduler({ registry, db, bus, workspace: WORKSPACE_ROOT })
+await scheduler.reconcileOnBoot()
 
 const loopScheduler = new LoopScheduler({
   db,

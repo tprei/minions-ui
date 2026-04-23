@@ -23,17 +23,15 @@ export type SessionGroup =
 // which wins over variant group which wins over standalone.
 export function buildSessionGroups(sessions: ApiSession[], dags: ApiDagGraph[]): SessionGroup[] {
   const byId = new Map<string, ApiSession>()
-  const byThreadId = new Map<string, ApiSession>()
   for (const s of sessions) {
     byId.set(s.id, s)
-    if (s.threadId !== undefined) byThreadId.set(String(s.threadId), s)
   }
 
   const consumed = new Set<string>()
   const groups: SessionGroup[] = []
 
   for (const dag of dags) {
-    const parent = byThreadId.get(dag.rootTaskId) ?? null
+    const parent = byId.get(dag.rootTaskId) ?? null
     const childIds = Object.values(dag.nodes)
       .map((n) => n.session?.id)
       .filter((id): id is string => typeof id === 'string')

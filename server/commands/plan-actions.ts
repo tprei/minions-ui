@@ -117,7 +117,7 @@ async function buildAndStartDag(
   const sessionRow = prepared.getSession(ctx.db, sessionId)
   const repo = sessionRow?.repo ?? ""
 
-  const graph = buildDag(dagId, items, 0, repo)
+  const graph = buildDag(dagId, items, sessionId, repo)
   saveDag(graph, ctx.db)
   await ctx.scheduler.start(dagId)
 

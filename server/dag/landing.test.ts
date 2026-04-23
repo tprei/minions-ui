@@ -21,7 +21,7 @@ function makeGraph() {
   const graph = buildDag("dag-1", [
     { id: "a", title: "Task A", description: "First task", dependsOn: [] },
     { id: "b", title: "Task B", description: "Second task", dependsOn: ["a"] },
-  ], 1, "https://github.com/org/repo")
+  ], "root-session", "https://github.com/org/repo")
   graph.nodes[0]!.prUrl = "https://github.com/org/repo/pull/1"
   graph.nodes[0]!.branch = "minion/slug-a"
   graph.nodes[0]!.status = "done"
@@ -49,7 +49,7 @@ describe("LandingManager.landNode", () => {
     const manager = createLandingManager({ bus, execFile: exec })
     const graph = buildDag("dag-1", [
       { id: "a", title: "Task A", description: "First task", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
     graph.nodes[0]!.status = "done"
 
     const result = await manager.landNode("a", graph)
