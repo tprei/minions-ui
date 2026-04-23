@@ -248,7 +248,8 @@ describe('App view toggle', () => {
     const App = (await import('../src/App')).default
     render(<App />)
 
-    fireEvent.click(await screen.findByTestId('view-toggle-canvas'))
+    fireEvent.click(await screen.findByTestId('header-menu-btn'))
+    fireEvent.click(await screen.findByTestId('menu-view-canvas'))
 
     const modal = await screen.findByTestId('canvas-mobile-modal')
     expect(modal).toBeTruthy()
@@ -321,7 +322,8 @@ describe('App view toggle', () => {
     const App = (await import('../src/App')).default
     render(<App />)
 
-    fireEvent.click(await screen.findByTestId('view-toggle-ship'))
+    fireEvent.click(await screen.findByTestId('header-menu-btn'))
+    fireEvent.click(await screen.findByTestId('menu-view-ship'))
     const modal = await screen.findByTestId('ship-mobile-modal')
     expect(modal).toBeTruthy()
 

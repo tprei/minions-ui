@@ -39,6 +39,7 @@ import type { ApiDagGraph } from './api/types'
 import { currentRoute } from './routing/current'
 import { VariantGroupView } from './groups/VariantGroupView'
 import type { ApiSession, AttentionReason, MinionCommand, QuickAction } from './api/types'
+import { HeaderMenu } from './components/HeaderMenu'
 
 export type ViewMode = 'list' | 'canvas' | 'ship'
 
@@ -756,45 +757,58 @@ function ActiveView() {
           <ResourceChip store={store} onOpen={() => { showRuntime.value = 'resources' }} />
         )}
         <RunningBadge store={store} onSelect={handleOpenChat} />
-        <div class="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
-          <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />
-          <ThemeToggle />
-          {hasFeature(store, 'runtime-config') && (
+        {isDesktop.value ? (
+          <div class="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />
+            <ThemeToggle />
+            {hasFeature(store, 'runtime-config') && (
+              <button
+                type="button"
+                onClick={() => { showRuntime.value = 'config' }}
+                class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+                title="Runtime config"
+                aria-label="Open runtime config"
+                data-testid="header-runtime-config-btn"
+              >
+                <span aria-hidden="true">⚙️</span>
+              </button>
+            )}
+            {hasFeature(store, 'messages') && (
+              <button
+                type="button"
+                onClick={() => void handleClean()}
+                disabled={cleaning}
+                class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={cleaning ? 'Cleaning…' : 'Clean unused worktrees, branches, and session state'}
+                aria-label={cleaning ? 'Cleaning…' : 'Clean unused worktrees, branches, and session state'}
+                data-testid="header-clean-btn"
+              >
+                <span aria-hidden="true">🧹</span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => { showRuntime.value = 'config' }}
+              onClick={() => void store.refresh()}
               class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
-              title="Runtime config"
-              aria-label="Open runtime config"
-              data-testid="header-runtime-config-btn"
+              title="Refetch sessions and DAGs from the minion"
+              aria-label="Refetch sessions and DAGs from the minion"
+              data-testid="header-refresh-btn"
             >
-              <span aria-hidden="true">⚙️</span>
+              <span aria-hidden="true">🔄</span>
             </button>
-          )}
-          {hasFeature(store, 'messages') && (
-            <button
-              type="button"
-              onClick={() => void handleClean()}
-              disabled={cleaning}
-              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={cleaning ? 'Cleaning…' : 'Clean unused worktrees, branches, and session state'}
-              aria-label={cleaning ? 'Cleaning…' : 'Clean unused worktrees, branches, and session state'}
-              data-testid="header-clean-btn"
-            >
-              <span aria-hidden="true">🧹</span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => void store.refresh()}
-            class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
-            title="Refetch sessions and DAGs from the minion"
-            aria-label="Refetch sessions and DAGs from the minion"
-            data-testid="header-refresh-btn"
-          >
-            <span aria-hidden="true">🔄</span>
-          </button>
-        </div>
+          </div>
+        ) : (
+          <div class="ml-auto">
+            <HeaderMenu
+              onRuntimeConfig={hasFeature(store, 'runtime-config') ? () => { showRuntime.value = 'config' } : undefined}
+              onClean={hasFeature(store, 'messages') ? handleClean : undefined}
+              onRefresh={() => void store.refresh()}
+              showRuntimeConfig={hasFeature(store, 'runtime-config')}
+              showClean={hasFeature(store, 'messages')}
+              cleaning={cleaning}
+            />
+          </div>
+        )}
       </header>
       {store.error.value && (
         <div class="flex items-center gap-3 px-4 py-2 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 shrink-0">
