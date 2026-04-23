@@ -58,7 +58,7 @@ export function WorktreeHeader({
   session: ApiSession
   store: ConnectionStore
 }) {
-  const diffEnabled = hasFeature(store, 'diff-viewer')
+  const diffEnabled = hasFeature(store, 'diff')
   const stats = store.diffStatsBySessionId.value.get(session.id)
 
   useEffect(() => {

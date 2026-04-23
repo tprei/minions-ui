@@ -116,7 +116,7 @@ describe('WorktreeHeader', () => {
     expect(container.querySelector('[data-testid="worktree-header"]')).toBeNull()
   })
 
-  it('omits stats badge when diff-viewer feature is disabled', async () => {
+  it('omits stats badge when diff feature is disabled', async () => {
     const loadDiffStats = vi.fn().mockResolvedValue(undefined)
     const store = makeStore({ features: [], loadDiffStats })
     render(<WorktreeHeader session={makeSession()} store={store} />)
@@ -129,7 +129,7 @@ describe('WorktreeHeader', () => {
   it('renders +N −M stats when feature enabled and cache has entry', () => {
     const stats: DiffStats = { filesChanged: 3, insertions: 12, deletions: 4, truncated: false }
     const store = makeStore({
-      features: ['diff-viewer'],
+      features: ['diff'],
       initialStats: new Map([['s1', stats]]),
     })
     render(<WorktreeHeader session={makeSession()} store={store} />)
@@ -142,7 +142,7 @@ describe('WorktreeHeader', () => {
   it('singularizes the files label when exactly one file changed', () => {
     const stats: DiffStats = { filesChanged: 1, insertions: 2, deletions: 0, truncated: false }
     const store = makeStore({
-      features: ['diff-viewer'],
+      features: ['diff'],
       initialStats: new Map([['s1', stats]]),
     })
     render(<WorktreeHeader session={makeSession()} store={store} />)
@@ -154,7 +154,7 @@ describe('WorktreeHeader', () => {
   it('renders "no changes" label when all counters are zero', () => {
     const stats: DiffStats = { filesChanged: 0, insertions: 0, deletions: 0, truncated: false }
     const store = makeStore({
-      features: ['diff-viewer'],
+      features: ['diff'],
       initialStats: new Map([['s1', stats]]),
     })
     render(<WorktreeHeader session={makeSession()} store={store} />)
@@ -164,7 +164,7 @@ describe('WorktreeHeader', () => {
   it('renders +∞ −∞ when the diff is truncated', () => {
     const stats: DiffStats = { filesChanged: 999, insertions: 0, deletions: 0, truncated: true }
     const store = makeStore({
-      features: ['diff-viewer'],
+      features: ['diff'],
       initialStats: new Map([['s1', stats]]),
     })
     render(<WorktreeHeader session={makeSession()} store={store} />)
@@ -176,7 +176,7 @@ describe('WorktreeHeader', () => {
 
   it('calls loadDiffStats on mount when feature enabled and cache is empty', async () => {
     const loadDiffStats = vi.fn().mockResolvedValue(undefined)
-    const store = makeStore({ features: ['diff-viewer'], loadDiffStats })
+    const store = makeStore({ features: ['diff'], loadDiffStats })
     render(<WorktreeHeader session={makeSession()} store={store} />)
     await waitFor(() => expect(loadDiffStats).toHaveBeenCalledWith('s1'))
   })
@@ -185,7 +185,7 @@ describe('WorktreeHeader', () => {
     const loadDiffStats = vi.fn().mockResolvedValue(undefined)
     const stats: DiffStats = { filesChanged: 1, insertions: 1, deletions: 0, truncated: false }
     const store = makeStore({
-      features: ['diff-viewer'],
+      features: ['diff'],
       initialStats: new Map([['s1', stats]]),
       loadDiffStats,
     })

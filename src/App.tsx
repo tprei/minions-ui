@@ -314,8 +314,8 @@ function ChatPane({
       <SessionTabs
         tabs={[
           { id: 'chat', label: 'Chat', available: true },
-          { id: 'diff', label: 'Diff', available: hasFeature(store, 'diff-viewer') },
-          { id: 'screenshots', label: 'Screenshots', available: hasFeature(store, 'screenshots-http') },
+          { id: 'diff', label: 'Diff', available: hasFeature(store, 'diff') },
+          { id: 'screenshots', label: 'Screenshots', available: hasFeature(store, 'screenshots') },
         ]}
         active={activeTab}
         onChange={setActiveTab}
