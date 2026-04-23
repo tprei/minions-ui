@@ -177,6 +177,21 @@ describe('NewTaskBar', () => {
     await waitFor(() => expect(store.applySessionCreated).toHaveBeenCalledWith(created))
   })
 
+  it('navigates to the new session route after single-task create resolves', async () => {
+    const created = makeSession({ id: 'created-2', slug: 'brave-fox' })
+    const { store } = makeStore({
+      features: ['sessions-create'],
+      createSessionImpl: async () => created,
+    })
+    const navigate = vi.fn<(hash: string) => void>()
+    render(<NewTaskBar store={store} navigate={navigate} />)
+    const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
+    fireEvent.input(textarea, { target: { value: 'open thread after launch' } })
+    fireEvent.click(screen.getByTestId('new-task-send'))
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('#/s/brave-fox'))
+  })
+
   it('omits repo field from payload when no repos are configured', async () => {
     const { store, client } = makeStore({ features: ['sessions-create'], repos: [] })
     render(<NewTaskBar store={store} />)
