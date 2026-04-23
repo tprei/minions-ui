@@ -99,6 +99,7 @@ export function NewTaskBar({
 
   const canCreate = hasFeature(store, 'sessions-create')
   const canVariants = hasFeature(store, 'sessions-variants')
+  const canAttachImages = hasFeature(store, 'sessions-create-images')
   const wantVariants = useComputed(() => variantCount.value > 1)
 
   // Collapsed state is user-controlled via the − button, persisted in
@@ -367,26 +368,30 @@ export function NewTaskBar({
       )}
 
       <div class="flex items-end gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          class="hidden"
-          onChange={handleFileChange}
-          data-testid="new-task-file-input"
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={sending.value}
-          aria-label="Attach image"
-          title="Attach image"
-          class="shrink-0 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors border shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600"
-          data-testid="new-task-attach-btn"
-        >
-          <PaperclipIcon />
-        </button>
+        {canAttachImages && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              class="hidden"
+              onChange={handleFileChange}
+              data-testid="new-task-file-input"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending.value}
+              aria-label="Attach image"
+              title="Attach image"
+              class="shrink-0 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors border shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600"
+              data-testid="new-task-attach-btn"
+            >
+              <PaperclipIcon />
+            </button>
+          </>
+        )}
         <textarea
           ref={textareaRef}
           value={prompt.value}

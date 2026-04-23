@@ -279,3 +279,388 @@ describe('NewTaskBar', () => {
     expect(screen.getByTestId('new-task-send').textContent).toBe('Launch ×4')
   })
 })
+
+describe('NewTaskBar · image attachments', () => {
+  let createdUrls: string[]
+  let revokedUrls: string[]
+
+  beforeEach(() => {
+    localStorage.clear()
+    resetVariantGroupsForTests()
+    createdUrls = []
+    revokedUrls = []
+    let counter = 0
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => {
+        const url = `blob:mock-${counter++}`
+        createdUrls.push(url)
+        return url
+      }),
+      revokeObjectURL: vi.fn((url: string) => {
+        revokedUrls.push(url)
+      }),
+    })
+    if (!window.matchMedia) {
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+      })
+    }
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows paperclip attach button when sessions-create-images feature is available', () => {
+    const { store } = makeStore({ features: ['sessions-create', 'sessions-create-images'] })
+    render(<NewTaskBar store={store} />)
+    expect(screen.getByTestId('new-task-attach-btn')).toBeTruthy()
+  })
+
+  it('hides paperclip attach button when sessions-create-images feature is missing', () => {
+    const { store } = makeStore({ features: ['sessions-create'] })
+    render(<NewTaskBar store={store} />)
+    expect(screen.queryByTestId('new-task-attach-btn')).toBeNull()
+  })
+
+  it('paste event with image file queues attachment and shows thumbnail strip', async () => {
+    const fakeBlob = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' })
+    const fakeFile = new File([fakeBlob], 'paste.png', { type: 'image/png' })
+
+    interface FileReaderStub {
+      result: string | ArrayBuffer | null
+      onload: ((ev: ProgressEvent) => void) | null
+      onerror: ((ev: ProgressEvent) => void) | null
+    }
+    const readAsDataURLMock = vi.fn().mockImplementation(function (this: FileReaderStub) {
+      Promise.resolve().then(() => {
+        Object.defineProperty(this, 'result', { value: 'data:image/png;base64,abc123', configurable: true })
+        this.onload?.call(this, new ProgressEvent('load'))
+      })
+    })
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = readAsDataURLMock
+    })
+
+    const { store } = makeStore({ features: ['sessions-create', 'sessions-create-images'] })
+    render(<NewTaskBar store={store} />)
+
+    const dt = {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
+    }
+    const textarea = screen.getByTestId('new-task-prompt')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('new-task-attachment-strip')).toBeTruthy())
+    expect(screen.getByTestId('new-task-remove-attachment-0')).toBeTruthy()
+  })
+
+  it('file input button queues multiple attachments when selected', async () => {
+    const fakeFile1 = new File([new Uint8Array([1])], 'img1.png', { type: 'image/png' })
+    const fakeFile2 = new File([new Uint8Array([2])], 'img2.jpg', { type: 'image/jpeg' })
+
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,dGVzdA=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    const { store } = makeStore({ features: ['sessions-create', 'sessions-create-images'] })
+    render(<NewTaskBar store={store} />)
+
+    const fileInput = screen.getByTestId('new-task-file-input') as HTMLInputElement
+    Object.defineProperty(fileInput, 'files', {
+      value: [fakeFile1, fakeFile2],
+      configurable: true,
+    })
+    fireEvent.change(fileInput)
+
+    await waitFor(() => expect(screen.getByTestId('new-task-attachment-strip')).toBeTruthy())
+    expect(screen.getByTestId('new-task-remove-attachment-0')).toBeTruthy()
+    expect(screen.getByTestId('new-task-remove-attachment-1')).toBeTruthy()
+  })
+
+  it('remove button dismisses an attachment and revokes object URL', async () => {
+    const fakeFile = new File([new Uint8Array([1])], 'img.png', { type: 'image/png' })
+
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,YQ=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    const { store } = makeStore({ features: ['sessions-create', 'sessions-create-images'] })
+    render(<NewTaskBar store={store} />)
+
+    const dt = {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
+    }
+    const textarea = screen.getByTestId('new-task-prompt')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('new-task-remove-attachment-0')).toBeTruthy())
+    fireEvent.click(screen.getByTestId('new-task-remove-attachment-0'))
+    await waitFor(() => expect(screen.queryByTestId('new-task-attachment-strip')).toBeNull())
+    expect(revokedUrls.length).toBe(1)
+  })
+
+  it('sends images with prompt in single session mode and clears attachments', async () => {
+    const fakeFile = new File([new Uint8Array([1, 2, 3])], 'img.png', { type: 'image/png' })
+
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,dGVzdA=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    const { store, client } = makeStore({
+      features: ['sessions-create', 'sessions-create-images'],
+    })
+    render(<NewTaskBar store={store} />)
+
+    const dt = {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
+    }
+    const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('new-task-attachment-strip')).toBeTruthy())
+
+    fireEvent.input(textarea, { target: { value: 'look at this image' } })
+    fireEvent.click(screen.getByTestId('new-task-send'))
+
+    await waitFor(() => expect(client.createSession).toHaveBeenCalled())
+    const payload = client.createSession.mock.calls[0][0] as CreateSessionRequest
+    expect(payload.prompt).toBe('look at this image')
+    expect(payload.images).toBeDefined()
+    expect(payload.images).toHaveLength(1)
+    expect(payload.images![0]).toMatchObject({ mediaType: 'image/png', dataBase64: 'dGVzdA==' })
+
+    await waitFor(() => expect(screen.queryByTestId('new-task-attachment-strip')).toBeNull())
+    expect(revokedUrls.length).toBeGreaterThan(0)
+  })
+
+  it('sends images with prompt in variants mode', async () => {
+    const fakeFile = new File([new Uint8Array([1, 2, 3])], 'img.png', { type: 'image/png' })
+
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,dGVzdA=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    const { store, client } = makeStore({
+      features: ['sessions-create', 'sessions-variants', 'sessions-create-images'],
+    })
+    const navigate = vi.fn<(hash: string) => void>()
+    render(<NewTaskBar store={store} navigate={navigate} generateGroupId={() => 'g-abc'} />)
+
+    fireEvent.change(screen.getByTestId('variant-count'), { target: { value: '2' } })
+
+    const dt = {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
+    }
+    const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('new-task-attachment-strip')).toBeTruthy())
+
+    fireEvent.input(textarea, { target: { value: 'compare approaches for this' } })
+    fireEvent.click(screen.getByTestId('new-task-send'))
+
+    await waitFor(() => expect(client.createSessionVariants).toHaveBeenCalled())
+    const payload = client.createSessionVariants.mock.calls[0][0] as CreateSessionVariantsRequest
+    expect(payload.prompt).toBe('compare approaches for this')
+    expect(payload.count).toBe(2)
+    expect(payload.images).toBeDefined()
+    expect(payload.images).toHaveLength(1)
+    expect(payload.images![0]).toMatchObject({ mediaType: 'image/png', dataBase64: 'dGVzdA==' })
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('#/g/g-abc'))
+    expect(screen.queryByTestId('new-task-attachment-strip')).toBeNull()
+    expect(revokedUrls.length).toBeGreaterThan(0)
+  })
+
+  it('omits images field from payload when no attachments are present', async () => {
+    const { store, client } = makeStore({
+      features: ['sessions-create', 'sessions-create-images'],
+    })
+    render(<NewTaskBar store={store} />)
+
+    const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
+    fireEvent.input(textarea, { target: { value: 'no images here' } })
+    fireEvent.click(screen.getByTestId('new-task-send'))
+
+    await waitFor(() => expect(client.createSession).toHaveBeenCalled())
+    const payload = client.createSession.mock.calls[0][0] as CreateSessionRequest
+    expect(payload.images).toBeUndefined()
+  })
+
+  it('filters out non-image files from paste event', async () => {
+    const imageFile = new File([new Uint8Array([1])], 'img.png', { type: 'image/png' })
+    const textFile = new File([new Uint8Array([2])], 'doc.txt', { type: 'text/plain' })
+
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,dGVzdA=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    const { store } = makeStore({ features: ['sessions-create', 'sessions-create-images'] })
+    render(<NewTaskBar store={store} />)
+
+    const dt = {
+      items: [
+        { kind: 'file', type: 'image/png', getAsFile: () => imageFile },
+        { kind: 'file', type: 'text/plain', getAsFile: () => textFile },
+      ],
+    }
+    const textarea = screen.getByTestId('new-task-prompt')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('new-task-attachment-strip')).toBeTruthy())
+    expect(screen.getByTestId('new-task-remove-attachment-0')).toBeTruthy()
+    expect(screen.queryByTestId('new-task-remove-attachment-1')).toBeNull()
+  })
+
+  it('file input value is reset after selection to allow re-selecting same file', async () => {
+    const fakeFile = new File([new Uint8Array([1])], 'img.png', { type: 'image/png' })
+
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,dGVzdA=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    const { store } = makeStore({ features: ['sessions-create', 'sessions-create-images'] })
+    render(<NewTaskBar store={store} />)
+
+    const fileInput = screen.getByTestId('new-task-file-input') as HTMLInputElement
+    Object.defineProperty(fileInput, 'files', {
+      value: [fakeFile],
+      configurable: true,
+    })
+    fireEvent.change(fileInput)
+
+    await waitFor(() => expect(screen.getByTestId('new-task-attachment-strip')).toBeTruthy())
+    expect(fileInput.value).toBe('')
+  })
+
+  it('clears prompt and revokes URLs on successful single session creation', async () => {
+    const fakeFile = new File([new Uint8Array([1])], 'img.png', { type: 'image/png' })
+
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,dGVzdA=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    const created = makeSession({ id: 'new-session', slug: 'new-slug' })
+    const { store } = makeStore({
+      features: ['sessions-create', 'sessions-create-images'],
+      createSessionImpl: async () => created,
+    })
+    render(<NewTaskBar store={store} />)
+
+    const dt = {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
+    }
+    const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('new-task-attachment-strip')).toBeTruthy())
+
+    fireEvent.input(textarea, { target: { value: 'test task' } })
+    fireEvent.click(screen.getByTestId('new-task-send'))
+
+    await waitFor(() => expect(textarea.value).toBe(''))
+    expect(screen.queryByTestId('new-task-attachment-strip')).toBeNull()
+    expect(revokedUrls.length).toBeGreaterThan(0)
+  })
+
+  it('clears prompt and revokes URLs on successful variant session creation', async () => {
+    const fakeFile = new File([new Uint8Array([1])], 'img.png', { type: 'image/png' })
+
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,dGVzdA=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    const { store } = makeStore({
+      features: ['sessions-create', 'sessions-variants', 'sessions-create-images'],
+    })
+    const navigate = vi.fn<(hash: string) => void>()
+    render(<NewTaskBar store={store} navigate={navigate} generateGroupId={() => 'g-xyz'} />)
+
+    fireEvent.change(screen.getByTestId('variant-count'), { target: { value: '3' } })
+
+    const dt = {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
+    }
+    const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('new-task-attachment-strip')).toBeTruthy())
+
+    fireEvent.input(textarea, { target: { value: 'variant test' } })
+    fireEvent.click(screen.getByTestId('new-task-send'))
+
+    await waitFor(() => expect(textarea.value).toBe(''))
+    expect(screen.queryByTestId('new-task-attachment-strip')).toBeNull()
+    expect(revokedUrls.length).toBeGreaterThan(0)
+  })
+})
