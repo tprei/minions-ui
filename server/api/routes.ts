@@ -74,6 +74,7 @@ const CommandSchema = z.discriminatedUnion('action', [
 ])
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024
 
 const ImageSchema = z.object({
   mediaType: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']),
@@ -276,11 +277,16 @@ export function registerApiRoutes(
     const { text, sessionId, images } = parsed.data
 
     if (images) {
+      let totalBytes = 0
       for (const img of images) {
         const byteCount = Math.floor((img.dataBase64.length * 3) / 4)
         if (byteCount > MAX_IMAGE_BYTES) {
           return c.json({ error: `Image exceeds 5 MB limit (decoded ~${byteCount} bytes)` }, 400)
         }
+        totalBytes += byteCount
+      }
+      if (totalBytes > MAX_TOTAL_IMAGE_BYTES) {
+        return c.json({ error: `Total image payload exceeds 20 MB limit (decoded ~${totalBytes} bytes)` }, 400)
       }
     }
 

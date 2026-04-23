@@ -200,4 +200,32 @@ describe('POST /api/messages — inbound images', () => {
 
     expect(res.status).toBe(400)
   })
+
+  test('rejects total payload exceeding 20 MB with 400', async () => {
+    const { spawnFn } = makeCapturingSpawnFn()
+    const app = new Hono()
+    const registry = createSessionRegistry({ getDb: () => testDb, spawnFn })
+    registerApiRoutes(app, registry, () => testDb)
+
+    const image4MB = 'A'.repeat(Math.ceil((4 * 1024 * 1024 * 4) / 3))
+    const res = await app.fetch(new Request('http://localhost/api/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        text: 'hello',
+        images: [
+          { mediaType: 'image/png', dataBase64: image4MB },
+          { mediaType: 'image/jpeg', dataBase64: image4MB },
+          { mediaType: 'image/gif', dataBase64: image4MB },
+          { mediaType: 'image/webp', dataBase64: image4MB },
+          { mediaType: 'image/png', dataBase64: image4MB },
+          { mediaType: 'image/jpeg', dataBase64: image4MB },
+        ],
+      }),
+    }))
+
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toContain('20 MB')
+  })
 })
