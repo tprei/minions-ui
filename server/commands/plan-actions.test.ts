@@ -10,6 +10,8 @@ mock.module("node:child_process", () => ({
 import { handleExecute, handleSplit, handleStack, handleDag } from "./plan-actions"
 import type { PlanActionCtx } from "./plan-actions"
 import type { SessionRegistry } from "../session/registry"
+import type { SessionRuntime } from "../session/runtime"
+import type { ApiSession } from "../../shared/api-types"
 import type { SpawnedChild } from "../dag/claude-extract"
 import { spawn } from "node:child_process"
 
@@ -149,16 +151,37 @@ describe("plan-actions gating", () => {
     expect(result.reason).toBe("session not found")
   })
 
-  it("replies to the session (no kill, no DAG) for non-ship modes", async () => {
+  it("spawns a new child task session for think/plan/review modes", async () => {
     const sessionId = insertSession(db, { mode: "think" })
+    prepared.insertEvent(db, {
+      session_id: sessionId,
+      seq: 1,
+      turn: 1,
+      type: "assistant_text",
+      timestamp: Date.now(),
+      payload: { text: "Here is my analysis of the problem", final: true, blockId: "block-1" },
+    })
     const stopCalls: string[] = []
-    const replyCalls: Array<{ sessionId: string; text: string }> = []
+    const createCalls: Array<{ mode: string; prompt: string; parentId?: string }> = []
     const startedDagIds: string[] = []
-    const registry = {
+    const mockRuntime: Partial<SessionRuntime> = {
+      running: false,
+      currentClaudeSessionId: undefined,
+      start: async () => {},
+      injectInput: async () => false,
+      stop: async () => {},
+    }
+    const mockSession: Partial<ApiSession> = {
+      id: "child-session-id",
+    }
+    const registry: SessionRegistry = {
       ...makeRegistry(stopCalls),
-      reply: async (sid: string, text: string) => {
-        replyCalls.push({ sessionId: sid, text })
-        return true
+      create: async (opts) => {
+        createCalls.push({ mode: opts.mode, prompt: opts.prompt, parentId: opts.parentId })
+        return {
+          session: mockSession as ApiSession,
+          runtime: mockRuntime as SessionRuntime,
+        }
       },
     }
     const ctx: PlanActionCtx = {
@@ -170,20 +193,19 @@ describe("plan-actions gating", () => {
     const result = await handleExecute(sessionId, ctx)
 
     expect(result.ok).toBe(true)
-    expect(stopCalls).toHaveLength(0)
-    expect(startedDagIds).toHaveLength(0)
-    expect(replyCalls).toHaveLength(1)
-    expect(replyCalls[0]?.sessionId).toBe(sessionId)
-    expect(replyCalls[0]?.text).toMatch(/PR: <url>/)
-    expect(replyCalls[0]?.text).toMatch(/gh pr create/)
+    expect(result.dagId).toBe("child-session-id")
+    expect(stopCalls).toHaveLength(1)
+    expect(stopCalls[0]).toBe(sessionId)
+    expect(createCalls).toHaveLength(1)
+    expect(createCalls[0]?.mode).toBe("dag-task")
+    expect(createCalls[0]?.parentId).toBe(sessionId)
+    expect(createCalls[0]?.prompt).toContain("Here is my analysis of the problem")
+    expect(createCalls[0]?.prompt).toContain("gh pr create")
   })
 
-  it("returns ok:false when reply fails to inject", async () => {
+  it("returns ok:false when there is no plan to execute for think/plan/review modes", async () => {
     const sessionId = insertSession(db, { mode: "plan" })
-    const registry = {
-      ...makeRegistry([]),
-      reply: async () => false,
-    }
+    const registry = makeRegistry([])
     const ctx: PlanActionCtx = {
       db,
       registry,
@@ -192,6 +214,33 @@ describe("plan-actions gating", () => {
 
     const result = await handleExecute(sessionId, ctx)
     expect(result.ok).toBe(false)
+    expect(result.reason).toBe("no plan/analysis to execute")
+  })
+
+  it("replies to the session for task mode (no child session spawn)", async () => {
+    const sessionId = insertSession(db, { mode: "task" })
+    const replyCalls: Array<{ sessionId: string; text: string }> = []
+    const stopCalls: string[] = []
+    const registry = {
+      ...makeRegistry(stopCalls),
+      reply: async (sid: string, text: string) => {
+        replyCalls.push({ sessionId: sid, text })
+        return true
+      },
+    }
+    const ctx: PlanActionCtx = {
+      db,
+      registry,
+      scheduler: makeScheduler([]),
+    }
+
+    const result = await handleExecute(sessionId, ctx)
+
+    expect(result.ok).toBe(true)
+    expect(stopCalls).toHaveLength(0)
+    expect(replyCalls).toHaveLength(1)
+    expect(replyCalls[0]?.sessionId).toBe(sessionId)
+    expect(replyCalls[0]?.text).toContain("gh pr create")
   })
 })
 

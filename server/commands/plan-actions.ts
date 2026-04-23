@@ -178,6 +178,33 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
     }
   }
 
+  if (mode === "think" || mode === "plan" || mode === "review") {
+    setPipelineAdvancing(ctx, sessionId, true)
+    try {
+      await killAndWait(sessionId, ctx)
+      const plan = getLastAssistantMessage(ctx.db, sessionId)
+      if (!plan) {
+        setPipelineAdvancing(ctx, sessionId, false)
+        return { ok: false, reason: "no plan/analysis to execute" }
+      }
+
+      const prompt = [plan, "", EXECUTE_DIRECTIVE].join("\n")
+
+      const { session } = await ctx.registry.create({
+        mode: "dag-task",
+        prompt,
+        repo: row?.repo ?? "",
+        parentId: sessionId,
+      })
+
+      setPipelineAdvancing(ctx, sessionId, false)
+      return { ok: true, dagId: session.id }
+    } catch (err) {
+      setPipelineAdvancing(ctx, sessionId, false)
+      throw err
+    }
+  }
+
   try {
     const ok = await ctx.registry.reply(sessionId, EXECUTE_DIRECTIVE)
     if (!ok) return { ok: false, reason: "could not inject execute directive into session" }
