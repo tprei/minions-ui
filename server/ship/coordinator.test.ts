@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, mock } from 'bun:test'
+import { describe, test, expect, beforeEach, mock, spyOn } from 'bun:test'
 import type { Database } from 'bun:sqlite'
 import { openDatabase, prepared, runMigrations } from '../db/sqlite'
 import { advanceShip, DIRECTIVE_PLAN, DIRECTIVE_VERIFY } from './coordinator'
@@ -411,6 +411,48 @@ describe('advanceShip', () => {
       await advanceShip(sessionId, 'plan', ctx)
 
       expect(registry.reply).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('logging', () => {
+    test('logs stage transition to console', async () => {
+      const sessionId = 'session-22'
+      createSession(db, sessionId, 'ship', 'think')
+
+      const consoleLogSpy = spyOn(console, 'log')
+
+      await advanceShip(sessionId, undefined, ctx)
+
+      expect(consoleLogSpy).toHaveBeenCalledWith('[ship]', sessionId, 'stage', 'think', '->', 'plan')
+
+      consoleLogSpy.mockRestore()
+    })
+
+    test('logs every stage transition', async () => {
+      const sessionId = 'session-23'
+      createSession(db, sessionId, 'ship', 'think')
+
+      const consoleLogSpy = spyOn(console, 'log')
+
+      // think → plan
+      await advanceShip(sessionId, undefined, ctx)
+      expect(consoleLogSpy).toHaveBeenCalledWith('[ship]', sessionId, 'stage', 'think', '->', 'plan')
+
+      // plan → dag
+      await advanceShip(sessionId, undefined, ctx)
+      expect(consoleLogSpy).toHaveBeenCalledWith('[ship]', sessionId, 'stage', 'plan', '->', 'dag')
+
+      // dag → verify
+      await advanceShip(sessionId, undefined, ctx)
+      expect(consoleLogSpy).toHaveBeenCalledWith('[ship]', sessionId, 'stage', 'dag', '->', 'verify')
+
+      // verify → done
+      await advanceShip(sessionId, undefined, ctx)
+      expect(consoleLogSpy).toHaveBeenCalledWith('[ship]', sessionId, 'stage', 'verify', '->', 'done')
+
+      expect(consoleLogSpy).toHaveBeenCalledTimes(4)
+
+      consoleLogSpy.mockRestore()
     })
   })
 })

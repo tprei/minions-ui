@@ -408,6 +408,71 @@ describe('SessionRegistry', () => {
       expect(row?.status).toBe('failed')
       expect(registry.get('recon-2')).toBeUndefined()
     })
+
+    test('resumes ship coordinator with claude_session_id on boot', async () => {
+      const bare = trackedDir('bare-ship-resume')
+      const work = trackedDir('work-ship-resume')
+      const workspaceRoot = trackedDir('ws-ship-resume')
+      await initLocalBareRepo(bare, work)
+
+      const repoName = path.basename(bare).replace(/\.git$/, '')
+      const bareDir = path.join(workspaceRoot, '.repos', `${repoName}.git`)
+
+      const handle = await import('../workspace/prepare').then((m) =>
+        m.prepareWorkspace({ slug: 'ship-resume-slug', repoUrl: bare, workspaceRoot, bootstrap: false }),
+      )
+
+      const now = Date.now()
+      db.run(
+        `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, stage)
+         VALUES ('ship-coord', 'ship-resume-slug', 'running', 'ship the feature', 'ship', ?, ?, ?, null, null, null, 'claude-ship-123', ?, ?, ?, 0, '[]', '[]', '[]', 'dag')`,
+        [bare, handle.branch, bareDir, workspaceRoot, now, now],
+      )
+
+      let capturedArgs: string[] = []
+      const capturingSpawn: SpawnFn = (argv, opts) => {
+        capturedArgs = argv
+        return makeNoopSpawnFn()(argv, opts)
+      }
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: capturingSpawn })
+
+      // Check status before reconcile - should be 'running'
+      const beforeRow = db.query<{ status: string }, [string]>('SELECT status FROM sessions WHERE id = ?').get('ship-coord')
+      expect(beforeRow?.status).toBe('running')
+
+      await registry.reconcileOnBoot()
+
+      // Should have spawned with --resume
+      expect(capturedArgs).toContain('--resume')
+      const resumeIdx = capturedArgs.indexOf('--resume')
+      expect(capturedArgs[resumeIdx + 1]).toBe('claude-ship-123')
+
+      // The noop spawn completes immediately, so the status will be 'completed'
+      // What matters is that resumeRuntime was called and --resume flag was passed
+      await new Promise<void>((r) => setTimeout(r, 200))
+
+      // Status will be 'completed' after the noop process exits
+      const afterRow = db.query<{ status: string }, [string]>('SELECT status FROM sessions WHERE id = ?').get('ship-coord')
+      expect(afterRow?.status).toBe('completed')
+    }, 60_000)
+
+    test('marks ship coordinator as failed if resume throws', async () => {
+      const now = Date.now()
+      db.run(
+        `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, stage)
+         VALUES ('ship-fail', 'ship-fail-slug', 'running', 'ship task', 'ship', null, 'minion/ship-fail-slug', null, null, null, null, 'claude-fail', null, ?, ?, 0, '[]', '[]', '[]', 'plan')`,
+        [now, now],
+      )
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
+      await registry.reconcileOnBoot()
+
+      // Missing workspace should cause resume to fail
+      const row = db.query<{ status: string }, [string]>('SELECT status FROM sessions WHERE id = ?').get('ship-fail')
+      expect(row?.status).toBe('failed')
+      expect(registry.get('ship-fail')).toBeUndefined()
+    })
   })
 
   describe('session.snapshot events', () => {

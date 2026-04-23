@@ -351,7 +351,9 @@ export class SessionRuntime {
 
   private startTimers(): void {
     const sessionTimeoutMs = this.opts.sessionTimeoutMs ?? 60 * 60 * 1000
-    const inactivityTimeoutMs = this.opts.inactivityTimeoutMs ?? 15 * 60 * 1000
+    // Ship coordinators need much longer inactivity timeout since they may be idle during dag stage
+    const defaultInactivityMs = this.opts.mode === 'ship' ? 24 * 60 * 60 * 1000 : 15 * 60 * 1000
+    const inactivityTimeoutMs = this.opts.inactivityTimeoutMs ?? defaultInactivityMs
 
     this.hardTimer = setTimeout(() => {
       console.warn(`[runtime] hard session timeout for ${this.opts.sessionId}`)

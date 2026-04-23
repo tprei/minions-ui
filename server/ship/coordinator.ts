@@ -140,6 +140,8 @@ export async function advanceShip(
       [nextStage, now, sessionId],
     )
 
+    console.log('[ship]', sessionId, 'stage', currentStage, '->', nextStage)
+
     // Emit SSE event
     const updatedRow = prepared.getSession(ctx.db, sessionId)
     if (updatedRow) {
