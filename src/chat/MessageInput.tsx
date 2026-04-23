@@ -1,6 +1,8 @@
 import { useRef, useCallback, useState } from 'preact/hooks'
 import type { ApiSession } from '../api/types'
+import type { ConnectionStore } from '../state/types'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
+import { hasFeature } from '../api/features'
 
 const PLACEHOLDER = 'Send instructions to the agent — Enter to send, Shift+Enter for newline'
 
@@ -12,6 +14,7 @@ export interface ImageAttachment {
 
 interface MessageInputProps {
   session: ApiSession
+  store: ConnectionStore
   value: string
   onValueChange: (text: string) => void
   onSend: (text: string, images?: Array<{ mediaType: string; dataBase64: string }>) => Promise<void>
@@ -35,7 +38,7 @@ function readFileAsBase64(file: File): Promise<{ mediaType: string; dataBase64: 
   })
 }
 
-export function MessageInput({ value, onValueChange, onSend }: MessageInputProps) {
+export function MessageInput({ value, onValueChange, onSend, store }: MessageInputProps) {
   const [sending, setSending] = useState(false)
   const [errorText, setErrorText] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<ImageAttachment[]>([])
@@ -150,6 +153,10 @@ export function MessageInput({ value, onValueChange, onSend }: MessageInputProps
     async (text: string, currentAttachments: ImageAttachment[]) => {
       const trimmed = text.trim()
       if (!trimmed || sending) return
+      if (currentAttachments.length > 0 && !hasFeature(store, 'sessions-create-images')) {
+        setErrorText('Image attachments require library ≥ 1.120.0')
+        return
+      }
       pendingRef.current = { text: trimmed, images: currentAttachments }
       setErrorText(null)
       setSending(true)
@@ -172,7 +179,7 @@ export function MessageInput({ value, onValueChange, onSend }: MessageInputProps
         setSending(false)
       }
     },
-    [sending, onSend, onValueChange],
+    [sending, onSend, onValueChange, store],
   )
 
   const handleKeyDown = useCallback(
@@ -269,26 +276,30 @@ export function MessageInput({ value, onValueChange, onSend }: MessageInputProps
         </div>
       )}
       <div class="flex items-end gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          class="hidden"
-          onChange={handleFileChange}
-          data-testid="file-input"
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={sending}
-          aria-label="Attach image"
-          title="Attach image"
-          class="shrink-0 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors border shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600"
-          data-testid="attach-btn"
-        >
-          <PaperclipIcon />
-        </button>
+        {hasFeature(store, 'sessions-create-images') && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              class="hidden"
+              onChange={handleFileChange}
+              data-testid="file-input"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending}
+              aria-label="Attach image"
+              title="Attach image"
+              class="shrink-0 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors border shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600"
+              data-testid="attach-btn"
+            >
+              <PaperclipIcon />
+            </button>
+          </>
+        )}
         <textarea
           ref={textareaRef}
           value={value}

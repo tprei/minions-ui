@@ -317,7 +317,7 @@ function ChatPane({
             <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
               <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />
               <SlashCommandMenu session={session} context={text} onCommand={handleSlashCommand} />
-              <MessageInput session={session} value={text} onValueChange={setText} onSend={handleSend} />
+              <MessageInput session={session} store={store} value={text} onValueChange={setText} onSend={handleSend} />
             </div>
           </>
         )}

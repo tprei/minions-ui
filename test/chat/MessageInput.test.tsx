@@ -1,8 +1,10 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/preact'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useState } from 'preact/hooks'
+import { signal } from '@preact/signals'
 import { MessageInput } from '../../src/chat/MessageInput'
-import type { ApiSession } from '../../src/api/types'
+import type { ApiSession, VersionInfo } from '../../src/api/types'
+import type { ConnectionStore } from '../../src/state/types'
 
 beforeEach(() => {
   if (!window.matchMedia) {
@@ -32,9 +34,14 @@ const session: ApiSession = {
   conversation: [],
 }
 
-function Controlled({ onSend }: { onSend: (text: string, images?: Array<{ mediaType: string; dataBase64: string }>) => Promise<void> }) {
+function makeStore(features: string[] = ['sessions-create-images']): ConnectionStore {
+  const version: VersionInfo = { apiVersion: '1', libraryVersion: '1.120.0', features }
+  return { version: signal(version) } as unknown as ConnectionStore
+}
+
+function Controlled({ onSend, store }: { onSend: (text: string, images?: Array<{ mediaType: string; dataBase64: string }>) => Promise<void>; store?: ConnectionStore }) {
   const [text, setText] = useState('')
-  return <MessageInput session={session} onSend={onSend} value={text} onValueChange={setText} />
+  return <MessageInput session={session} store={store ?? makeStore()} onSend={onSend} value={text} onValueChange={setText} />
 }
 
 function getTextarea() {
@@ -280,9 +287,54 @@ describe('MessageInput · image attachments', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows paperclip attach button', () => {
-    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+  it('shows paperclip attach button when feature is available', () => {
+    const store = makeStore(['sessions-create-images'])
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} store={store} />)
     expect(screen.getByTestId('attach-btn')).toBeTruthy()
+  })
+
+  it('hides paperclip attach button when feature is not available', () => {
+    const store = makeStore([])
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} store={store} />)
+    expect(screen.queryByTestId('attach-btn')).toBeNull()
+  })
+
+  it('shows error when trying to send images without feature support', async () => {
+    const store = makeStore([])
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    const fakeFile = new File([new Uint8Array([1, 2, 3])], 'img.png', { type: 'image/png' })
+
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,dGVzdA=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    render(<Controlled onSend={onSend} store={store} />)
+
+    const dt = {
+      items: [
+        { kind: 'file', type: 'image/png', getAsFile: () => fakeFile },
+      ],
+    }
+    const textarea = screen.getByTestId('message-textarea')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+
+    fireEvent.input(textarea, { target: { value: 'test message' } })
+    fireEvent.click(screen.getByTestId('send-btn'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Image attachments require library ≥ 1\.120\.0/)).toBeTruthy()
+    })
+    expect(onSend).not.toHaveBeenCalled()
   })
 
   it('paste event with image file queues attachment and shows thumbnail strip', async () => {
