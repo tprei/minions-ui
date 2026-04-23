@@ -318,11 +318,9 @@ describe('SessionRegistry', () => {
       expect(capturedArgs).toContain('--resume')
       const resumeIdx = capturedArgs.indexOf('--resume')
       expect(capturedArgs[resumeIdx + 1]).toBe('claude-abc')
-
-      expect(registry.get('reply-resume')).toBeDefined()
     }, 60_000)
 
-    test('returns false when runtime proc has already exited', async () => {
+    test('throws when the session has no claude_session_id to resume from', async () => {
       const bare = trackedDir('bare-reply')
       const work = trackedDir('work-reply')
       const workspaceRoot = trackedDir('ws-reply')
@@ -334,8 +332,7 @@ describe('SessionRegistry', () => {
 
       await new Promise<void>((r) => setTimeout(r, 100))
 
-      const ok = await registry.reply(session.id, 'more work')
-      expect(ok).toBe(false)
+      await expect(registry.reply(session.id, 'more work')).rejects.toThrow(/claude_session_id/)
     }, 30_000)
   })
 

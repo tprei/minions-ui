@@ -102,6 +102,7 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
   function wireCompletionHandler(sessionId: string): void {
     bus.onKind('session.completed', (e) => {
       if (e.sessionId !== sessionId) return
+      runtimes.delete(sessionId)
       emitSnapshot(sessionId)
     })
   }
@@ -271,7 +272,8 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       }
       runtime = await resumeRuntime(row, text, images)
       void runtime.start()
-      prepared.updateSession(db(), { id: sessionId, updated_at: Date.now() })
+      prepared.updateSession(db(), { id: sessionId, status: 'running', updated_at: Date.now() })
+      emitSnapshot(sessionId)
       return true
     }
     const ok = await runtime.injectInput(text, images)
