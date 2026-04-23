@@ -101,6 +101,35 @@ afterEach(() => {
 })
 
 describe('POST /api/messages — inbound images', () => {
+  test('valid payload produces multi-block message with images then text', () => {
+    const images = [
+      { mediaType: 'image/png' as const, dataBase64: 'pngData123' },
+      { mediaType: 'image/jpeg' as const, dataBase64: 'jpegData456' },
+    ]
+    const line = serializeUserMessage('check these screenshots', images)
+    const parsed = JSON.parse(line) as {
+      message: {
+        content: Array<{
+          type: string
+          source?: { type: string; media_type: string; data: string }
+          text?: string
+        }>
+      }
+    }
+    const content = parsed.message.content
+
+    expect(content).toHaveLength(3)
+    expect(content[0]?.type).toBe('image')
+    expect(content[0]?.source?.type).toBe('base64')
+    expect(content[0]?.source?.media_type).toBe('image/png')
+    expect(content[0]?.source?.data).toBe('pngData123')
+    expect(content[1]?.type).toBe('image')
+    expect(content[1]?.source?.media_type).toBe('image/jpeg')
+    expect(content[1]?.source?.data).toBe('jpegData456')
+    expect(content[2]?.type).toBe('text')
+    expect(content[2]?.text).toBe('check these screenshots')
+  })
+
   test('rejects image exceeding 5 MB with 400', async () => {
     const { spawnFn } = makeCapturingSpawnFn()
     const app = new Hono()
@@ -121,6 +150,60 @@ describe('POST /api/messages — inbound images', () => {
     expect(res.status).toBe(400)
     const body = await json<{ error: string }>(res)
     expect(body.error).toContain('5 MB')
+  })
+
+  test('rejects unsupported MIME type image/bmp', async () => {
+    const { spawnFn } = makeCapturingSpawnFn()
+    const app = new Hono()
+    const registry = createSessionRegistry({ getDb: () => testDb, spawnFn })
+    registerApiRoutes(app, registry, () => testDb)
+
+    const res = await app.fetch(new Request('http://localhost/api/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        text: 'test',
+        images: [{ mediaType: 'image/bmp', dataBase64: 'abc' }],
+      }),
+    }))
+
+    expect(res.status).toBe(400)
+  })
+
+  test('rejects unsupported MIME type image/svg+xml', async () => {
+    const { spawnFn } = makeCapturingSpawnFn()
+    const app = new Hono()
+    const registry = createSessionRegistry({ getDb: () => testDb, spawnFn })
+    registerApiRoutes(app, registry, () => testDb)
+
+    const res = await app.fetch(new Request('http://localhost/api/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        text: 'test',
+        images: [{ mediaType: 'image/svg+xml', dataBase64: 'abc' }],
+      }),
+    }))
+
+    expect(res.status).toBe(400)
+  })
+
+  test('rejects unsupported MIME type application/pdf', async () => {
+    const { spawnFn } = makeCapturingSpawnFn()
+    const app = new Hono()
+    const registry = createSessionRegistry({ getDb: () => testDb, spawnFn })
+    registerApiRoutes(app, registry, () => testDb)
+
+    const res = await app.fetch(new Request('http://localhost/api/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        text: 'test',
+        images: [{ mediaType: 'application/pdf', dataBase64: 'abc' }],
+      }),
+    }))
+
+    expect(res.status).toBe(400)
   })
 
   test('slash command /task with image passes images to serializeUserMessage wire format', async () => {
@@ -172,33 +255,20 @@ describe('POST /api/messages — inbound images', () => {
     const body = await json<{ error: string }>(res)
     expect(body.error).toContain('Session no-such-session not found')
   })
+})
 
-  test('serializeUserMessage includes image content blocks', () => {
-    const images = [{ mediaType: 'image/png' as const, dataBase64: 'abc123' }]
-    const line = serializeUserMessage('look at this', images)
-    const parsed = JSON.parse(line) as { message: { content: Array<{ type: string; source?: { data: string } }> } }
-    const content = parsed.message.content
-    const imageBlock = content.find((b) => b.type === 'image')
-    expect(imageBlock).toBeDefined()
-    expect(imageBlock?.source?.data).toBe('abc123')
-  })
-
-  test('invalid mediaType is rejected with 400', async () => {
+describe('GET /api/version — images feature flag', () => {
+  test('advertises images feature in capabilities', async () => {
     const { spawnFn } = makeCapturingSpawnFn()
     const app = new Hono()
     const registry = createSessionRegistry({ getDb: () => testDb, spawnFn })
     registerApiRoutes(app, registry, () => testDb)
 
-    const res = await app.fetch(new Request('http://localhost/api/messages', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        text: 'test',
-        images: [{ mediaType: 'image/bmp', dataBase64: 'abc' }],
-      }),
-    }))
+    const res = await app.fetch(new Request('http://localhost/api/version'))
 
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(200)
+    const body = await json<{ data: { features: string[] } }>(res)
+    expect(body.data.features).toContain('images')
   })
 
   test('rejects total payload exceeding 20 MB with 400', async () => {

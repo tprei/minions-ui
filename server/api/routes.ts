@@ -47,6 +47,7 @@ const LIBRARY_VERSION = '0.1.0'
 const FEATURES = [
   'sessions-create',
   'messages',
+  'images',
   'transcript',
   'auth',
   'cors-allowlist',
