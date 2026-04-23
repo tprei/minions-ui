@@ -224,6 +224,7 @@ export function NewTaskBar({
         prompt.value = ''
         for (const a of attachments) URL.revokeObjectURL(a.objectUrl)
         setAttachments([])
+        navigate(formatRoute({ name: 'session', sessionSlug: created.slug }))
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Send failed'
