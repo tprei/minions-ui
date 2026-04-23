@@ -288,14 +288,18 @@ export function buildDagChildPrompt(
     ? upstreamBranches[upstreamBranches.length - 1]
     : defaultBranch
 
-  lines.push("## Deliverable")
+  lines.push("## Deliverable — MANDATORY, DO NOT STOP EARLY")
   lines.push("")
-  lines.push("When your work is complete:")
-  lines.push("1. Write unit and integration tests for your changes")
-  lines.push("2. Run unit and integration tests to verify they pass (do NOT run e2e or browser tests — these are expensive and not required)")
-  lines.push("3. Commit all changes with a descriptive message")
-  lines.push("4. Push your branch")
-  lines.push(`5. Open a pull request targeting \`${targetBranch}\``)
+  lines.push(`You are an autonomous DAG worker. Your session auto-exits on turn completion, so there is no second chance: you MUST finish every step below in this one turn before ending. Ending with code uncommitted or without a PR URL counts as a FAILED node.`)
+  lines.push("")
+  lines.push("1. Write unit and integration tests for your changes.")
+  lines.push("2. Run unit and integration tests to verify they pass (do NOT run e2e or browser tests — those are expensive and not required). If they fail, fix the code until they pass.")
+  lines.push("3. Stage and commit all changes with `git add -A && git commit -m \"<descriptive message>\"`.")
+  lines.push(`4. Push your branch with \`git push -u origin HEAD\`. Auth is preconfigured via GIT_ASKPASS.`)
+  lines.push(`5. Open a pull request targeting \`${targetBranch}\` with \`gh pr create\` — do NOT use \`--draft\`, do NOT use \`--no-verify\`. Include a short summary and a test plan.`)
+  lines.push("6. End your turn with a single line: `PR: <url>` — the orchestrator parses this.")
+  lines.push("")
+  lines.push("If anything blocks you (failing test you cannot fix, missing dependency, etc.), end the turn with `BLOCKED: <one-line reason>` instead of leaving the task half-done.")
 
   return lines.join("\n")
 }
