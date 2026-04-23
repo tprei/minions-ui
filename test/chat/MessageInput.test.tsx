@@ -280,51 +280,7 @@ describe('MessageInput · image attachments', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows paperclip attach button', () => {
-    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
-    expect(screen.getByTestId('attach-btn')).toBeTruthy()
-  })
-
-  it('paste event with image file queues attachment and shows thumbnail strip', async () => {
-    const fakeBlob = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' })
-    const fakeFile = new File([fakeBlob], 'paste.png', { type: 'image/png' })
-
-    interface FileReaderStub {
-      result: string | ArrayBuffer | null
-      onload: ((ev: ProgressEvent) => void) | null
-      onerror: ((ev: ProgressEvent) => void) | null
-    }
-    const readAsDataURLMock = vi.fn().mockImplementation(function (this: FileReaderStub) {
-      Promise.resolve().then(() => {
-        Object.defineProperty(this, 'result', { value: 'data:image/png;base64,abc123', configurable: true })
-        this.onload?.call(this, new ProgressEvent('load'))
-      })
-    })
-    vi.stubGlobal('FileReader', class {
-      result: string | ArrayBuffer | null = null
-      onload: ((ev: ProgressEvent) => void) | null = null
-      onerror: ((ev: ProgressEvent) => void) | null = null
-      readAsDataURL = readAsDataURLMock
-    })
-
-    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
-
-    const dt = {
-      items: [
-        { kind: 'file', type: 'image/png', getAsFile: () => fakeFile },
-      ],
-    }
-    const textarea = screen.getByTestId('message-textarea')
-    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
-
-    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
-    expect(screen.getByTestId('remove-attachment-0')).toBeTruthy()
-  })
-
-  it('sends images with text when onSend is called', async () => {
-    const onSend = vi.fn().mockResolvedValue(undefined)
-    const fakeFile = new File([new Uint8Array([1, 2, 3])], 'img.png', { type: 'image/png' })
-
+  function mockFileReader() {
     vi.stubGlobal('FileReader', class {
       result: string | ArrayBuffer | null = null
       onload: ((ev: ProgressEvent) => void) | null = null
@@ -336,13 +292,188 @@ describe('MessageInput · image attachments', () => {
         })
       })
     })
+  }
+
+  it('shows paperclip attach button', () => {
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    expect(screen.getByTestId('attach-btn')).toBeTruthy()
+  })
+
+  it('paste event with image file queues attachment and shows thumbnail strip', async () => {
+    const fakeFile = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'paste.png', { type: 'image/png' })
+    mockFileReader()
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const dt = {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
+    }
+    const textarea = screen.getByTestId('message-textarea')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+    expect(screen.getByTestId('remove-attachment-0')).toBeTruthy()
+  })
+
+  it('paste ignores non-image items', async () => {
+    const textFile = new File(['hello'], 'doc.txt', { type: 'text/plain' })
+    mockFileReader()
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const dt = {
+      items: [{ kind: 'file', type: 'text/plain', getAsFile: () => textFile }],
+    }
+    const textarea = screen.getByTestId('message-textarea')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => new Promise((r) => setTimeout(r, 50)))
+    expect(screen.queryByTestId('attachment-strip')).toBeNull()
+  })
+
+  it('paste filters mixed clipboard content to only valid image types', async () => {
+    const pngFile = new File([new Uint8Array([1])], 'img.png', { type: 'image/png' })
+    const jpegFile = new File([new Uint8Array([2])], 'photo.jpg', { type: 'image/jpeg' })
+    const textFile = new File(['text'], 'doc.txt', { type: 'text/plain' })
+    mockFileReader()
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const dt = {
+      items: [
+        { kind: 'file', type: 'image/png', getAsFile: () => pngFile },
+        { kind: 'file', type: 'text/plain', getAsFile: () => textFile },
+        { kind: 'file', type: 'image/jpeg', getAsFile: () => jpegFile },
+      ],
+    }
+    const textarea = screen.getByTestId('message-textarea')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+    expect(screen.getByTestId('remove-attachment-0')).toBeTruthy()
+    expect(screen.getByTestId('remove-attachment-1')).toBeTruthy()
+    expect(screen.queryByTestId('remove-attachment-2')).toBeNull()
+  })
+
+  it('file-pick via attach button queues selected images', async () => {
+    const file1 = new File([new Uint8Array([1])], 'a.png', { type: 'image/png' })
+    const file2 = new File([new Uint8Array([2])], 'b.webp', { type: 'image/webp' })
+    mockFileReader()
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement
+    Object.defineProperty(input, 'files', {
+      value: [file1, file2],
+      configurable: true,
+    })
+
+    fireEvent.change(input)
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+    expect(screen.getByTestId('remove-attachment-0')).toBeTruthy()
+    expect(screen.getByTestId('remove-attachment-1')).toBeTruthy()
+  })
+
+  it('file-pick filters out non-image files', async () => {
+    const imgFile = new File([new Uint8Array([1])], 'img.gif', { type: 'image/gif' })
+    const pdfFile = new File([new Uint8Array([2])], 'doc.pdf', { type: 'application/pdf' })
+    mockFileReader()
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement
+    Object.defineProperty(input, 'files', {
+      value: [imgFile, pdfFile],
+      configurable: true,
+    })
+
+    fireEvent.change(input)
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+    expect(screen.getByTestId('remove-attachment-0')).toBeTruthy()
+    expect(screen.queryByTestId('remove-attachment-1')).toBeNull()
+  })
+
+  it('file-pick clears input value after selection', async () => {
+    const file = new File([new Uint8Array([1])], 'test.png', { type: 'image/png' })
+    mockFileReader()
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+
+    fireEvent.change(input)
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+    expect(input.value).toBe('')
+  })
+
+  it('thumbnail renders with blob objectUrl as img src', async () => {
+    const fakeFile = new File([new Uint8Array([1])], 'img.png', { type: 'image/png' })
+    mockFileReader()
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const dt = {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
+    }
+    fireEvent(screen.getByTestId('message-textarea'), Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+
+    const img = screen.getByAltText('attachment 1') as HTMLImageElement
+    expect(img.src).toContain('blob:mock-')
+    expect(createdUrls.some((url) => img.src.includes(url))).toBe(true)
+  })
+
+  it('thumbnail shows correct alt text for each attachment', async () => {
+    const file1 = new File([new Uint8Array([1])], 'a.png', { type: 'image/png' })
+    const file2 = new File([new Uint8Array([2])], 'b.png', { type: 'image/png' })
+    mockFileReader()
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const dt = {
+      items: [
+        { kind: 'file', type: 'image/png', getAsFile: () => file1 },
+        { kind: 'file', type: 'image/png', getAsFile: () => file2 },
+      ],
+    }
+    fireEvent(screen.getByTestId('message-textarea'), Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+
+    expect(screen.getByAltText('attachment 1')).toBeTruthy()
+    expect(screen.getByAltText('attachment 2')).toBeTruthy()
+  })
+
+  it('handles large file without crashing', async () => {
+    const largeArray = new Uint8Array(10 * 1024 * 1024)
+    const largeFile = new File([largeArray], 'big.png', { type: 'image/png' })
+    mockFileReader()
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement
+    Object.defineProperty(input, 'files', { value: [largeFile], configurable: true })
+
+    fireEvent.change(input)
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+    expect(screen.getByTestId('remove-attachment-0')).toBeTruthy()
+  })
+
+  it('sends images with text when onSend is called', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    const fakeFile = new File([new Uint8Array([1, 2, 3])], 'img.png', { type: 'image/png' })
+    mockFileReader()
 
     render(<Controlled onSend={onSend} />)
 
     const dt = {
-      items: [
-        { kind: 'file', type: 'image/png', getAsFile: () => fakeFile },
-      ],
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
     }
     const textarea = screen.getByTestId('message-textarea')
     fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
@@ -359,20 +490,9 @@ describe('MessageInput · image attachments', () => {
     expect(images[0]).toMatchObject({ mediaType: 'image/png' })
   })
 
-  it('remove button dismisses an attachment', async () => {
+  it('remove button dismisses an attachment and revokes URL', async () => {
     const fakeFile = new File([new Uint8Array([1])], 'img.png', { type: 'image/png' })
-
-    vi.stubGlobal('FileReader', class {
-      result: string | ArrayBuffer | null = null
-      onload: ((ev: ProgressEvent) => void) | null = null
-      onerror: ((ev: ProgressEvent) => void) | null = null
-      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
-        Promise.resolve().then(() => {
-          this.result = 'data:image/png;base64,YQ=='
-          this.onload?.call(this, new ProgressEvent('load'))
-        })
-      })
-    })
+    mockFileReader()
 
     render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
 
@@ -383,8 +503,91 @@ describe('MessageInput · image attachments', () => {
     fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
 
     await waitFor(() => expect(screen.getByTestId('remove-attachment-0')).toBeTruthy())
+
+    const urlsBefore = createdUrls.length
     fireEvent.click(screen.getByTestId('remove-attachment-0'))
+
     await waitFor(() => expect(screen.queryByTestId('attachment-strip')).toBeNull())
-    expect(revokedUrls.length).toBeGreaterThan(0)
+    expect(revokedUrls.length).toBe(urlsBefore)
+  })
+
+  it('revokes all attachment URLs after successful send', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    const file1 = new File([new Uint8Array([1])], 'a.png', { type: 'image/png' })
+    const file2 = new File([new Uint8Array([2])], 'b.png', { type: 'image/png' })
+    mockFileReader()
+
+    render(<Controlled onSend={onSend} />)
+
+    const dt = {
+      items: [
+        { kind: 'file', type: 'image/png', getAsFile: () => file1 },
+        { kind: 'file', type: 'image/png', getAsFile: () => file2 },
+      ],
+    }
+    const textarea = screen.getByTestId('message-textarea')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+
+    const urlsCreated = createdUrls.length
+
+    fireEvent.input(textarea, { target: { value: 'sending both' } })
+    fireEvent.click(screen.getByTestId('send-btn'))
+
+    await waitFor(() => expect(onSend).toHaveBeenCalled())
+    await waitFor(() => expect(screen.queryByTestId('attachment-strip')).toBeNull())
+
+    expect(revokedUrls.length).toBe(urlsCreated)
+  })
+
+  it('does not revoke URLs if send fails', async () => {
+    const onSend = vi.fn().mockRejectedValue(new Error('network error'))
+    const fakeFile = new File([new Uint8Array([1])], 'img.png', { type: 'image/png' })
+    mockFileReader()
+
+    render(<Controlled onSend={onSend} />)
+
+    const dt = {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
+    }
+    const textarea = screen.getByTestId('message-textarea')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+
+    revokedUrls = []
+
+    fireEvent.input(textarea, { target: { value: 'will fail' } })
+    fireEvent.click(screen.getByTestId('send-btn'))
+
+    await waitFor(() => expect(screen.getByText(/Send failed/)).toBeTruthy())
+
+    expect(revokedUrls.length).toBe(0)
+    expect(screen.getByTestId('attachment-strip')).toBeTruthy()
+  })
+
+  it('accepts all valid image types: png, jpeg, gif, webp', async () => {
+    const pngFile = new File([new Uint8Array([1])], 'a.png', { type: 'image/png' })
+    const jpegFile = new File([new Uint8Array([2])], 'b.jpeg', { type: 'image/jpeg' })
+    const gifFile = new File([new Uint8Array([3])], 'c.gif', { type: 'image/gif' })
+    const webpFile = new File([new Uint8Array([4])], 'd.webp', { type: 'image/webp' })
+    mockFileReader()
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+
+    const input = screen.getByTestId('file-input') as HTMLInputElement
+    Object.defineProperty(input, 'files', {
+      value: [pngFile, jpegFile, gifFile, webpFile],
+      configurable: true,
+    })
+
+    fireEvent.change(input)
+
+    await waitFor(() => expect(screen.getByTestId('attachment-strip')).toBeTruthy())
+    expect(screen.getByTestId('remove-attachment-0')).toBeTruthy()
+    expect(screen.getByTestId('remove-attachment-1')).toBeTruthy()
+    expect(screen.getByTestId('remove-attachment-2')).toBeTruthy()
+    expect(screen.getByTestId('remove-attachment-3')).toBeTruthy()
   })
 })
