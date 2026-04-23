@@ -385,7 +385,7 @@ describe('serializeUserMessage', () => {
     expect(parsed.parent_tool_use_id).toBe('tu-parent')
   })
 
-  test('with images: image blocks first, text last', () => {
+  test('with images: text first, image blocks after', () => {
     const line = serializeUserMessage('caption', [
       { mediaType: 'image/png', dataBase64: 'abc==' },
       { mediaType: 'image/jpeg', dataBase64: 'def==' },
@@ -393,15 +393,15 @@ describe('serializeUserMessage', () => {
     const parsed = JSON.parse(line)
     const content = parsed.message.content as unknown[]
     expect(content).toHaveLength(3)
-    expect(content[0]).toEqual({
+    expect(content[0]).toEqual({ type: 'text', text: 'caption' })
+    expect(content[1]).toEqual({
       type: 'image',
       source: { type: 'base64', media_type: 'image/png', data: 'abc==' },
     })
-    expect(content[1]).toEqual({
+    expect(content[2]).toEqual({
       type: 'image',
       source: { type: 'base64', media_type: 'image/jpeg', data: 'def==' },
     })
-    expect(content[2]).toEqual({ type: 'text', text: 'caption' })
   })
 
   test('empty images array produces text-only content', () => {
