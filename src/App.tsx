@@ -176,6 +176,9 @@ function ChatPane({
   }
   const handleSend = (t: string, images?: Array<{ mediaType: string; dataBase64: string }>) => onSend(t, session.id, images)
   const handleQuickAction = (action: QuickAction) => onSend(action.message, session.id)
+  const handleShipAdvance = async (to: import('./api/types').ShipStage) => {
+    await onCommand({ action: 'ship_advance', sessionId: session.id, to })
+  }
 
   const handlePrefillCommand = (fullText: string) => {
     setText(fullText)
@@ -336,7 +339,7 @@ function ChatPane({
               <TranscriptUpgradeNotice store={store} />
             )}
             <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
-              <QuickActionsBar actions={session.quickActions} onAction={handleQuickAction} />
+              <QuickActionsBar session={session} onAction={handleQuickAction} onShipAdvance={handleShipAdvance} />
               <SlashCommandMenu session={session} context={text} onPrefill={handlePrefillCommand} />
               <MessageInput session={session} store={store} value={text} onValueChange={setText} onSend={handleSend} />
             </div>
