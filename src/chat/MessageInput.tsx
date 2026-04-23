@@ -1,18 +1,22 @@
 import { useRef, useCallback, useState } from 'preact/hooks'
 import type { ApiSession } from '../api/types'
+import type { ConnectionStore } from '../state/types'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { useImageAttachments, type ImageAttachment } from './ImageAttachments'
+import { hasFeature } from '../api/features'
 
 const PLACEHOLDER = 'Send instructions to the agent — Enter to send, Shift+Enter for newline'
 
 interface MessageInputProps {
   session: ApiSession
+  store: ConnectionStore
   value: string
   onValueChange: (text: string) => void
   onSend: (text: string, images?: Array<{ mediaType: string; dataBase64: string }>) => Promise<void>
 }
 
-export function MessageInput({ value, onValueChange, onSend }: MessageInputProps) {
+export function MessageInput({ store, value, onValueChange, onSend }: MessageInputProps) {
+  const imagesSupported = hasFeature(store, 'sessions-create-images')
   const [sending, setSending] = useState(false)
   const [errorText, setErrorText] = useState<string | null>(null)
   const pendingRef = useRef<{ text: string; images: ImageAttachment[] } | null>(null)
@@ -73,6 +77,10 @@ export function MessageInput({ value, onValueChange, onSend }: MessageInputProps
     async (text: string, currentAttachments: ImageAttachment[]) => {
       const trimmed = text.trim()
       if (!trimmed || sending) return
+      if (currentAttachments.length > 0 && !imagesSupported) {
+        setErrorText('This engine does not advertise image support — needs sessions-create-images feature.')
+        return
+      }
       pendingRef.current = { text: trimmed, images: currentAttachments }
       setErrorText(null)
       setSending(true)
@@ -94,7 +102,7 @@ export function MessageInput({ value, onValueChange, onSend }: MessageInputProps
         setSending(false)
       }
     },
-    [sending, onSend, onValueChange, clear],
+    [sending, onSend, onValueChange, clear, imagesSupported],
   )
 
   const handleKeyDown = useCallback(
@@ -165,15 +173,15 @@ export function MessageInput({ value, onValueChange, onSend }: MessageInputProps
         sending={sending}
         recording={recording}
       />
-      {attachmentsStrip}
+      {imagesSupported && attachmentsStrip}
       <div class="flex items-end gap-2">
-        {paperclipButton}
+        {imagesSupported && paperclipButton}
         <textarea
           ref={textareaRef}
           value={value}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
-          onPaste={pasteHandler}
+          onPaste={imagesSupported ? pasteHandler : undefined}
           disabled={sending}
           placeholder={PLACEHOLDER}
           rows={1}

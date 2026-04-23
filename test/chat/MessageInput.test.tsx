@@ -1,8 +1,10 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/preact'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useState } from 'preact/hooks'
+import { signal } from '@preact/signals'
 import { MessageInput } from '../../src/chat/MessageInput'
 import type { ApiSession } from '../../src/api/types'
+import type { ConnectionStore } from '../../src/state/types'
 
 beforeEach(() => {
   if (!window.matchMedia) {
@@ -32,9 +34,13 @@ const session: ApiSession = {
   conversation: [],
 }
 
-function Controlled({ onSend }: { onSend: (text: string, images?: Array<{ mediaType: string; dataBase64: string }>) => Promise<void> }) {
+const mockStore = {
+  version: signal({ apiVersion: '2.0.0', libraryVersion: '0.1.0', features: ['sessions-create-images'] as string[] }),
+} as unknown as ConnectionStore
+
+function Controlled({ onSend, store = mockStore }: { onSend: (text: string, images?: Array<{ mediaType: string; dataBase64: string }>) => Promise<void>; store?: ConnectionStore }) {
   const [text, setText] = useState('')
-  return <MessageInput session={session} onSend={onSend} value={text} onValueChange={setText} />
+  return <MessageInput session={session} store={store} onSend={onSend} value={text} onValueChange={setText} />
 }
 
 function getTextarea() {
