@@ -140,7 +140,10 @@ export function NewTaskBar({
 
   const canCreate = hasFeature(store, 'sessions-create')
   const canVariants = hasFeature(store, 'sessions-variants')
+  const canShip = hasFeature(store, 'ship-coordinator')
   const wantVariants = useComputed(() => variantCount.value > 1)
+
+  const availableModes = NEW_TASK_MODES.filter((m) => m.value !== 'ship' || canShip)
 
   // Collapsed state is user-controlled via the − button, persisted in
   // localStorage. Defaults to expanded; tests rely on the expanded render.
@@ -268,7 +271,7 @@ export function NewTaskBar({
     >
       <div class="flex flex-wrap items-center gap-2">
         <div class="flex gap-1" role="radiogroup" aria-label="Task mode" data-testid="mode-picker">
-          {NEW_TASK_MODES.map((m) => {
+          {availableModes.map((m) => {
             const active = mode.value === m.value
             const btnClass = active
               ? 'bg-indigo-600 text-white border-indigo-700'

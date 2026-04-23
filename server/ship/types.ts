@@ -1,4 +1,4 @@
-export type SessionMode = "task" | "plan" | "think" | "review" | "ci-fix" | "dag-review" | "ship-think" | "ship-plan" | "ship-verify"
+export type SessionMode = "task" | "plan" | "think" | "review" | "ci-fix" | "dag-review" | "ship"
 
 export interface SessionMeta {
   sessionId: string
@@ -158,7 +158,7 @@ export interface PendingTask {
   threadId?: number
   repoSlug?: string
   repoUrl?: string
-  mode: "task" | "plan" | "think" | "review" | "ship-think"
+  mode: "task" | "plan" | "think" | "review" | "ship"
   autoAdvance?: AutoAdvance
 }
 

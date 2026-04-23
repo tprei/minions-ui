@@ -114,7 +114,7 @@ function makeSession(overrides: Partial<TopicSession> = {}): TopicSession {
     slug: "test-slug",
     conversation: [{ role: "user", text: "test task" }],
     pendingFeedback: [],
-    mode: "ship-think",
+    mode: "ship",
     lastActivityAt: Date.now(),
     childThreadIds: [],
     autoAdvance: makeAutoAdvance(),
@@ -168,7 +168,7 @@ describe("ShipPipeline", () => {
       await pipeline.handleShipAdvance(session)
 
       expect(session.autoAdvance!.phase).toBe("plan")
-      expect(session.mode).toBe("ship-plan")
+      expect(session.mode).toBe("ship")
       expect(ctx.notifier.send).toHaveBeenCalled()
       expect(ctx.spawnTopicAgent).toHaveBeenCalled()
     })
