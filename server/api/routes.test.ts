@@ -157,6 +157,42 @@ describe('POST /api/sessions', () => {
     expect(res.status).toBe(400)
   })
 
+  test('old ship-think mode returns 400', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/sessions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt: 'do it', mode: 'ship-think', repo: '/repo' }),
+      }),
+    )
+    expect(res.status).toBe(400)
+  })
+
+  test('old ship-plan mode returns 400', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/sessions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt: 'do it', mode: 'ship-plan', repo: '/repo' }),
+      }),
+    )
+    expect(res.status).toBe(400)
+  })
+
+  test('old ship-verify mode returns 400', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/sessions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt: 'do it', mode: 'ship-verify', repo: '/repo' }),
+      }),
+    )
+    expect(res.status).toBe(400)
+  })
+
   test('valid body with unreachable repo returns 500', async () => {
     const app = makeApp(testDb)
     const res = await app.fetch(
@@ -206,6 +242,30 @@ describe('POST /api/commands', () => {
     const body = await json<{ data: { success: boolean; error: string } }>(res)
     expect(body.data.success).toBe(false)
     expect(body.data.error).toBeTruthy()
+  })
+
+  test('ship_advance command is accepted', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'ship_advance', sessionId: 'some-id', to: 'plan' }),
+      }),
+    )
+    expect(res.status).toBe(200)
+  })
+
+  test('ship_advance command without "to" is accepted', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'ship_advance', sessionId: 'some-id' }),
+      }),
+    )
+    expect(res.status).toBe(200)
   })
 
   test('invalid body returns 400', async () => {

@@ -13,6 +13,7 @@ export type QuickActionType = 'make_pr' | 'retry' | 'resume'
 export interface QuickAction { type: QuickActionType; label: string; message: string }
 export type PlanActionType = 'execute' | 'split' | 'stack' | 'dag'
 export interface ConversationMessage { role: 'user' | 'assistant'; text: string }
+export type ShipStage = 'think' | 'plan' | 'dag' | 'verify' | 'done'
 
 export interface ApiSession {
   id: string
@@ -32,6 +33,7 @@ export interface ApiSession {
   attentionReasons: AttentionReason[]
   quickActions: QuickAction[]
   mode: string
+  stage?: ShipStage
   conversation: ConversationMessage[]
   variantGroupId?: string
   transcriptUrl?: string
@@ -185,6 +187,7 @@ export type MinionCommand =
   | { action: 'close'; sessionId: string }
   | { action: 'plan_action'; sessionId: string; planAction: PlanActionType; markdown?: string }
   | { action: 'land'; dagId: string; nodeId: string }
+  | { action: 'ship_advance'; sessionId: string; to?: ShipStage }
 
 export interface RepoEntry {
   alias: string
@@ -204,9 +207,7 @@ export type CreateSessionMode =
   | 'plan'
   | 'think'
   | 'review'
-  | 'ship-think'
-  | 'ship-plan'
-  | 'ship-verify'
+  | 'ship'
 
 export interface CreateSessionRequest {
   prompt: string

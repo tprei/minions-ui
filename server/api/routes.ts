@@ -97,7 +97,7 @@ function validateImagePayloads(
 
 const CreateSessionSchema = z.object({
   prompt: z.string().min(1),
-  mode: z.enum(['task', 'plan', 'think', 'review', 'ship-think']),
+  mode: z.enum(['task', 'plan', 'think', 'review', 'ship']),
   repo: z.string().min(1).optional(),
   profileId: z.string().optional(),
   images: z.array(ImageSchema).optional(),
@@ -109,6 +109,7 @@ const CommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('close'), sessionId: z.string() }),
   z.object({ action: z.literal('plan_action'), sessionId: z.string(), planAction: z.enum(['execute', 'split', 'stack', 'dag']), markdown: z.string().optional() }),
   z.object({ action: z.literal('land'), dagId: z.string(), nodeId: z.string() }),
+  z.object({ action: z.literal('ship_advance'), sessionId: z.string(), to: z.enum(['think', 'plan', 'dag', 'verify', 'done']).optional() }),
 ])
 
 const MessageSchema = z.object({
@@ -123,10 +124,10 @@ const SLASH_MODES = new Map([
   ['plan', 'plan'],
   ['think', 'think'],
   ['review', 'review'],
-  ['ship', 'ship-think'],
+  ['ship', 'ship'],
 ] as const)
 
-type SlashMode = 'task' | 'plan' | 'think' | 'review' | 'ship-think'
+type SlashMode = 'task' | 'plan' | 'think' | 'review' | 'ship'
 
 function findSessionRow(key: string, db: Database) {
   const rows = prepared.listSessions(db)
@@ -841,7 +842,7 @@ export function registerApiRoutes(
 
   const CreateVariantsSchema = z.object({
     prompt: z.string().min(1),
-    mode: z.enum(['task', 'plan', 'think', 'review', 'ship-think']),
+    mode: z.enum(['task', 'plan', 'think', 'review', 'ship']),
     repo: z.string().min(1).optional(),
     profileId: z.string().optional(),
     count: z.number().int().min(2).max(10),

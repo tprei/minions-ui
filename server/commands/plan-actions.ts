@@ -124,26 +124,6 @@ async function buildAndStartDag(
   return { ok: true, dagId }
 }
 
-async function handoffShipPhase(
-  sessionId: string,
-  nextMode: "ship-plan" | "ship-verify",
-  ctx: PlanActionCtx,
-): Promise<PlanActionResult> {
-  const sessionRow = prepared.getSession(ctx.db, sessionId)
-  if (!sessionRow) return { ok: false, reason: "session not found" }
-
-  const design = getLastAssistantMessage(ctx.db, sessionId)
-  if (!design) return { ok: false, reason: "no design output from previous phase to hand off" }
-
-  const { session } = await ctx.registry.create({
-    mode: nextMode,
-    prompt: design,
-    repo: sessionRow.repo ?? "",
-    parentId: sessionId,
-  })
-
-  return { ok: true, dagId: session.id }
-}
 
 const EXECUTE_DIRECTIVE = [
   "Implement your plan now, in this session — do NOT wait for another turn.",
@@ -165,18 +145,6 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
   const row = prepared.getSession(ctx.db, sessionId)
   const mode = row?.mode
 
-  if (mode === "ship-think") {
-    setPipelineAdvancing(ctx, sessionId, true)
-    try {
-      await killAndWait(sessionId, ctx)
-      const result = await handoffShipPhase(sessionId, "ship-plan", ctx)
-      if (!result.ok) setPipelineAdvancing(ctx, sessionId, false)
-      return result
-    } catch (err) {
-      setPipelineAdvancing(ctx, sessionId, false)
-      throw err
-    }
-  }
 
   if (mode === "think" || mode === "plan" || mode === "review") {
     setPipelineAdvancing(ctx, sessionId, true)
