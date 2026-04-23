@@ -10,6 +10,8 @@ mock.module("node:child_process", () => ({
 import { handleExecute, handleSplit, handleStack, handleDag } from "./plan-actions"
 import type { PlanActionCtx } from "./plan-actions"
 import type { SessionRegistry } from "../session/registry"
+import type { SessionRuntime } from "../session/runtime"
+import type { ApiSession } from "../../shared/api-types"
 import type { SpawnedChild } from "../dag/claude-extract"
 import { spawn } from "node:child_process"
 
@@ -162,20 +164,23 @@ describe("plan-actions gating", () => {
     const stopCalls: string[] = []
     const createCalls: Array<{ mode: string; prompt: string; parentId?: string }> = []
     const startedDagIds: string[] = []
-    const mockRuntime = {
+    const mockRuntime: Partial<SessionRuntime> = {
       running: false,
       currentClaudeSessionId: undefined,
       start: async () => {},
       injectInput: async () => false,
       stop: async () => {},
     }
+    const mockSession: Partial<ApiSession> = {
+      id: "child-session-id",
+    }
     const registry: SessionRegistry = {
       ...makeRegistry(stopCalls),
       create: async (opts) => {
         createCalls.push({ mode: opts.mode, prompt: opts.prompt, parentId: opts.parentId })
         return {
-          session: { id: "child-session-id" } as any,
-          runtime: mockRuntime as any,
+          session: mockSession as ApiSession,
+          runtime: mockRuntime as SessionRuntime,
         }
       },
     }
