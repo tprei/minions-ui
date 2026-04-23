@@ -27,7 +27,7 @@ export function sessionRowToApi(row: SessionRow): ApiSession {
   const quickActions = computeQuickActions(row)
   const needsAttention = attentionReasons.length > 0
 
-  return {
+  const result: ApiSession = {
     id: row.id,
     slug: row.slug,
     status: row.status === 'waiting_input' ? 'running' : row.status,
@@ -46,6 +46,13 @@ export function sessionRowToApi(row: SessionRow): ApiSession {
     conversation: row.conversation as ConversationMessage[],
     variantGroupId: row.variant_group_id ?? undefined,
   }
+
+  // Include stage only when mode is 'ship' and stage is present
+  if (row.mode === 'ship' && row.stage) {
+    result.stage = row.stage as ApiSession['stage']
+  }
+
+  return result
 }
 
 export function dagToApi(dag: DagRow, nodes: DagNodeRow[], sessionMap: Map<string, ApiSession>): ApiDagGraph {
