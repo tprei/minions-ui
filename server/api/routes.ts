@@ -128,10 +128,13 @@ const SLASH_MODES = new Map([
 
 type SlashMode = 'task' | 'plan' | 'think' | 'review' | 'ship-think'
 
-function resolveSessionBySlug(slug: string, registry: SessionRegistry, dbProvider: () => Database): ApiSession | null {
-  const db = dbProvider()
+function findSessionRow(key: string, db: Database) {
   const rows = prepared.listSessions(db)
-  const row = rows.find((r) => r.slug === slug)
+  return rows.find((r) => r.slug === key || r.id === key)
+}
+
+function resolveSessionBySlug(slug: string, dbProvider: () => Database): ApiSession | null {
+  const row = findSessionRow(slug, dbProvider())
   return row ? sessionRowToApi(row) : null
 }
 
@@ -198,7 +201,7 @@ export function registerApiRoutes(
 
   app.get('/api/sessions/:slug', (c) => {
     const { slug } = c.req.param()
-    const session = resolveSessionBySlug(slug, registry, resolveDb)
+    const session = resolveSessionBySlug(slug, resolveDb)
     if (!session) return c.json({ data: null, error: 'Session not found' }, 404)
     const body: ApiResponse<ApiSession> = { data: session }
     return c.json(body)
@@ -247,8 +250,7 @@ export function registerApiRoutes(
     }
 
     const db = resolveDb()
-    const rows = prepared.listSessions(db)
-    const row = rows.find((r) => r.slug === slug)
+    const row = findSessionRow(slug, db)
     if (!row) return c.json({ data: null, error: 'Session not found' }, 404)
 
     const eventRows = prepared.listEvents(db, row.id, afterSeq)
@@ -551,7 +553,7 @@ export function registerApiRoutes(
 
   app.delete('/api/sessions/:slug', async (c) => {
     const { slug } = c.req.param()
-    const session = resolveSessionBySlug(slug, registry, resolveDb)
+    const session = resolveSessionBySlug(slug, resolveDb)
     if (!session) return c.json({ data: null, error: 'Session not found' }, 404)
     await registry.close(session.id)
     return c.json({ data: { ok: true } })
@@ -722,8 +724,7 @@ export function registerApiRoutes(
   app.get('/api/sessions/:slug/diff', async (c) => {
     const { slug } = c.req.param()
     const db = resolveDb()
-    const rows = prepared.listSessions(db)
-    const row = rows.find((r) => r.slug === slug)
+    const row = findSessionRow(slug, db)
     if (!row) return c.json({ data: null, error: 'Session not found' }, 404)
     if (!row.workspace_root) return c.json({ error: 'Session has no workspace' }, 422)
     const cwd = `${row.workspace_root}/${row.slug}`
@@ -739,11 +740,10 @@ export function registerApiRoutes(
   app.get('/api/sessions/:slug/screenshots', (c) => {
     const { slug } = c.req.param()
     const db = resolveDb()
-    const rows = prepared.listSessions(db)
-    const row = rows.find((r) => r.slug === slug)
+    const row = findSessionRow(slug, db)
     if (!row) return c.json({ data: null, error: 'Session not found' }, 404)
     const workspaceRoot = row.workspace_root ?? process.env['WORKSPACE_ROOT'] ?? './.minion-data'
-    const screenshotDir = path.join(workspaceRoot, slug, '.screenshots')
+    const screenshotDir = path.join(workspaceRoot, row.slug, '.screenshots')
 
     let entries: fs.Dirent[]
     try {
@@ -768,7 +768,7 @@ export function registerApiRoutes(
         }
         return {
           file: e.name,
-          url: `/api/sessions/${encodeURIComponent(slug)}/screenshots/${encodeURIComponent(e.name)}`,
+          url: `/api/sessions/${encodeURIComponent(row.slug)}/screenshots/${encodeURIComponent(e.name)}`,
           capturedAt: new Date().toISOString(),
           size,
         }
@@ -783,8 +783,7 @@ export function registerApiRoutes(
   app.get('/api/sessions/:slug/screenshots/:filename', async (c) => {
     const { slug, filename } = c.req.param()
     const db = resolveDb()
-    const rows = prepared.listSessions(db)
-    const row = rows.find((r) => r.slug === slug)
+    const row = findSessionRow(slug, db)
     if (!row) return c.json({ data: null, error: 'Session not found' }, 404)
 
     if (filename.includes('/') || filename.includes('..')) {
@@ -792,7 +791,7 @@ export function registerApiRoutes(
     }
 
     const workspaceRoot = row.workspace_root ?? process.env['WORKSPACE_ROOT'] ?? './.minion-data'
-    const screenshotDir = path.join(workspaceRoot, slug, '.screenshots')
+    const screenshotDir = path.join(workspaceRoot, row.slug, '.screenshots')
 
     let dirEntries: fs.Dirent[]
     try {
@@ -828,8 +827,7 @@ export function registerApiRoutes(
   app.get('/api/sessions/:slug/pr', async (c) => {
     const { slug } = c.req.param()
     const db = resolveDb()
-    const rows = prepared.listSessions(db)
-    const row = rows.find((r) => r.slug === slug)
+    const row = findSessionRow(slug, db)
     if (!row) return c.json({ data: null, error: 'Session not found' }, 404)
     if (!row.pr_url) return c.json({ error: 'Session has no PR' }, 422)
     try {
