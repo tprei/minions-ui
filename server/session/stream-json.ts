@@ -155,11 +155,13 @@ export function serializeUserMessage(
     })
   }
 
-  const content: unknown[] = images.map((img) => ({
-    type: 'image',
-    source: { type: 'base64', media_type: img.mediaType, data: img.dataBase64 },
-  }))
-  content.push({ type: 'text', text })
+  const content: unknown[] = [{ type: 'text', text }]
+  for (const img of images) {
+    content.push({
+      type: 'image',
+      source: { type: 'base64', media_type: img.mediaType, data: img.dataBase64 },
+    })
+  }
 
   return JSON.stringify({
     type: 'user',
