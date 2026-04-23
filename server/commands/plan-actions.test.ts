@@ -160,13 +160,23 @@ describe("plan-actions gating", () => {
       payload: { text: "Here is my analysis of the problem", final: true, blockId: "block-1" },
     })
     const stopCalls: string[] = []
-    const createCalls: Array<{ mode: string; prompt: string; parentId: string }> = []
+    const createCalls: Array<{ mode: string; prompt: string; parentId?: string }> = []
     const startedDagIds: string[] = []
-    const registry = {
+    const mockRuntime = {
+      running: false,
+      currentClaudeSessionId: undefined,
+      start: async () => {},
+      injectInput: async () => false,
+      stop: async () => {},
+    }
+    const registry: SessionRegistry = {
       ...makeRegistry(stopCalls),
-      create: async (opts: { mode: string; prompt: string; repo: string; parentId: string }) => {
+      create: async (opts) => {
         createCalls.push({ mode: opts.mode, prompt: opts.prompt, parentId: opts.parentId })
-        return { session: { id: "child-session-id" }, runtime: {} as any }
+        return {
+          session: { id: "child-session-id" } as any,
+          runtime: mockRuntime as any,
+        }
       },
     }
     const ctx: PlanActionCtx = {
