@@ -10,8 +10,11 @@ test.describe('header layout', () => {
     mock.setVersion({ features: ['messages'] })
     try {
       await connectToMinion(page, mock, 'My Minion')
-      await expect(page.getByTestId('header-refresh-btn')).toBeVisible()
-      await expect(page.getByTestId('header-clean-btn')).toBeVisible()
+
+      await expect(page.getByTestId('header-menu-btn')).toBeVisible()
+      await page.getByTestId('header-menu-btn').click()
+      await expect(page.getByTestId('menu-refresh')).toBeVisible()
+      await expect(page.getByTestId('menu-clean')).toBeVisible()
 
       const headerOverflow = await page
         .locator('header')
