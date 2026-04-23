@@ -2,7 +2,7 @@ import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import type { Hono } from 'hono'
 import type { Database } from 'bun:sqlite'
-import type { SseEvent, ResourceSnapshot } from '../../shared/api-types'
+import type { SseEvent } from '../../shared/api-types'
 import type { EngineEvent } from '../events/types'
 import { getEventBus } from '../events/bus'
 import { getDb, prepared } from '../db/sqlite'
@@ -127,20 +127,7 @@ function projectEvent(
   }
 
   if (event.kind === 'resource') {
-    const snapshot: ResourceSnapshot = {
-      ts: event.timestamp,
-      cpu: { usagePercent: event.cpuPct, cpuCount: 1, source: 'cgroup' },
-      memory: {
-        usedBytes: event.memBytes,
-        limitBytes: event.memMaxBytes,
-        rssBytes: event.memBytes,
-        source: 'cgroup',
-      },
-      disk: { path: '/', usedBytes: 0, totalBytes: 0 },
-      eventLoopLagMs: 0,
-      counts: { activeSessions: 0, maxSessions: 0, activeLoops: 0, maxLoops: 0 },
-    }
-    return { type: 'resource', snapshot }
+    return { type: 'resource', snapshot: event.snapshot }
   }
 
   return null

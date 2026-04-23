@@ -4,6 +4,7 @@ export interface LoopRuntime {
   setInterval(id: string, ms: number): void
   enable(id: string): void
   disable(id: string): void
+  setMaxConcurrentSessions?(n: number): void
 }
 
 export interface AppliedResult {
@@ -11,7 +12,6 @@ export interface AppliedResult {
 }
 
 const RESTART_FIELDS: ReadonlyArray<keyof RuntimeOverrides> = [
-  'workspace',
   'loopsConfig',
 ]
 
@@ -39,11 +39,19 @@ export function applyOverrides(
   }
 
   if (overrides.workspace?.maxConcurrentSessions !== undefined) {
-    needsRestart.push('workspace.maxConcurrentSessions')
+    if (loopRuntime?.setMaxConcurrentSessions) {
+      loopRuntime.setMaxConcurrentSessions(overrides.workspace.maxConcurrentSessions)
+    } else {
+      needsRestart.push('workspace.maxConcurrentSessions')
+    }
   }
 
   if (overrides.loopsConfig?.maxConcurrentLoops !== undefined) {
     needsRestart.push('loopsConfig.maxConcurrentLoops')
+  }
+
+  if (overrides.loopsConfig?.reservedInteractiveSlots !== undefined) {
+    needsRestart.push('loopsConfig.reservedInteractiveSlots')
   }
 
   return { requiresRestart: needsRestart }

@@ -1,4 +1,4 @@
-import type { TranscriptEvent, ApiSession, ApiDagGraph } from '../../shared/api-types'
+import type { TranscriptEvent, ApiSession, ApiDagGraph, ResourceSnapshot } from '../../shared/api-types'
 
 export type SessionRunState = 'completed' | 'errored' | 'quota_exhausted' | 'stream_stalled'
 
@@ -49,7 +49,7 @@ export type EngineEvent =
       allPassed: boolean
       results: Array<{ name: string; passed: boolean; output: string }>
     }
-  | { kind: 'resource'; cpuPct: number; memBytes: number; memMaxBytes: number; timestamp: number }
+  | { kind: 'resource'; snapshot: ResourceSnapshot }
 
 export type EngineEventKind = EngineEvent['kind']
 export type EngineEventOfKind<K extends EngineEventKind> = Extract<EngineEvent, { kind: K }>

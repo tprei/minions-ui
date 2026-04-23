@@ -73,10 +73,23 @@ describe('applyOverrides', () => {
   })
 })
 
+  test('calls setMaxConcurrentSessions live when runtime exposes it', () => {
+    const calls: Array<{ method: string; args: unknown[] }> = []
+    const runtime = {
+      setInterval(id: string, ms: number) { calls.push({ method: 'setInterval', args: [id, ms] }) },
+      enable(id: string) { calls.push({ method: 'enable', args: [id] }) },
+      disable(id: string) { calls.push({ method: 'disable', args: [id] }) },
+      setMaxConcurrentSessions(n: number) { calls.push({ method: 'setMaxConcurrentSessions', args: [n] }) },
+    }
+    const result = applyOverrides({ workspace: { maxConcurrentSessions: 5 } }, runtime)
+    expect(calls).toContainEqual({ method: 'setMaxConcurrentSessions', args: [5] })
+    expect(result.requiresRestart).not.toContain('workspace.maxConcurrentSessions')
+  })
+
 describe('requiresRestart', () => {
   test('returns only restart-flagged fields', () => {
-    const result = requiresRestart(['workspace', 'quota'])
-    expect(result).toContain('workspace')
+    const result = requiresRestart(['loopsConfig', 'quota'])
+    expect(result).toContain('loopsConfig')
     expect(result).not.toContain('quota')
   })
 

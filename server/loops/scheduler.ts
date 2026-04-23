@@ -24,7 +24,7 @@ export class LoopScheduler implements LoopSchedulerInterface {
   private readonly registry: SessionRegistry
   private readonly workspaceRoot: string
   private readonly repo: string
-  private readonly maxConcurrentSessions: number
+  private maxConcurrentSessions: number
   private readonly getInteractiveSessionCount: () => number
   private readonly definitions = new Map<string, LoopDefinition>()
   private timer: ReturnType<typeof setInterval> | null = null
@@ -163,6 +163,10 @@ export class LoopScheduler implements LoopSchedulerInterface {
 
   setInterval(id: string, ms: number): void {
     setLoopInterval(this.db, id, ms)
+  }
+
+  setMaxConcurrentSessions(n: number): void {
+    this.maxConcurrentSessions = n
   }
 
   private computeBackoff(consecutiveFailures: number): number {

@@ -1,5 +1,7 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import type { EngineEventBus } from '../events/bus'
+import type { CountsSnapshot, ResourceSnapshot } from '../../shared/api-types'
 
 interface CpuStatCgroup {
   usageUsec: number
@@ -26,6 +28,20 @@ function readCgroupMemory(): { current: number; max: number } | null {
     const max = maxRaw === 'max' ? Number.MAX_SAFE_INTEGER : Number(maxRaw)
     if (!isFinite(current) || !isFinite(max)) return null
     return { current, max }
+  } catch {
+    return null
+  }
+}
+
+function readCgroupCpuMax(): number | null {
+  try {
+    const raw = fs.readFileSync('/sys/fs/cgroup/cpu.max', 'utf8').trim()
+    const [quota, period] = raw.split(/\s+/)
+    if (!quota || !period || quota === 'max') return null
+    const q = Number(quota)
+    const p = Number(period)
+    if (!isFinite(q) || !isFinite(p) || p <= 0) return null
+    return q / p
   } catch {
     return null
   }
@@ -71,28 +87,63 @@ function readProcMeminfo(): { used: number; total: number } | null {
   }
 }
 
-export interface ResourceMetrics {
-  kind: 'resource'
-  cpuPct: number
-  memBytes: number
-  memMaxBytes: number
-  timestamp: number
+function readDisk(p: string): { usedBytes: number; totalBytes: number } {
+  try {
+    const stats = fs.statfsSync(p)
+    const blockSize = Number(stats.bsize)
+    const total = Number(stats.blocks) * blockSize
+    const free = Number(stats.bavail) * blockSize
+    return { usedBytes: Math.max(0, total - free), totalBytes: total }
+  } catch {
+    return { usedBytes: 0, totalBytes: 0 }
+  }
+}
+
+export type CountsProvider = () => CountsSnapshot
+
+export interface ResourceMonitorOpts {
+  intervalMs?: number
+  diskPath?: string
+  countsProvider?: CountsProvider
+}
+
+const DEFAULT_COUNTS: CountsSnapshot = {
+  activeSessions: 0,
+  maxSessions: 0,
+  activeLoops: 0,
+  maxLoops: 0,
 }
 
 export class ResourceMonitor {
   private timer: ReturnType<typeof setInterval> | null = null
+  private lagTimer: ReturnType<typeof setInterval> | null = null
   private prevCgroupUsec: number | null = null
   private prevProcStat: ProcStatSnapshot | null = null
   private prevTs: number | null = null
+  private lastEventLoopLagMs = 0
+  private readonly intervalMs: number
+  private readonly diskPath: string
+  private readonly countsProvider: CountsProvider
 
   constructor(
     private readonly bus: EngineEventBus,
-    private readonly intervalMs = 1000,
-  ) {}
+    opts: number | ResourceMonitorOpts = {},
+  ) {
+    if (typeof opts === 'number') {
+      this.intervalMs = opts
+      this.diskPath = '/'
+      this.countsProvider = () => DEFAULT_COUNTS
+    } else {
+      this.intervalMs = opts.intervalMs ?? 1000
+      this.diskPath = opts.diskPath ?? '/'
+      this.countsProvider = opts.countsProvider ?? (() => DEFAULT_COUNTS)
+    }
+  }
 
   start(): void {
     if (this.timer !== null) return
     this.timer = setInterval(() => this.tick(), this.intervalMs)
+    this.lagTimer = setInterval(() => this.measureLag(), 500)
   }
 
   stop(): void {
@@ -100,37 +151,49 @@ export class ResourceMonitor {
       clearInterval(this.timer)
       this.timer = null
     }
+    if (this.lagTimer !== null) {
+      clearInterval(this.lagTimer)
+      this.lagTimer = null
+    }
   }
 
-  private tick(): void {
-    const now = Date.now()
-    const metrics = this.sample(now)
-    this.bus.emit({
-      kind: 'resource' as const,
-      ...metrics,
+  private measureLag(): void {
+    const start = process.hrtime.bigint()
+    setImmediate(() => {
+      const elapsedNs = Number(process.hrtime.bigint() - start)
+      this.lastEventLoopLagMs = elapsedNs / 1e6
     })
   }
 
-  sample(now: number): Omit<ResourceMetrics, 'kind'> {
+  private tick(): void {
+    const snapshot = this.sample(Date.now())
+    this.bus.emit({ kind: 'resource' as const, snapshot })
+  }
+
+  sample(now: number): ResourceSnapshot {
     const cgroupMem = readCgroupMemory()
     const cgroupCpu = readCgroupCpuStat()
 
     let cpuPct = 0
-    let memBytes = 0
-    let memMaxBytes = 0
+    let memUsed = 0
+    let memLimit = 0
+    let memSource: 'cgroup' | 'host' = 'host'
+    let cpuSource: 'cgroup' | 'host' = 'host'
 
     if (cgroupMem) {
-      memBytes = cgroupMem.current
-      memMaxBytes = cgroupMem.max
+      memUsed = cgroupMem.current
+      memLimit = cgroupMem.max
+      memSource = 'cgroup'
     } else {
       const proc = readProcMeminfo()
       if (proc) {
-        memBytes = proc.used
-        memMaxBytes = proc.total
+        memUsed = proc.used
+        memLimit = proc.total
       }
     }
 
     if (cgroupCpu) {
+      cpuSource = 'cgroup'
       if (this.prevCgroupUsec !== null && this.prevTs !== null) {
         const usecDelta = cgroupCpu.usageUsec - this.prevCgroupUsec
         const msDelta = now - this.prevTs
@@ -151,11 +214,27 @@ export class ResourceMonitor {
 
     this.prevTs = now
 
+    const cpuCount = readCgroupCpuMax() ?? os.cpus().length
+    const disk = readDisk(this.diskPath)
+    const counts = this.countsProvider()
+    const rssBytes = process.memoryUsage().rss
+
     return {
-      cpuPct: Math.max(0, Math.min(100, cpuPct)),
-      memBytes,
-      memMaxBytes,
-      timestamp: now,
+      ts: now,
+      cpu: {
+        usagePercent: Math.max(0, Math.min(100, cpuPct)),
+        cpuCount,
+        source: cpuSource,
+      },
+      memory: {
+        usedBytes: memUsed,
+        limitBytes: memLimit,
+        rssBytes,
+        source: memSource,
+      },
+      disk: { path: this.diskPath, ...disk },
+      eventLoopLagMs: this.lastEventLoopLagMs,
+      counts,
     }
   }
 }
