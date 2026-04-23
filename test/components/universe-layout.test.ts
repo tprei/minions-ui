@@ -719,4 +719,21 @@ describe('universe-layout', () => {
     expect(cross?.data?.relationship).toBe('parent-child')
     expect(cross?.animated).toBe(false)
   })
+
+  it('renders ship coordinator (mode=ship) with stage in ship group', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const coordinator = makeSession({
+      id: 'coord',
+      slug: 'feature-coordinator',
+      mode: 'ship',
+      stage: 'plan',
+    })
+
+    const result = layoutUniverse([coordinator], [], false)
+
+    expect(result.nodes).toHaveLength(1)
+    expect(result.nodes[0].data.nodeType).toBe('ship')
+    expect(result.nodes[0].data.groupId).toBe('ship-coord')
+    expect(result.nodes[0].data.session?.stage).toBe('plan')
+  })
 })

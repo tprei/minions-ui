@@ -356,4 +356,87 @@ describe('NodeDetailPopup hierarchy metadata', () => {
     )
     expect(document.querySelector('[data-testid="node-detail-view-logs-btn"]')).toBeFalsy()
   })
+
+  it('renders stage badge for ship coordinator sessions', () => {
+    const coordinator = makeSession({
+      id: 'coord',
+      slug: 'feature-coordinator',
+      mode: 'ship',
+      stage: 'dag',
+    })
+    render(
+      <NodeDetailPopup
+        session={coordinator}
+        onClose={vi.fn()}
+        sessions={[coordinator]}
+        dags={[]}
+      />
+    )
+    const stageBadge = document.querySelector('[data-testid="node-detail-ship-stage"]')
+    expect(stageBadge).toBeTruthy()
+    expect(stageBadge!.textContent).toContain('dag')
+  })
+
+  it('renders workers list with status chips for ship coordinator with children', () => {
+    const coordinator = makeSession({
+      id: 'coord',
+      slug: 'coordinator',
+      mode: 'ship',
+      stage: 'dag',
+      childIds: ['w1', 'w2'],
+    })
+    const worker1 = makeSession({
+      id: 'w1',
+      slug: 'worker-one',
+      parentId: 'coord',
+      status: 'completed',
+    })
+    const worker2 = makeSession({
+      id: 'w2',
+      slug: 'worker-two',
+      parentId: 'coord',
+      status: 'running',
+    })
+    render(
+      <NodeDetailPopup
+        session={coordinator}
+        onClose={vi.fn()}
+        sessions={[coordinator, worker1, worker2]}
+        dags={[]}
+      />
+    )
+    const hierarchy = document.querySelector('[data-testid="node-detail-hierarchy"]')!
+    expect(hierarchy.innerHTML).toContain('Workers')
+    expect(hierarchy.innerHTML).toContain('worker-one')
+    expect(hierarchy.innerHTML).toContain('worker-two')
+    expect(hierarchy.innerHTML).toContain('Done')
+    expect(hierarchy.innerHTML).toContain('Running')
+  })
+
+  it('does not render workers as inline links for ship coordinators', () => {
+    const coordinator = makeSession({
+      id: 'coord',
+      slug: 'coordinator',
+      mode: 'ship',
+      stage: 'plan',
+      childIds: ['w1'],
+    })
+    const worker1 = makeSession({
+      id: 'w1',
+      slug: 'worker-one',
+      parentId: 'coord',
+      status: 'pending',
+    })
+    render(
+      <NodeDetailPopup
+        session={coordinator}
+        onClose={vi.fn()}
+        sessions={[coordinator, worker1]}
+        dags={[]}
+      />
+    )
+    const hierarchy = document.querySelector('[data-testid="node-detail-hierarchy"]')!
+    expect(hierarchy.innerHTML).toContain('Workers')
+    expect(hierarchy.innerHTML).not.toContain('Child')
+  })
 })

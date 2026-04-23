@@ -111,6 +111,8 @@ export function NodeDetailPopup({
   const dagNodeStatus = dagMatch?.node.status
   const showDagStatus = dagNodeStatus && dagNodeStatus !== session.status
 
+  const isShipCoordinator = session.mode === 'ship'
+
   const overlayBg = isDark ? 'bg-black/70' : 'bg-black/50'
   const dialogBg = isDark ? 'bg-gray-800' : 'bg-white'
   const titleColor = isDark ? 'text-white' : 'text-gray-900'
@@ -128,7 +130,8 @@ export function NodeDetailPopup({
   const hasHierarchyMeta =
     parentSession !== undefined ||
     childSessions.length > 0 ||
-    dagMatch !== null
+    dagMatch !== null ||
+    (isShipCoordinator && session.stage !== undefined)
 
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center">
@@ -175,12 +178,26 @@ export function NodeDetailPopup({
 
         {hasHierarchyMeta && (
           <div class={`px-4 py-3 border-b ${borderColor} flex flex-col gap-2`} data-testid="node-detail-hierarchy">
+            {isShipCoordinator && session.stage && (
+              <MetaRow label="Stage" isDark={isDark}>
+                <span
+                  class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                  style={{
+                    backgroundColor: isDark ? 'rgba(167,139,250,0.2)' : 'rgba(124,58,237,0.1)',
+                    color: isDark ? '#a78bfa' : '#7c3aed',
+                  }}
+                  data-testid="node-detail-ship-stage"
+                >
+                  {session.stage}
+                </span>
+              </MetaRow>
+            )}
             {parentSession && (
               <MetaRow label="Parent" isDark={isDark}>
                 <SessionLink session={parentSession} onClick={onSelectSession} isDark={isDark} />
               </MetaRow>
             )}
-            {childSessions.length > 0 && (
+            {childSessions.length > 0 && !isShipCoordinator && (
               <MetaRow label={childSessions.length === 1 ? 'Child' : 'Children'} isDark={isDark}>
                 <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {childSessions.map((child, i) => (
@@ -192,6 +209,18 @@ export function NodeDetailPopup({
                     </span>
                   ))}
                 </span>
+              </MetaRow>
+            )}
+            {childSessions.length > 0 && isShipCoordinator && (
+              <MetaRow label="Workers" isDark={isDark}>
+                <div class="flex flex-col gap-1">
+                  {childSessions.map((child) => (
+                    <div key={child.id} class="flex items-center gap-2">
+                      <SessionLink session={child} onClick={onSelectSession} isDark={isDark} />
+                      <StatusBadge status={child.status} />
+                    </div>
+                  ))}
+                </div>
               </MetaRow>
             )}
             {dagMatch && (
