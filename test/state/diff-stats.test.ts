@@ -27,7 +27,7 @@ const SESSION: ApiSession = {
   branch: 'feature/x',
   repo: 'https://github.com/acme/widgets',
 }
-const VERSION: VersionInfo = { apiVersion: '1', libraryVersion: '0.1.0', features: ['diff-viewer'] }
+const VERSION: VersionInfo = { apiVersion: '1', libraryVersion: '0.1.0', features: ['diff'] }
 const DAGS: ApiDagGraph[] = []
 
 const PATCH_V1 = [

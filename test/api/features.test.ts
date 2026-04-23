@@ -29,16 +29,16 @@ describe('hasFeature', () => {
     const store = makeStore({
       apiVersion: '1',
       libraryVersion: '1.1.0',
-      features: ['messages', 'pr-preview', 'diff-viewer'],
+      features: ['messages', 'pr-preview', 'diff'],
     })
     expect(hasFeature(store, 'pr-preview')).toBe(true)
-    expect(hasFeature(store, 'diff-viewer')).toBe(true)
+    expect(hasFeature(store, 'diff')).toBe(true)
     expect(hasFeature(store, 'messages')).toBe(true)
   })
 
   it('accepts a raw VersionInfo without a store wrapper', () => {
     const v: VersionInfo = { apiVersion: '1', libraryVersion: '1.1.0', features: ['web-push'] }
     expect(hasFeature(v, 'web-push')).toBe(true)
-    expect(hasFeature(v, 'diff-viewer')).toBe(false)
+    expect(hasFeature(v, 'diff')).toBe(false)
   })
 })

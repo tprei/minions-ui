@@ -227,13 +227,13 @@ export async function createMockMinion(opts?: {
         return sendJson(res, 200, { data: pr })
       }
       if (kind === 'diff') {
-        if (!hasFeature('diff-viewer')) return featureDisabled(res, 'diff-viewer')
+        if (!hasFeature('diff')) return featureDisabled(res, 'diff')
         const diff = diffBySession.get(sessionId)
         if (!diff) return notFound(res)
         return sendJson(res, 200, { data: diff })
       }
       if (kind === 'screenshots') {
-        if (!hasFeature('screenshots-http')) return featureDisabled(res, 'screenshots-http')
+        if (!hasFeature('screenshots')) return featureDisabled(res, 'screenshots')
         const list = screenshotsBySession.get(sessionId) ?? []
         return sendJson(res, 200, { data: { sessionId, screenshots: list } satisfies ScreenshotList })
       }
@@ -241,7 +241,7 @@ export async function createMockMinion(opts?: {
 
     const screenshotMatch = path.match(/^\/api\/screenshots\/(.+)$/)
     if (screenshotMatch && req.method === 'GET') {
-      if (!hasFeature('screenshots-http')) return featureDisabled(res, 'screenshots-http')
+      if (!hasFeature('screenshots')) return featureDisabled(res, 'screenshots')
       const file = decodeURIComponent(screenshotMatch[1])
       const blob = screenshotBlobs.get(file)
       if (!blob) return notFound(res)

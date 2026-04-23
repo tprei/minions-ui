@@ -72,7 +72,7 @@ describe('mock-minion integration', () => {
   })
 
   it('getDiff returns the stored workspace diff when flag on', async () => {
-    minion.setVersion({ features: ['diff-viewer'] })
+    minion.setVersion({ features: ['diff'] })
     const patch = [
       'diff --git a/x b/x',
       '--- a/x',
@@ -94,7 +94,7 @@ describe('mock-minion integration', () => {
   })
 
   it('listScreenshots + fetchScreenshotBlob round-trip', async () => {
-    minion.setVersion({ features: ['screenshots-http'] })
+    minion.setVersion({ features: ['screenshots'] })
     minion.setScreenshots('s-1', [
       { file: 'shot-1.png', url: '/api/screenshots/shot-1.png', capturedAt: '2026-04-19T00:00:00Z', size: 4 },
     ])
