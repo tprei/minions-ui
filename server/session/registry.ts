@@ -144,6 +144,8 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       quota_retry_count: 0,
       metadata: createOpts.metadata ?? {},
       pipeline_advancing: false,
+      stage: null,
+      coordinator_children: [],
     }
 
     prepared.insertSession(db(), row)

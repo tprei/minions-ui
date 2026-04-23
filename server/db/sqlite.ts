@@ -31,6 +31,8 @@ export interface SessionRow {
   quota_retry_count: number
   metadata: Record<string, unknown>
   pipeline_advancing: boolean
+  stage: string | null
+  coordinator_children: string[]
 }
 
 interface SessionDbRow {
@@ -57,6 +59,8 @@ interface SessionDbRow {
   quota_retry_count: number
   metadata: string
   pipeline_advancing: number
+  stage: string | null
+  coordinator_children: string | null
 }
 
 interface SessionEventRow {
@@ -149,6 +153,7 @@ function mapSessionRow(row: SessionDbRow): SessionRow {
     conversation: JSON.parse(row.conversation) as unknown[],
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
     pipeline_advancing: row.pipeline_advancing !== 0,
+    coordinator_children: row.coordinator_children ? (JSON.parse(row.coordinator_children) as string[]) : [],
   }
 }
 
@@ -237,8 +242,8 @@ export const prepared = {
     const c = stmts(db)
     if (!c.insertSession) {
       c.insertSession = db.prepare(
-        `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, quota_sleep_until, quota_retry_count, metadata, pipeline_advancing)
-         VALUES ($id, $slug, $status, $command, $mode, $repo, $branch, $bare_dir, $pr_url, $parent_id, $variant_group_id, $claude_session_id, $workspace_root, $created_at, $updated_at, $needs_attention, $attention_reasons, $quick_actions, $conversation, $quota_sleep_until, $quota_retry_count, $metadata, $pipeline_advancing)`,
+        `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, quota_sleep_until, quota_retry_count, metadata, pipeline_advancing, stage, coordinator_children)
+         VALUES ($id, $slug, $status, $command, $mode, $repo, $branch, $bare_dir, $pr_url, $parent_id, $variant_group_id, $claude_session_id, $workspace_root, $created_at, $updated_at, $needs_attention, $attention_reasons, $quick_actions, $conversation, $quota_sleep_until, $quota_retry_count, $metadata, $pipeline_advancing, $stage, $coordinator_children)`,
       )
     }
     c.insertSession.run({
@@ -265,6 +270,8 @@ export const prepared = {
       $quota_retry_count: row.quota_retry_count,
       $metadata: JSON.stringify(row.metadata),
       $pipeline_advancing: row.pipeline_advancing ? 1 : 0,
+      $stage: row.stage ?? null,
+      $coordinator_children: row.coordinator_children.length > 0 ? JSON.stringify(row.coordinator_children) : null,
     })
   },
 
@@ -296,7 +303,9 @@ export const prepared = {
           quota_sleep_until = COALESCE($quota_sleep_until, quota_sleep_until),
           quota_retry_count = COALESCE($quota_retry_count, quota_retry_count),
           metadata = COALESCE($metadata, metadata),
-          pipeline_advancing = COALESCE($pipeline_advancing, pipeline_advancing)
+          pipeline_advancing = COALESCE($pipeline_advancing, pipeline_advancing),
+          stage = COALESCE($stage, stage),
+          coordinator_children = COALESCE($coordinator_children, coordinator_children)
         WHERE id = $id`,
       )
     }
@@ -324,6 +333,8 @@ export const prepared = {
       $quota_retry_count: row.quota_retry_count ?? null,
       $metadata: row.metadata !== undefined ? JSON.stringify(row.metadata) : null,
       $pipeline_advancing: row.pipeline_advancing !== undefined ? (row.pipeline_advancing ? 1 : 0) : null,
+      $stage: row.stage !== undefined ? row.stage : null,
+      $coordinator_children: row.coordinator_children !== undefined ? (row.coordinator_children.length > 0 ? JSON.stringify(row.coordinator_children) : null) : null,
     })
   },
 

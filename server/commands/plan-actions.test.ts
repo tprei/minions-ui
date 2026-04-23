@@ -82,6 +82,8 @@ function insertSession(db: Database, overrides: Partial<SessionRow> = {}): strin
     quota_retry_count: 0,
     metadata: {},
     pipeline_advancing: false,
+    stage: null,
+    coordinator_children: [],
     ...overrides,
   }
   prepared.insertSession(db, row)

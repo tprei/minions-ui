@@ -19,8 +19,8 @@ function setupTestDb(): Database {
 function insertSession(db: Database, id: string, status = 'running'): void {
   const now = Date.now()
   db.run(
-    `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, quota_sleep_until, quota_retry_count, metadata, pipeline_advancing)
-     VALUES (?, ?, ?, 'run something', 'task', null, null, null, null, null, null, null, ?, ?, 0, '[]', '[]', '[]', null, 0, '{}', 0)`,
+    `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, quota_sleep_until, quota_retry_count, metadata, pipeline_advancing, stage, coordinator_children)
+     VALUES (?, ?, ?, 'run something', 'task', null, null, null, null, null, null, null, ?, ?, 0, '[]', '[]', '[]', null, 0, '{}', 0, null, null)`,
     [id, `${id}-slug`, status, now, now],
   )
 }

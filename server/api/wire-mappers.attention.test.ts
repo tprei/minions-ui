@@ -28,6 +28,8 @@ function makeRow(overrides: Partial<SessionRow> = {}): SessionRow {
     quota_retry_count: 0,
     metadata: {},
     pipeline_advancing: false,
+    stage: null,
+    coordinator_children: [],
     ...overrides,
   }
 }
