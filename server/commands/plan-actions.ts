@@ -178,6 +178,42 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
     }
   }
 
+  if (mode === "ship-plan") {
+    setPipelineAdvancing(ctx, sessionId, true)
+    try {
+      await killAndWait(sessionId, ctx)
+      const lastMsg = getLastAssistantMessage(ctx.db, sessionId)
+      if (!lastMsg) {
+        setPipelineAdvancing(ctx, sessionId, false)
+        return { ok: false, reason: "no DAG output from ship-plan to parse" }
+      }
+
+      let items: DagInput[]
+      try {
+        items = parseDagItems(lastMsg)
+      } catch {
+        const conversation = getConversationMessages(ctx.db, sessionId)
+        const typedConversation = conversation.map((m) => ({
+          role: m.role as "user" | "assistant",
+          text: m.text,
+        }))
+        const result = await extractDagItems(typedConversation)
+        if (result.error || result.items.length === 0) {
+          setPipelineAdvancing(ctx, sessionId, false)
+          return { ok: false, reason: result.errorMessage ?? "failed to extract DAG items" }
+        }
+        items = result.items
+      }
+
+      const dagResult = await buildAndStartDag(items, sessionId, ctx)
+      if (!dagResult.ok) setPipelineAdvancing(ctx, sessionId, false)
+      return dagResult
+    } catch (err) {
+      setPipelineAdvancing(ctx, sessionId, false)
+      throw err
+    }
+  }
+
   if (mode === "think" || mode === "plan" || mode === "review") {
     setPipelineAdvancing(ctx, sessionId, true)
     try {
@@ -205,13 +241,17 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
     }
   }
 
-  try {
-    const ok = await ctx.registry.reply(sessionId, EXECUTE_DIRECTIVE)
-    if (!ok) return { ok: false, reason: "could not inject execute directive into session" }
-    return { ok: true }
-  } catch (err) {
-    return { ok: false, reason: err instanceof Error ? err.message : String(err) }
+  if (mode === "task" || mode === "dag-task" || mode === "ship-verify") {
+    try {
+      const ok = await ctx.registry.reply(sessionId, EXECUTE_DIRECTIVE)
+      if (!ok) return { ok: false, reason: "could not inject execute directive into session" }
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, reason: err instanceof Error ? err.message : String(err) }
+    }
   }
+
+  return { ok: false, reason: `execute not supported for mode ${mode ?? "unknown"}` }
 }
 
 export async function handleSplit(sessionId: string, ctx: PlanActionCtx): Promise<PlanActionResult> {

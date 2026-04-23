@@ -242,6 +242,127 @@ describe("plan-actions gating", () => {
     expect(replyCalls[0]?.sessionId).toBe(sessionId)
     expect(replyCalls[0]?.text).toContain("gh pr create")
   })
+
+  it("ship-plan with valid DAG JSON triggers buildAndStartDag, not registry.reply", async () => {
+    const sessionId = insertSession(db, { mode: "ship-plan" })
+    const dagJson = JSON.stringify([
+      { id: "task-a", title: "Task A", description: "Do task A", dependsOn: [] },
+      { id: "task-b", title: "Task B", description: "Do task B", dependsOn: ["task-a"] },
+    ])
+    prepared.insertEvent(db, {
+      session_id: sessionId,
+      seq: 1,
+      turn: 1,
+      type: "assistant_text",
+      timestamp: Date.now(),
+      payload: { text: `Here is the DAG:\n\n\`\`\`json\n${dagJson}\n\`\`\``, final: true, blockId: "block-1" },
+    })
+
+    const stopCalls: string[] = []
+    const replyCalls: Array<{ sessionId: string; text: string }> = []
+    const startedDagIds: string[] = []
+    const registry = {
+      ...makeRegistry(stopCalls),
+      reply: async (sid: string, text: string) => {
+        replyCalls.push({ sessionId: sid, text })
+        return true
+      },
+    }
+    const ctx: PlanActionCtx = {
+      db,
+      registry,
+      scheduler: makeScheduler(startedDagIds),
+    }
+
+    const result = await handleExecute(sessionId, ctx)
+
+    expect(result.ok).toBe(true)
+    expect(result.dagId).toBeTruthy()
+    expect(stopCalls).toHaveLength(1)
+    expect(stopCalls[0]).toBe(sessionId)
+    expect(startedDagIds).toHaveLength(1)
+    expect(replyCalls).toHaveLength(0)
+  })
+
+  it("ship-plan with no DAG output returns error", async () => {
+    const sessionId = insertSession(db, { mode: "ship-plan" })
+    const stopCalls: string[] = []
+    const startedDagIds: string[] = []
+    const ctx: PlanActionCtx = {
+      db,
+      registry: makeRegistry(stopCalls),
+      scheduler: makeScheduler(startedDagIds),
+    }
+
+    const result = await handleExecute(sessionId, ctx)
+
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe("no DAG output from ship-plan to parse")
+    expect(startedDagIds).toHaveLength(0)
+  })
+
+  it("ship-plan falls back to extractDagItems when parseDagItems fails", async () => {
+    mockSpawn.mockImplementation(() => makeDagItemsChild([
+      { id: "task-1", title: "Task 1", description: "Do task 1", dependsOn: [] },
+    ]))
+
+    const sessionId = insertSession(db, { mode: "ship-plan" })
+    prepared.insertEvent(db, {
+      session_id: sessionId,
+      seq: 1,
+      turn: 1,
+      type: "user_message",
+      timestamp: Date.now(),
+      payload: { text: "Plan a feature" },
+    })
+    prepared.insertEvent(db, {
+      session_id: sessionId,
+      seq: 2,
+      turn: 1,
+      type: "assistant_text",
+      timestamp: Date.now(),
+      payload: { text: "Not valid JSON format but conversation contains plan", final: true, blockId: "block-1" },
+    })
+
+    const stopCalls: string[] = []
+    const startedDagIds: string[] = []
+    const ctx: PlanActionCtx = {
+      db,
+      registry: makeRegistry(stopCalls),
+      scheduler: makeScheduler(startedDagIds),
+    }
+
+    const result = await handleExecute(sessionId, ctx)
+
+    expect(result.ok).toBe(true)
+    expect(result.dagId).toBeTruthy()
+    expect(startedDagIds).toHaveLength(1)
+  })
+
+  it("rejects unknown modes with helpful error message", async () => {
+    const sessionId = insertSession(db, { mode: "unknown-mode" })
+    const stopCalls: string[] = []
+    const replyCalls: Array<{ sessionId: string; text: string }> = []
+    const registry = {
+      ...makeRegistry(stopCalls),
+      reply: async (sid: string, text: string) => {
+        replyCalls.push({ sessionId: sid, text })
+        return true
+      },
+    }
+    const ctx: PlanActionCtx = {
+      db,
+      registry,
+      scheduler: makeScheduler([]),
+    }
+
+    const result = await handleExecute(sessionId, ctx)
+
+    expect(result.ok).toBe(false)
+    expect(result.reason).toContain("execute not supported")
+    expect(result.reason).toContain("unknown-mode")
+    expect(replyCalls).toHaveLength(0)
+  })
 })
 
 describe("handleSplit", () => {
