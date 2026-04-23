@@ -407,6 +407,107 @@ describe('StatusBanner', () => {
     const banner = screen.getByTestId('transcript-status')
     expect(banner.textContent).toContain('Session interrupted')
   })
+
+  it('renders child_completed status with slug and status chip', () => {
+    const event: StatusEvent = {
+      ...baseEvent(1),
+      type: 'status',
+      severity: 'info',
+      kind: 'child_completed',
+      message: '',
+      data: {
+        slug: 'fix-login-bug',
+        status: 'completed',
+      },
+    }
+    render(<StatusBanner event={event} />)
+    const banner = screen.getByTestId('transcript-status')
+    expect(banner.getAttribute('data-kind')).toBe('child_completed')
+    expect(banner.textContent).toContain('fix-login-bug')
+    const chip = screen.getByTestId('child-status-chip')
+    expect(chip.textContent).toBe('completed')
+  })
+
+  it('renders child_completed with failed status', () => {
+    const event: StatusEvent = {
+      ...baseEvent(1),
+      type: 'status',
+      severity: 'info',
+      kind: 'child_completed',
+      message: '',
+      data: {
+        slug: 'refactor-database',
+        status: 'failed',
+      },
+    }
+    render(<StatusBanner event={event} />)
+    expect(screen.getByText('refactor-database')).toBeTruthy()
+    const chip = screen.getByTestId('child-status-chip')
+    expect(chip.textContent).toBe('failed')
+  })
+
+  it('renders child_completed with prUrl', () => {
+    const event: StatusEvent = {
+      ...baseEvent(1),
+      type: 'status',
+      severity: 'info',
+      kind: 'child_completed',
+      message: '',
+      data: {
+        slug: 'add-feature-x',
+        status: 'completed',
+        prUrl: 'https://github.com/owner/repo/pull/42',
+      },
+    }
+    render(<StatusBanner event={event} />)
+    expect(screen.getByText('add-feature-x')).toBeTruthy()
+    expect(screen.getByText('#42')).toBeTruthy()
+  })
+
+  it('defaults to completed status when not provided', () => {
+    const event: StatusEvent = {
+      ...baseEvent(1),
+      type: 'status',
+      severity: 'info',
+      kind: 'child_completed',
+      message: '',
+      data: {
+        slug: 'task-without-status',
+      },
+    }
+    render(<StatusBanner event={event} />)
+    const chip = screen.getByTestId('child-status-chip')
+    expect(chip.textContent).toBe('completed')
+  })
+
+  it('defaults to "child" slug when not provided', () => {
+    const event: StatusEvent = {
+      ...baseEvent(1),
+      type: 'status',
+      severity: 'info',
+      kind: 'child_completed',
+      message: '',
+      data: {
+        status: 'completed',
+      },
+    }
+    render(<StatusBanner event={event} />)
+    expect(screen.getByText('child')).toBeTruthy()
+  })
+
+  it('falls back to generic rendering when data is missing for child_completed', () => {
+    const event: StatusEvent = {
+      ...baseEvent(1),
+      type: 'status',
+      severity: 'info',
+      kind: 'child_completed',
+      message: 'Child completed',
+    }
+    render(<StatusBanner event={event} />)
+    const banner = screen.getByTestId('transcript-status')
+    expect(banner.textContent).toContain('Child task')
+    expect(banner.textContent).toContain('Child completed')
+  })
 })
 
 describe('TurnSeparator', () => {
