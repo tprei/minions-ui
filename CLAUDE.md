@@ -138,4 +138,4 @@ cd docker && docker compose up --build
 
 ## Monorepo structure
 
-The engine lives in `server/`, the UI in `src/`. Changes spanning both should be done in a single PR. See `docs/two-repo-prs.md` for legacy context on the previous split-repo workflow.
+The engine lives in `server/`, the UI in `src/`. Changes spanning both go in a single PR — there is no separate `telegram-minions` repo to coordinate with.

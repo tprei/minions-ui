@@ -33,4 +33,4 @@ See [`CLAUDE.md`](./CLAUDE.md) for the full directory map and working rules, [`A
 - **M5** — Multi-connection UX: picker dropdown, drawer, color accents, staggered initial SSE.
 - **M6** — PWA: `vite-plugin-pwa` (Workbox injectManifest), manifest, icons, offline last-snapshot render.
 - **M7** — Playwright E2E against a mock-SSE fixture, matrix `mobile-chromium` / `desktop-chromium` / `desktop-firefox`.
-- **M8** — `meta-minion` registration + this repo's `CLAUDE.md`, `AGENTS.md`, `docs/two-repo-prs.md`.
+- **M8** — `meta-minion` registration + this repo's `CLAUDE.md` and `AGENTS.md`.
