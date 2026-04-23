@@ -105,7 +105,7 @@ describe("DagScheduler", () => {
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
       { id: "b", title: "Task B", description: "B", dependsOn: [] },
       { id: "c", title: "Task C", description: "C", dependsOn: ["a", "b"] },
-    ], 1, "https://github.com/org/repo")
+    ], "root-session", "https://github.com/org/repo")
     saveDag(graph, db)
 
     const created: string[] = []
@@ -125,7 +125,7 @@ describe("DagScheduler", () => {
     const repoUrl = "https://github.com/org/repo"
     const graph = buildDag("dag-repo", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
-    ], 1, repoUrl)
+    ], "root-session", repoUrl)
     saveDag(graph, db)
 
     const repos: string[] = []
@@ -147,7 +147,7 @@ describe("DagScheduler", () => {
       description: `Task ${i} desc`,
       dependsOn: [] as string[],
     }))
-    const graph = buildDag("dag-big", nodes, 1, "https://github.com/org/repo")
+    const graph = buildDag("dag-big", nodes, "root-session", "https://github.com/org/repo")
     saveDag(graph, db)
 
     let concurrent = 0
@@ -171,7 +171,7 @@ describe("DagScheduler", () => {
     const graph = buildDag("dag-chain", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
       { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
-    ], 1, "https://github.com/org/repo")
+    ], "root-session", "https://github.com/org/repo")
     saveDag(graph, db)
 
     const createdSessions: string[] = []
@@ -195,7 +195,7 @@ describe("DagScheduler", () => {
     const graph = buildDag("dag-fail", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
       { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
-    ], 1, "https://github.com/org/repo")
+    ], "root-session", "https://github.com/org/repo")
     saveDag(graph, db)
 
     const createdSessions: string[] = []
@@ -222,7 +222,7 @@ describe("DagScheduler", () => {
   it("emits dag.node.started event when node spawns", async () => {
     const graph = buildDag("dag-events", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
-    ], 1, "https://github.com/org/repo")
+    ], "root-session", "https://github.com/org/repo")
     saveDag(graph, db)
 
     const events: Array<{ kind: string; nodeId: string }> = []
@@ -239,7 +239,7 @@ describe("DagScheduler", () => {
   it("emits dag.node.completed event when session finishes", async () => {
     const graph = buildDag("dag-complete", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
-    ], 1, "https://github.com/org/repo")
+    ], "root-session", "https://github.com/org/repo")
     saveDag(graph, db)
 
     const events: Array<{ kind: string; state: string }> = []
@@ -263,7 +263,7 @@ describe("DagScheduler", () => {
   it("cancel stops running sessions and marks them failed", async () => {
     const graph = buildDag("dag-cancel", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
-    ], 1, "https://github.com/org/repo")
+    ], "root-session", "https://github.com/org/repo")
     saveDag(graph, db)
 
     const stopped: string[] = []
@@ -290,7 +290,7 @@ describe("DagScheduler", () => {
   it("retryNode resets a failed node and re-spawns it", async () => {
     const graph = buildDag("dag-retry", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
-    ], 1, "https://github.com/org/repo")
+    ], "root-session", "https://github.com/org/repo")
     saveDag(graph, db)
 
     const sessions: string[] = []
@@ -319,7 +319,7 @@ describe("DagScheduler", () => {
     const graph = buildDag("dag-force", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
       { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
-    ], 1, "https://github.com/org/repo")
+    ], "root-session", "https://github.com/org/repo")
     saveDag(graph, db)
 
     const sessions: string[] = []
@@ -352,7 +352,7 @@ describe("DagScheduler", () => {
   it("calls updateStackComment after each node state transition", async () => {
     const graph = buildDag("dag-comment", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
-    ], 1, "https://github.com/org/repo")
+    ], "root-session", "https://github.com/org/repo")
     saveDag(graph, db)
 
     const sessions: string[] = []

@@ -1,12 +1,49 @@
 import type { Database } from "bun:sqlite"
 import { readyNodes, advanceDag, failNode, resetFailedNode, nodeIndex, getUpstreamBranches, isDagComplete } from "./dag"
 import type { DagGraph, DagNode } from "./dag"
-import { saveDag, loadDag } from "./store"
+import { saveDag, loadDag, listDags } from "./store"
 import { updateStackComment } from "./stack-comment"
 import type { SessionRegistry } from "../session/registry"
 import type { EngineEventBus } from "../events/bus"
 import type { SessionRunState } from "../events/types"
 import type { ApiDagNode, ApiDagGraph } from "../../shared/api-types"
+
+const PR_URL_REGEX = /https:\/\/github\.com\/[^\s)]+\/pull\/\d+/
+
+function readNodePrInfo(db: Database, sessionId: string): { prUrl?: string; branch?: string } {
+  const row = db
+    .query<{ branch: string | null }, [string]>("SELECT branch FROM sessions WHERE id = ?")
+    .get(sessionId)
+  const branch = row?.branch ?? undefined
+
+  const maxTurn = db
+    .query<{ m: number | null }, [string]>(
+      "SELECT MAX(turn) as m FROM session_events WHERE session_id = ? AND type = 'assistant_text'",
+    )
+    .get(sessionId)
+  if (!maxTurn || maxTurn.m === null) return { branch }
+
+  const rows = db
+    .query<{ payload: string }, [string, number]>(
+      "SELECT payload FROM session_events WHERE session_id = ? AND type = 'assistant_text' AND turn = ? ORDER BY seq ASC",
+    )
+    .all(sessionId, maxTurn.m)
+
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i]!
+    try {
+      const payload = JSON.parse(row.payload) as Record<string, unknown>
+      if (payload.final !== true) continue
+      const text = typeof payload.text === "string" ? payload.text : ""
+      const match = PR_URL_REGEX.exec(text)
+      if (match) return { prUrl: match[0], branch }
+    } catch {
+      continue
+    }
+  }
+
+  return { branch }
+}
 
 const MAX_DAG_CONCURRENCY = Number(process.env["MAX_DAG_CONCURRENCY"] ?? 4)
 
@@ -35,6 +72,7 @@ export interface DagScheduler {
   status(dagId: string): DagStatusSnapshot
   retryNode(nodeId: string, dagId: string): Promise<void>
   forceNodeLanded(nodeId: string, dagId: string): Promise<void>
+  reconcileOnBoot(): Promise<void>
 }
 
 export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
@@ -77,7 +115,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     }
     return {
       id: graph.id,
-      rootTaskId: String(graph.parentThreadId),
+      rootTaskId: graph.rootSessionId,
       nodes,
       status: "running",
       createdAt: new Date(graph.createdAt).toISOString(),
@@ -179,6 +217,9 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     nodeToGraph.delete(sessionId)
 
     if (state === "completed") {
+      const { prUrl, branch } = readNodePrInfo(db, sessionId)
+      if (branch) node.branch = branch
+      if (prUrl) node.prUrl = prUrl
       node.status = "done"
       advanceDag(graph)
 
@@ -262,6 +303,58 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     await tickGraph(graph)
   }
 
+  async function reconcileOnBoot(): Promise<void> {
+    const graphs = listDags(db)
+    for (const graph of graphs) {
+      const nonTerminal = graph.nodes.some((n) =>
+        n.status === "pending" || n.status === "ready" || n.status === "running"
+      )
+      if (!nonTerminal) continue
+
+      activeGraphs.set(graph.id, graph)
+
+      for (const node of graph.nodes) {
+        if (node.status !== "running") continue
+        if (!node.sessionId) {
+          node.status = "failed"
+          node.error = "session id missing after engine restart"
+          failNode(graph, node.id)
+          continue
+        }
+
+        const row = db
+          .query<{ status: string }, [string]>("SELECT status FROM sessions WHERE id = ?")
+          .get(node.sessionId)
+
+        if (!row) {
+          node.status = "failed"
+          node.error = "session row missing after engine restart"
+          failNode(graph, node.id)
+          continue
+        }
+
+        if (row.status === "completed") {
+          const { prUrl, branch } = readNodePrInfo(db, node.sessionId)
+          if (branch) node.branch = branch
+          if (prUrl) node.prUrl = prUrl
+          node.status = "done"
+          advanceDag(graph)
+        } else if (row.status === "failed") {
+          node.status = "failed"
+          node.error = "session ended (failed) while engine was down"
+          failNode(graph, node.id)
+        } else {
+          nodeToSession.set(node.id, node.sessionId)
+          nodeToGraph.set(node.sessionId, graph.id)
+        }
+      }
+
+      persist(graph)
+      await commentUpdater(graph).catch(() => {})
+      await tickGraph(graph)
+    }
+  }
+
   async function forceNodeLanded(nodeId: string, dagId: string): Promise<void> {
     let graph = activeGraphs.get(dagId)
     if (!graph) {
@@ -290,5 +383,5 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     await tickGraph(graph)
   }
 
-  return { start, onSessionCompleted, cancel, status, retryNode, forceNodeLanded }
+  return { start, onSessionCompleted, cancel, status, retryNode, forceNodeLanded, reconcileOnBoot }
 }

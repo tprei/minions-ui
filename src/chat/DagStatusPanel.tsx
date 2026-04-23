@@ -21,14 +21,11 @@ interface DagStatusPanelProps {
 }
 
 // Finds the DAG for an active session. Either the active session IS the DAG
-// parent (match via threadId → `ApiDagGraph.rootTaskId`) or one of the DAG's
+// root (match via session.id → `ApiDagGraph.rootTaskId`) or one of the DAG's
 // child nodes wraps this session (match via `node.session.id`).
 function findDagForSession(dags: ApiDagGraph[], session: ApiSession): ApiDagGraph | null {
-  if (session.threadId !== undefined) {
-    const tidStr = String(session.threadId)
-    for (const g of dags) {
-      if (g.rootTaskId === tidStr) return g
-    }
+  for (const g of dags) {
+    if (g.rootTaskId === session.id) return g
   }
   for (const g of dags) {
     for (const n of Object.values(g.nodes)) {
@@ -40,7 +37,7 @@ function findDagForSession(dags: ApiDagGraph[], session: ApiSession): ApiDagGrap
 
 function findParentSession(sessions: ApiSession[], dag: ApiDagGraph): ApiSession | null {
   for (const s of sessions) {
-    if (s.threadId !== undefined && String(s.threadId) === dag.rootTaskId) return s
+    if (s.id === dag.rootTaskId) return s
   }
   return null
 }

@@ -53,12 +53,12 @@ function makeDag(overrides: Partial<ApiDagGraph> & { id: string }): ApiDagGraph 
 
 describe('buildSessionGroups', () => {
   it('puts DAG parent + its children into one group', () => {
-    const parent = mkSession({ id: 'p', slug: 'parent', threadId: 1, childIds: ['c1', 'c2'] })
-    const c1 = mkSession({ id: 'c1', slug: 'child-1', parentId: 'p', threadId: 10 })
-    const c2 = mkSession({ id: 'c2', slug: 'child-2', parentId: 'p', threadId: 11 })
+    const parent = mkSession({ id: 'p', slug: 'parent', childIds: ['c1', 'c2'] })
+    const c1 = mkSession({ id: 'c1', slug: 'child-1', parentId: 'p' })
+    const c2 = mkSession({ id: 'c2', slug: 'child-2', parentId: 'p' })
     const dag: ApiDagGraph = {
       id: 'dag-parent',
-      rootTaskId: '1',
+      rootTaskId: 'p',
       status: 'running',
       createdAt: '',
       updatedAt: '',
@@ -105,11 +105,11 @@ describe('buildSessionGroups', () => {
   })
 
   it('does not double-count sessions across groups', () => {
-    const parent = mkSession({ id: 'p', childIds: ['c'], threadId: 1 })
-    const child = mkSession({ id: 'c', parentId: 'p', threadId: 10, variantGroupId: 'maybe' })
+    const parent = mkSession({ id: 'p', childIds: ['c'] })
+    const child = mkSession({ id: 'c', parentId: 'p', variantGroupId: 'maybe' })
     const dag: ApiDagGraph = {
       id: 'dag-p',
-      rootTaskId: '1',
+      rootTaskId: 'p',
       status: 'running',
       createdAt: '',
       updatedAt: '',

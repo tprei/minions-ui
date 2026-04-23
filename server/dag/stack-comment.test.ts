@@ -21,7 +21,7 @@ describe("updateStackComment", () => {
     const { exec, calls } = makeSuccessExec()
     const graph = buildDag("test-dag", [
       { id: "a", title: "Task A", description: "Description A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     await updateStackComment(graph, exec)
     expect(calls).toHaveLength(0)
@@ -31,7 +31,7 @@ describe("updateStackComment", () => {
     const { exec, calls } = makeSuccessExec()
     const graph = buildDag("test-dag", [
       { id: "a", title: "Task A", description: "Description A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
     graph.nodes[0]!.prUrl = "https://github.com/org/repo/pull/1"
     graph.nodes[0]!.status = "landed"
 
@@ -44,7 +44,7 @@ describe("updateStackComment", () => {
     const graph = buildDag("test-dag", [
       { id: "a", title: "Task A", description: "Description A", dependsOn: [] },
       { id: "b", title: "Task B", description: "Description B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
     graph.nodes[0]!.prUrl = "https://github.com/org/repo/pull/1"
     graph.nodes[0]!.status = "done"
     graph.nodes[1]!.prUrl = "https://github.com/org/repo/pull/2"
@@ -71,7 +71,7 @@ describe("updateStackComment", () => {
 
     const graph = buildDag("test-dag", [
       { id: "a", title: "Task A", description: "Description A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
     graph.nodes[0]!.prUrl = "https://github.com/org/repo/pull/1"
     graph.nodes[0]!.status = "running"
 
@@ -95,7 +95,7 @@ describe("updateStackComment", () => {
 
     const graph = buildDag("test-dag", [
       { id: "a", title: "Task A", description: "Description A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
     graph.nodes[0]!.prUrl = "https://github.com/org/repo/pull/1"
     graph.nodes[0]!.status = "running"
 
@@ -122,7 +122,7 @@ describe("updateStackComment", () => {
     const graph = buildDag("test-dag", [
       { id: "a", title: "Task A", description: "Description A", dependsOn: [] },
       { id: "b", title: "Task B", description: "Description B", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
     graph.nodes[0]!.prUrl = "https://github.com/org/repo/pull/1"
     graph.nodes[0]!.status = "running"
     graph.nodes[1]!.prUrl = "https://github.com/org/repo/pull/2"

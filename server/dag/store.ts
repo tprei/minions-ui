@@ -7,7 +7,7 @@ function graphToRows(graph: DagGraph): { dagRow: Parameters<typeof prepared.inse
   const repo = graph.repoUrl ?? graph.repo ?? null
   const dagRow = {
     id: graph.id,
-    root_task_id: String(graph.parentThreadId),
+    root_task_id: graph.rootSessionId,
     status: "running" as const,
     repo: repo && repo.length > 0 ? repo : null,
     created_at: graph.createdAt,
@@ -118,7 +118,7 @@ export function loadDag(id: string, db?: Database): DagGraph | null {
   return {
     id: dagRow.id,
     nodes,
-    parentThreadId: Number(dagRow.root_task_id),
+    rootSessionId: dagRow.root_task_id,
     repo: dagRow.repo ?? "",
     createdAt: dagRow.created_at,
   }
