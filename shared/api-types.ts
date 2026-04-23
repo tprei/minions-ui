@@ -211,6 +211,7 @@ export interface CreateSessionRequest {
   mode: CreateSessionMode
   repo?: string
   profileId?: string
+  images?: string[]
 }
 
 export interface CreateSessionVariantsRequest extends CreateSessionRequest {
