@@ -184,8 +184,16 @@ function ChatPane({
       })
       if (!ok) return
     }
-    await onSend(fullText, session.id)
-    setText('')
+    try {
+      await onSend(fullText, session.id)
+      setText('')
+    } catch (e) {
+      await confirm({
+        title: `${cmd.cmd} failed`,
+        message: e instanceof Error ? e.message : String(e),
+        mode: 'alert',
+      })
+    }
   }
 
   const handleStop = async () => {
@@ -202,6 +210,10 @@ function ChatPane({
     } finally {
       setPending(null)
     }
+  }
+
+  const handleLand = async (dagId: string, nodeId: string): Promise<void> => {
+    await onCommand({ action: 'land', dagId, nodeId })
   }
 
   const handleClose = async () => {
@@ -221,7 +233,6 @@ function ChatPane({
   }
 
   const stoppable = session.status === 'running' || session.status === 'pending'
-  const closable = session.status !== 'completed' && session.status !== 'failed'
   const mobileFullscreen = !isDesktopPane.value && fullscreen
   const rootClass = mobileFullscreen
     ? 'fixed inset-0 z-40 flex flex-col bg-white dark:bg-slate-800'
@@ -235,9 +246,34 @@ function ChatPane({
           ? 'text-green-700 dark:text-green-300'
           : 'text-slate-500 dark:text-slate-400'
 
+  const parentSession = useMemo(() => {
+    for (const dag of store.dags.value) {
+      for (const node of Object.values(dag.nodes)) {
+        if (node.session?.id === session.id) {
+          for (const s of store.sessions.value) {
+            if (s.id === dag.rootTaskId) return s
+          }
+          return null
+        }
+      }
+    }
+    return null
+  }, [session.id, store.dags.value, store.sessions.value])
+
   return (
     <div class={rootClass} data-testid="chat-pane" data-fullscreen={mobileFullscreen ? 'true' : 'false'}>
       <header class="flex items-center gap-2 px-4 py-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
+        {parentSession && onNavigate && (
+          <button
+            type="button"
+            onClick={() => onNavigate(parentSession.id)}
+            class="shrink-0 rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+            title={`Back to parent: ${parentSession.slug}`}
+            data-testid="chat-pane-parent-btn"
+          >
+            ↑ {parentSession.slug}
+          </button>
+        )}
         <span class={`inline-block h-2 w-2 rounded-full ${statusDot(session.status)}`} />
         <span class="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
         <span class={`text-xs ${statusTone}`} data-testid="chat-pane-status">{session.status}</span>
@@ -280,8 +316,8 @@ function ChatPane({
           <button
             type="button"
             onClick={() => void handleClose()}
-            disabled={!closable || pending !== null}
-            title={closable ? 'Close this session permanently' : 'Session is already terminal'}
+            disabled={pending !== null}
+            title="Close this session permanently"
             class="rounded-md border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 px-2 py-1 text-xs font-medium hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-40 disabled:cursor-not-allowed"
             data-testid="chat-close-btn"
           >
@@ -290,7 +326,7 @@ function ChatPane({
         </div>
       </header>
       <WorktreeHeader session={session} store={store} />
-      <DagStatusPanel session={session} store={store} onSelect={onNavigate} />
+      <DagStatusPanel session={session} store={store} onSelect={onNavigate} onLand={handleLand} />
       <SessionTabs
         tabs={[
           { id: 'chat', label: 'Chat', available: true },

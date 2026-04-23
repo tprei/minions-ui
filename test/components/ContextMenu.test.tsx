@@ -127,7 +127,7 @@ describe('ContextMenu', () => {
     expect(screen.queryByText('Open in Telegram')).toBeNull()
   })
 
-  it('renders no items for completed sessions', () => {
+  it('renders close action for completed sessions', () => {
     render(
       <ContextMenu
         session={mockCompletedSession}
@@ -139,7 +139,7 @@ describe('ContextMenu', () => {
 
     expect(screen.queryByText('Send Reply')).toBeNull()
     expect(screen.queryByText('Stop Minion')).toBeNull()
-    expect(screen.queryByText('Close Session')).toBeNull()
+    expect(screen.getByText('Close Session')).toBeTruthy()
   })
 
   it('renders quick action items when session has quick actions', () => {

@@ -22,6 +22,8 @@ import { fetchPrPreview } from '../github/pr-preview'
 import { computeWorkspaceDiff } from '../workspace/diff'
 import { handleExecute, handleSplit, handleStack, handleDag } from '../commands/plan-actions'
 import type { PlanScheduler } from '../commands/plan-actions'
+import { handleLandCommand } from '../commands/land'
+import type { LandingManager } from '../dag/landing'
 import { loadOverrides, saveOverrides } from '../config/runtime-overrides'
 import { applyOverrides } from '../config/apply'
 import { RuntimeOverridesSchema } from '../config/schema'
@@ -45,6 +47,7 @@ const LIBRARY_VERSION = '0.1.0'
 const FEATURES = [
   'sessions-create',
   'messages',
+  'images',
   'transcript',
   'auth',
   'cors-allowlist',
@@ -71,9 +74,11 @@ const CommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('stop'), sessionId: z.string() }),
   z.object({ action: z.literal('close'), sessionId: z.string() }),
   z.object({ action: z.literal('plan_action'), sessionId: z.string(), planAction: z.enum(['execute', 'split', 'stack', 'dag']), markdown: z.string().optional() }),
+  z.object({ action: z.literal('land'), dagId: z.string(), nodeId: z.string() }),
 ])
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024
 
 const ImageSchema = z.object({
   mediaType: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']),
@@ -113,6 +118,7 @@ export function registerApiRoutes(
   registry: SessionRegistry,
   dbProvider?: () => Database,
   scheduler?: PlanScheduler,
+  landingManager?: LandingManager,
 ): void {
   const resolveDb = dbProvider ?? getDb
 
@@ -251,6 +257,27 @@ export function registerApiRoutes(
       }
     }
 
+    if (command.action === 'land') {
+      if (!landingManager) {
+        return c.json({
+          data: { success: false, error: 'landing is not configured on this engine' },
+        } satisfies ApiResponse<CommandResult>)
+      }
+      try {
+        const result = await handleLandCommand(command.nodeId, command.dagId, {
+          landingManager,
+          db: resolveDb(),
+        })
+        const body: ApiResponse<CommandResult> = {
+          data: result.ok ? { success: true } : { success: false, error: result.error ?? 'land failed' },
+        }
+        return c.json(body)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ data: { success: false, error: message } } satisfies ApiResponse<CommandResult>)
+      }
+    }
+
     try {
       if (command.action === 'reply') {
         await registry.reply(command.sessionId, command.message)
@@ -276,11 +303,16 @@ export function registerApiRoutes(
     const { text, sessionId, images } = parsed.data
 
     if (images) {
+      let totalBytes = 0
       for (const img of images) {
         const byteCount = Math.floor((img.dataBase64.length * 3) / 4)
         if (byteCount > MAX_IMAGE_BYTES) {
           return c.json({ error: `Image exceeds 5 MB limit (decoded ~${byteCount} bytes)` }, 400)
         }
+        totalBytes += byteCount
+      }
+      if (totalBytes > MAX_TOTAL_IMAGE_BYTES) {
+        return c.json({ error: `Total image payload exceeds 20 MB limit (decoded ~${totalBytes} bytes)` }, 400)
       }
     }
 

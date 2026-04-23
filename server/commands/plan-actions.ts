@@ -30,7 +30,7 @@ function sleep(ms: number): Promise<void> {
 function getConversationMessages(db: Database, sessionId: string): Array<{ role: string; text: string }> {
   const rows = db
     .query<{ type: string; payload: string }, [string]>(
-      "SELECT type, payload FROM session_events WHERE session_id = ? ORDER BY seq ASC",
+      "SELECT type, payload FROM session_events WHERE session_id = ? AND type IN ('user_message','assistant_text') ORDER BY seq ASC",
     )
     .all(sessionId)
 
@@ -44,30 +44,47 @@ function getConversationMessages(db: Database, sessionId: string): Array<{ role:
     }
     const text = typeof payload.text === "string" ? payload.text : ""
     if (!text) continue
-    if (row.type === "assistant_message" || row.type === "assistant") {
-      messages.push({ role: "assistant", text })
-    } else if (row.type === "user_message" || row.type === "user") {
+    if (row.type === "user_message") {
       messages.push({ role: "user", text })
+    } else if (row.type === "assistant_text" && payload.final === true) {
+      messages.push({ role: "assistant", text })
     }
   }
   return messages
 }
 
 function getLastAssistantMessage(db: Database, sessionId: string): string {
-  const rows = db
-    .query<{ payload: string }, [string]>(
-      "SELECT payload FROM session_events WHERE session_id = ? AND type IN ('assistant_message','assistant') ORDER BY seq DESC LIMIT 1",
+  const maxTurnRow = db
+    .query<{ max_turn: number | null }, [string]>(
+      "SELECT MAX(turn) as max_turn FROM session_events WHERE session_id = ? AND type = 'assistant_text'",
     )
-    .all(sessionId)
+    .get(sessionId)
+  const lastTurn = maxTurnRow?.max_turn ?? null
+  if (lastTurn === null) return ""
+
+  const rows = db
+    .query<{ payload: string }, [string, number]>(
+      "SELECT payload FROM session_events WHERE session_id = ? AND type = 'assistant_text' AND turn = ? ORDER BY seq ASC",
+    )
+    .all(sessionId, lastTurn)
+
+  const blocks = new Map<string, string>()
   for (const row of rows) {
+    let payload: Record<string, unknown>
     try {
-      const payload = JSON.parse(row.payload) as Record<string, unknown>
-      if (typeof payload.text === "string" && payload.text.length > 0) return payload.text
+      payload = JSON.parse(row.payload) as Record<string, unknown>
     } catch {
       continue
     }
+    const blockId = typeof payload.blockId === "string" ? payload.blockId : ""
+    const text = typeof payload.text === "string" ? payload.text : ""
+    const final = payload.final === true
+    if (!blockId || !text) continue
+    if (final) blocks.set(blockId, text)
+    else if (!blocks.has(blockId)) blocks.set(blockId, text)
   }
-  return ""
+
+  return Array.from(blocks.values()).filter((t) => t.length > 0).join("\n\n")
 }
 
 async function gate(sessionId: string, ctx: PlanActionCtx): Promise<string | null> {
@@ -75,6 +92,13 @@ async function gate(sessionId: string, ctx: PlanActionCtx): Promise<string | nul
   if (!row) return "session not found"
   if (row.pipeline_advancing) return "pipeline already advancing"
   return null
+}
+
+function setPipelineAdvancing(ctx: PlanActionCtx, sessionId: string, value: boolean): void {
+  ctx.db.run(
+    "UPDATE sessions SET pipeline_advancing = ?, updated_at = ? WHERE id = ?",
+    [value ? 1 : 0, Date.now(), sessionId],
+  )
 }
 
 async function killAndWait(sessionId: string, ctx: PlanActionCtx): Promise<void> {
@@ -93,7 +117,7 @@ async function buildAndStartDag(
   const sessionRow = prepared.getSession(ctx.db, sessionId)
   const repo = sessionRow?.repo ?? ""
 
-  const graph = buildDag(dagId, items, 0, repo)
+  const graph = buildDag(dagId, items, sessionId, repo)
   saveDag(graph, ctx.db)
   await ctx.scheduler.start(dagId)
 
@@ -128,22 +152,35 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
   const row = prepared.getSession(ctx.db, sessionId)
   const mode = row?.mode
 
-  await killAndWait(sessionId, ctx)
+  setPipelineAdvancing(ctx, sessionId, true)
 
-  if (mode === "ship-think") {
-    return handoffShipPhase(sessionId, "ship-plan", ctx)
+  let result: PlanActionResult
+  try {
+    await killAndWait(sessionId, ctx)
+
+    if (mode === "ship-think") {
+      result = await handoffShipPhase(sessionId, "ship-plan", ctx)
+    } else {
+      const conversation = getConversationMessages(ctx.db, sessionId)
+      const typedConversation = conversation.map((m) => ({
+        role: m.role as "user" | "assistant",
+        text: m.text,
+      }))
+
+      const extraction = await extractDagItems(typedConversation)
+      if (extraction.error) {
+        result = { ok: false, reason: extraction.errorMessage ?? extraction.error }
+      } else {
+        result = await buildAndStartDag(extraction.items, sessionId, ctx)
+      }
+    }
+  } catch (err) {
+    setPipelineAdvancing(ctx, sessionId, false)
+    throw err
   }
 
-  const conversation = getConversationMessages(ctx.db, sessionId)
-  const typedConversation = conversation.map((m) => ({
-    role: m.role as "user" | "assistant",
-    text: m.text,
-  }))
-
-  const result = await extractDagItems(typedConversation)
-  if (result.error) return { ok: false, reason: result.errorMessage ?? result.error }
-
-  return buildAndStartDag(result.items, sessionId, ctx)
+  if (!result.ok) setPipelineAdvancing(ctx, sessionId, false)
+  return result
 }
 
 export async function handleSplit(sessionId: string, ctx: PlanActionCtx): Promise<PlanActionResult> {

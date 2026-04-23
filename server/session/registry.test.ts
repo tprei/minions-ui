@@ -318,11 +318,9 @@ describe('SessionRegistry', () => {
       expect(capturedArgs).toContain('--resume')
       const resumeIdx = capturedArgs.indexOf('--resume')
       expect(capturedArgs[resumeIdx + 1]).toBe('claude-abc')
-
-      expect(registry.get('reply-resume')).toBeDefined()
     }, 60_000)
 
-    test('returns false when runtime proc has already exited', async () => {
+    test('throws when the session has no claude_session_id to resume from', async () => {
       const bare = trackedDir('bare-reply')
       const work = trackedDir('work-reply')
       const workspaceRoot = trackedDir('ws-reply')
@@ -334,8 +332,7 @@ describe('SessionRegistry', () => {
 
       await new Promise<void>((r) => setTimeout(r, 100))
 
-      const ok = await registry.reply(session.id, 'more work')
-      expect(ok).toBe(false)
+      await expect(registry.reply(session.id, 'more work')).rejects.toThrow(/claude_session_id/)
     }, 30_000)
   })
 
@@ -361,7 +358,7 @@ describe('SessionRegistry', () => {
   })
 
   describe('reconcileOnBoot', () => {
-    test('skips rows with null claude_session_id and marks them failed', async () => {
+    test('marks running sessions failed and emits a session_interrupted status event', async () => {
       const now = Date.now()
       db.run(
         `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation)
@@ -375,43 +372,42 @@ describe('SessionRegistry', () => {
       const row = db.query<{ status: string }, [string]>('SELECT status FROM sessions WHERE id = ?').get('recon-1')
       expect(row?.status).toBe('failed')
       expect(registry.get('recon-1')).toBeUndefined()
+
+      const events = db
+        .query<{ type: string; payload: string }, [string]>(
+          'SELECT type, payload FROM session_events WHERE session_id = ? ORDER BY seq',
+        )
+        .all('recon-1')
+      expect(events.map((e) => e.type)).toEqual(['status', 'turn_completed'])
+      const statusPayload = JSON.parse(events[0]!.payload) as { kind: string; severity: string }
+      expect(statusPayload.kind).toBe('session_interrupted')
+      expect(statusPayload.severity).toBe('error')
     })
 
-    test('resumes a session that has a claude_session_id', async () => {
-      const bare = trackedDir('bare-recon')
-      const work = trackedDir('work-recon')
-      const workspaceRoot = trackedDir('ws-recon')
-      await initLocalBareRepo(bare, work)
-
-      const repoName = path.basename(bare).replace(/\.git$/, '')
-      const bareDir = path.join(workspaceRoot, '.repos', `${repoName}.git`)
-
-      const handle = await import('../workspace/prepare').then((m) =>
-        m.prepareWorkspace({ slug: 'recon-slug', repoUrl: bare, workspaceRoot, bootstrap: false }),
-      )
-
+    test('does not resume sessions even when claude_session_id is present', async () => {
       const now = Date.now()
       db.run(
         `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation)
-         VALUES ('recon-2', 'recon-slug', 'running', 'resume task', 'task', ?, ?, ?, null, null, null, 'claude-session-xyz', ?, ?, ?, 0, '[]', '[]', '[]')`,
-        [bare, handle.branch, bareDir, workspaceRoot, now, now],
+         VALUES ('recon-2', 'recon-slug', 'running', 'resume task', 'task', null, null, null, null, null, null, 'claude-session-xyz', null, ?, ?, 0, '[]', '[]', '[]')`,
+        [now, now],
       )
 
-      let capturedArgs: string[] = []
+      let spawned = false
       const capturingSpawn: SpawnFn = (argv, opts) => {
-        capturedArgs = argv
+        spawned = true
         return makeNoopSpawnFn()(argv, opts)
       }
 
       const registry = createSessionRegistry({ getDb: () => db, spawnFn: capturingSpawn })
       await registry.reconcileOnBoot()
 
-      await new Promise<void>((r) => setTimeout(r, 200))
+      await new Promise<void>((r) => setTimeout(r, 100))
 
-      expect(capturedArgs).toContain('--resume')
-      const resumeIdx = capturedArgs.indexOf('--resume')
-      expect(capturedArgs[resumeIdx + 1]).toBe('claude-session-xyz')
-    }, 60_000)
+      expect(spawned).toBe(false)
+      const row = db.query<{ status: string }, [string]>('SELECT status FROM sessions WHERE id = ?').get('recon-2')
+      expect(row?.status).toBe('failed')
+      expect(registry.get('recon-2')).toBeUndefined()
+    })
   })
 
   describe('session.snapshot events', () => {

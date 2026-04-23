@@ -12,7 +12,6 @@ export interface StackOpts {
   db: Database
   scheduler: StackScheduler
   repo?: string
-  parentThreadId?: number
 }
 
 export interface StackResult {
@@ -25,7 +24,6 @@ export async function startStack(
   opts: StackOpts,
 ): Promise<StackResult> {
   const dagId = randomUUID()
-  const parentThreadId = opts.parentThreadId ?? 0
   const repo = opts.repo ?? ""
 
   const linearItems: DagInput[] = items.map((item, i) => ({
@@ -34,9 +32,7 @@ export async function startStack(
     dependsOn: i > 0 ? [items[i - 1]?.id ?? `step-${i - 1}`] : [],
   }))
 
-  const graph = buildDag(dagId, linearItems, parentThreadId, repo)
-
-  void rootSessionId
+  const graph = buildDag(dagId, linearItems, rootSessionId, repo)
 
   saveDag(graph, opts.db)
   await opts.scheduler.start(dagId)

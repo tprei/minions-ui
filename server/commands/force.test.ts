@@ -12,6 +12,7 @@ function makeScheduler(shouldFail = false): DagScheduler {
     async forceNodeLanded(nodeId, dagId) {
       if (shouldFail) throw new Error(`cannot force ${nodeId} in ${dagId}`)
     },
+    async reconcileOnBoot() {},
   }
 }
 

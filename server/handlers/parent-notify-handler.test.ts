@@ -20,6 +20,7 @@ function makeScheduler(calls: Array<{ sessionId: string; state: string }>): DagS
     onSessionCompleted: async (sessionId, state) => {
       calls.push({ sessionId, state })
     },
+    start: async () => {},
   }
 }
 

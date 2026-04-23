@@ -31,7 +31,7 @@ describe("buildDag", () => {
       { id: "b", title: "Step B", description: "Second", dependsOn: ["a"] },
       { id: "c", title: "Step C", description: "Third", dependsOn: ["b"] },
     ]
-    const graph = buildDag("test-dag", items, 123, "myrepo")
+    const graph = buildDag("test-dag", items, "root-session", "myrepo")
 
     expect(graph.nodes).toHaveLength(3)
     expect(graph.nodes[0]!.status).toBe("ready")
@@ -46,7 +46,7 @@ describe("buildDag", () => {
       { id: "c", title: "Right", description: "Right branch", dependsOn: ["a"] },
       { id: "d", title: "Merge", description: "Merge point", dependsOn: ["b", "c"] },
     ]
-    const graph = buildDag("diamond", items, 1, "repo")
+    const graph = buildDag("diamond", items, "root-session", "repo")
 
     expect(graph.nodes[0]!.status).toBe("ready")
     expect(graph.nodes[1]!.status).toBe("pending")
@@ -60,7 +60,7 @@ describe("buildDag", () => {
       { id: "b", title: "B", description: "B", dependsOn: [] },
       { id: "c", title: "C", description: "C", dependsOn: [] },
     ]
-    const graph = buildDag("parallel", items, 1, "repo")
+    const graph = buildDag("parallel", items, "root-session", "repo")
 
     expect(graph.nodes.every((n) => n.status === "ready")).toBe(true)
   })
@@ -70,9 +70,9 @@ describe("buildDag", () => {
       { id: "a", title: "A", description: "A", dependsOn: ["nonexistent"] },
       { id: "b", title: "B", description: "B", dependsOn: [] },
     ]
-    expect(() => buildDag("bad", items, 1, "repo")).toThrow(UnknownNodeError)
+    expect(() => buildDag("bad", items, "root-session", "repo")).toThrow(UnknownNodeError)
     try {
-      buildDag("bad", items, 1, "repo")
+      buildDag("bad", items, "root-session", "repo")
     } catch (err) {
       expect(err).toBeInstanceOf(UnknownNodeError)
       expect((err as UnknownNodeError).nodeId).toBe("a")
@@ -86,9 +86,9 @@ describe("buildDag", () => {
     const items: DagInput[] = [
       { id: "a", title: "A", description: "A", dependsOn: ["a"] },
     ]
-    expect(() => buildDag("bad", items, 1, "repo")).toThrow(DagSelfDependencyError)
+    expect(() => buildDag("bad", items, "root-session", "repo")).toThrow(DagSelfDependencyError)
     try {
-      buildDag("bad", items, 1, "repo")
+      buildDag("bad", items, "root-session", "repo")
     } catch (err) {
       expect(err).toBeInstanceOf(DagSelfDependencyError)
       expect((err as DagSelfDependencyError).nodeId).toBe("a")
@@ -100,9 +100,9 @@ describe("buildDag", () => {
       { id: "a", title: "A", description: "A", dependsOn: ["b"] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
     ]
-    expect(() => buildDag("cycle", items, 1, "repo")).toThrow(DagCycleError)
+    expect(() => buildDag("cycle", items, "root-session", "repo")).toThrow(DagCycleError)
     try {
-      buildDag("cycle", items, 1, "repo")
+      buildDag("cycle", items, "root-session", "repo")
     } catch (err) {
       expect(err).toBeInstanceOf(DagCycleError)
       expect((err as DagCycleError).cycleNodes).toBeDefined()
@@ -117,9 +117,9 @@ describe("buildDag", () => {
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["b"] },
     ]
-    expect(() => buildDag("cycle", items, 1, "repo")).toThrow(DagCycleError)
+    expect(() => buildDag("cycle", items, "root-session", "repo")).toThrow(DagCycleError)
     try {
-      buildDag("cycle", items, 1, "repo")
+      buildDag("cycle", items, "root-session", "repo")
     } catch (err) {
       expect(err).toBeInstanceOf(DagCycleError)
       expect((err as DagCycleError).cycleNodes).toBeDefined()
@@ -135,7 +135,7 @@ describe("buildLinearDag", () => {
       { title: "Second", description: "Do second" },
       { title: "Third", description: "Do third" },
     ]
-    const graph = buildLinearDag("linear", items, 1, "repo")
+    const graph = buildLinearDag("linear", items, "root-session", "repo")
 
     expect(graph.nodes).toHaveLength(3)
     expect(graph.nodes[0]!.dependsOn).toEqual([])
@@ -153,7 +153,7 @@ describe("topologicalSort", () => {
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["b"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     expect(topologicalSort(graph)).toEqual(["a", "b", "c"])
   })
@@ -164,7 +164,7 @@ describe("topologicalSort", () => {
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["a"] },
       { id: "d", title: "D", description: "D", dependsOn: ["b", "c"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const sorted = topologicalSort(graph)
     expect(sorted).toHaveLength(4)
@@ -178,7 +178,7 @@ describe("topologicalSort", () => {
     const graph = buildDag("parallel", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const sorted = topologicalSort(graph)
     expect(sorted).toHaveLength(2)
@@ -192,7 +192,7 @@ describe("readyNodes", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const ready = readyNodes(graph)
     expect(ready).toHaveLength(1)
@@ -206,7 +206,7 @@ describe("advanceDag", () => {
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["b"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "done"
     const newlyReady = advanceDag(graph)
@@ -223,7 +223,7 @@ describe("advanceDag", () => {
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["a"] },
       { id: "d", title: "D", description: "D", dependsOn: ["b", "c"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "done"
     let ready = advanceDag(graph)
@@ -245,7 +245,7 @@ describe("advanceDag", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const ready = advanceDag(graph)
     expect(ready).toHaveLength(0)
@@ -255,7 +255,7 @@ describe("advanceDag", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "landed"
     const newlyReady = advanceDag(graph)
@@ -270,7 +270,7 @@ describe("advanceDag", () => {
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: [] },
       { id: "c", title: "C", description: "C", dependsOn: ["a", "b"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "landed"
     graph.nodes[1]!.status = "done"
@@ -287,7 +287,7 @@ describe("failNode", () => {
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["b"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const skipped = failNode(graph, "a")
     expect(graph.nodes[0]!.status).toBe("failed")
@@ -301,7 +301,7 @@ describe("failNode", () => {
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const skipped = failNode(graph, "a")
     expect(graph.nodes[0]!.status).toBe("failed")
@@ -315,7 +315,7 @@ describe("failNode", () => {
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[1]!.status = "done"
     const skipped = failNode(graph, "a")
@@ -329,7 +329,7 @@ describe("isDagComplete", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "done"
     graph.nodes[1]!.status = "done"
@@ -340,7 +340,7 @@ describe("isDagComplete", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "failed"
     graph.nodes[1]!.status = "skipped"
@@ -351,7 +351,7 @@ describe("isDagComplete", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "done"
     expect(isDagComplete(graph)).toBe(false)
@@ -361,7 +361,7 @@ describe("isDagComplete", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "landed"
     graph.nodes[1]!.status = "landed"
@@ -375,7 +375,7 @@ describe("getUpstreamBranches", () => {
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: [] },
       { id: "c", title: "C", description: "C", dependsOn: ["a", "b"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.branch = "minion/slug-a"
     graph.nodes[1]!.branch = "minion/slug-b"
@@ -388,7 +388,7 @@ describe("getUpstreamBranches", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const branches = getUpstreamBranches(graph, "b")
     expect(branches).toEqual([])
@@ -397,7 +397,7 @@ describe("getUpstreamBranches", () => {
   it("returns empty for root nodes", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     expect(getUpstreamBranches(graph, "a")).toEqual([])
   })
@@ -409,7 +409,7 @@ describe("getDownstreamNodes", () => {
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const downstream = getDownstreamNodes(graph, "a")
     expect(downstream.map((n) => n.id)).toEqual(["b"])
@@ -420,7 +420,7 @@ describe("getDownstreamNodes", () => {
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["b"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const downstream = getDownstreamNodes(graph, "a")
     expect(downstream.map((n) => n.id)).toEqual(["b", "c"])
@@ -430,7 +430,7 @@ describe("getDownstreamNodes", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     expect(getDownstreamNodes(graph, "b")).toEqual([])
   })
@@ -441,7 +441,7 @@ describe("getDownstreamNodes", () => {
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["a"] },
       { id: "d", title: "D", description: "D", dependsOn: ["b", "c"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const downstream = getDownstreamNodes(graph, "a")
     expect(downstream.map((n) => n.id).sort()).toEqual(["b", "c", "d"])
@@ -450,7 +450,7 @@ describe("getDownstreamNodes", () => {
   it("returns empty for unknown node", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     expect(getDownstreamNodes(graph, "nonexistent")).toEqual([])
   })
@@ -460,7 +460,7 @@ describe("mergeBase field", () => {
   it("is undefined by default when building a DAG", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     expect(graph.nodes[0]!.mergeBase).toBeUndefined()
   })
@@ -469,7 +469,7 @@ describe("mergeBase field", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.mergeBase = "abc123"
     graph.nodes[1]!.mergeBase = "def456"
@@ -483,7 +483,7 @@ describe("criticalPathLength", () => {
   it("returns 1 for a single node", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
     expect(criticalPathLength(graph)).toBe(1)
   })
 
@@ -492,7 +492,7 @@ describe("criticalPathLength", () => {
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["b"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
     expect(criticalPathLength(graph)).toBe(3)
   })
 
@@ -502,7 +502,7 @@ describe("criticalPathLength", () => {
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["a"] },
       { id: "d", title: "D", description: "D", dependsOn: ["b", "c"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
     expect(criticalPathLength(graph)).toBe(3)
   })
 })
@@ -514,7 +514,7 @@ describe("dagProgress", () => {
       { id: "b", title: "B", description: "B", dependsOn: [] },
       { id: "c", title: "C", description: "C", dependsOn: ["a"] },
       { id: "d", title: "D", description: "D", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "done"
     graph.nodes[1]!.status = "running"
@@ -534,7 +534,7 @@ describe("dagProgress", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "landed"
     graph.nodes[1]!.status = "done"
@@ -552,7 +552,7 @@ describe("transitiveReduction", () => {
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["a", "b"] },
     ]
-    const graph = buildDag("test", items, 1, "repo")
+    const graph = buildDag("test", items, "root-session", "repo")
 
     transitiveReduction(graph)
 
@@ -566,7 +566,7 @@ describe("transitiveReduction", () => {
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["a"] },
     ]
-    const graph = buildDag("test", items, 1, "repo")
+    const graph = buildDag("test", items, "root-session", "repo")
 
     transitiveReduction(graph)
 
@@ -580,7 +580,7 @@ describe("renderDagStatus", () => {
     const graph = buildDag("test", [
       { id: "a", title: "Schema", description: "DB schema", dependsOn: [] },
       { id: "b", title: "API", description: "API routes", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "done"
     graph.nodes[0]!.prUrl = "https://github.com/repo/pull/1"
@@ -597,7 +597,7 @@ describe("renderDagStatus", () => {
     const graph = buildDag("test", [
       { id: "a", title: "Done Task", description: "A", dependsOn: [] },
       { id: "b", title: "Skipped Task", description: "B", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "done"
     graph.nodes[1]!.status = "skipped"
@@ -611,7 +611,7 @@ describe("renderDagStatus", () => {
     const graph = buildDag("test", [
       { id: "a", title: "Running Task", description: "A", dependsOn: [] },
       { id: "b", title: "Failed Task", description: "B", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "running"
     graph.nodes[1]!.status = "failed"
@@ -625,7 +625,7 @@ describe("renderDagStatus", () => {
     const graph = buildDag("test", [
       { id: "a", title: "Pending Task", description: "A", dependsOn: [] },
       { id: "b", title: "Ready Task", description: "B", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "pending"
     graph.nodes[1]!.status = "ready"
@@ -644,7 +644,7 @@ describe("renderDagForGitHub", () => {
   it("wraps output in HTML comment markers", () => {
     const graph = buildDag("test", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const result = renderDagForGitHub(graph)
     expect(result).toMatch(/^<!-- dag-status-start -->/)
@@ -655,7 +655,7 @@ describe("renderDagForGitHub", () => {
     const graph: DagGraph = {
       id: "empty",
       nodes: [],
-      parentThreadId: 1,
+      rootSessionId: "root-session",
       repo: "repo",
       createdAt: Date.now(),
     }
@@ -669,7 +669,7 @@ describe("renderDagForGitHub", () => {
   it("renders a single node", () => {
     const graph = buildDag("test", [
       { id: "a", title: "Only task", description: "Solo", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const result = renderDagForGitHub(graph)
     expect(result).toContain("```mermaid")
@@ -684,7 +684,7 @@ describe("renderDagForGitHub", () => {
       { title: "Schema migration", description: "DB" },
       { title: "API routes", description: "Routes" },
       { title: "Frontend UI", description: "UI" },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "done"
     graph.nodes[0]!.prUrl = "https://github.com/repo/pull/1"
@@ -713,7 +713,7 @@ describe("renderDagForGitHub", () => {
       { id: "b", title: "Left", description: "Left branch", dependsOn: ["a"] },
       { id: "c", title: "Right", description: "Right branch", dependsOn: ["a"] },
       { id: "d", title: "Merge", description: "Merge point", dependsOn: ["b", "c"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "done"
     graph.nodes[1]!.status = "running"
@@ -739,7 +739,7 @@ describe("renderDagForGitHub", () => {
       { id: "pending-node", title: "Pending", description: "P", dependsOn: ["done-node"] },
       { id: "failed-node", title: "Failed", description: "F", dependsOn: [] },
       { id: "skipped-node", title: "Skipped", description: "S", dependsOn: ["failed-node"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "done"
     graph.nodes[1]!.status = "running"
@@ -768,7 +768,7 @@ describe("renderDagForGitHub", () => {
   it("renders PR links as dash when absent", () => {
     const graph = buildDag("test", [
       { id: "a", title: "No PR", description: "A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const result = renderDagForGitHub(graph)
     expect(result).toContain("| — |")
@@ -777,7 +777,7 @@ describe("renderDagForGitHub", () => {
   it("handles special characters in titles", () => {
     const graph = buildDag("test", [
       { id: "a", title: 'Fix "quotes" & <tags>', description: "A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const result = renderDagForGitHub(graph)
     expect(result).toContain("'quotes'")
@@ -787,7 +787,7 @@ describe("renderDagForGitHub", () => {
   it("sanitizes node IDs for mermaid", () => {
     const graph = buildDag("test", [
       { id: "node.with.dots", title: "Dotty", description: "A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const result = renderDagForGitHub(graph)
     expect(result).toContain("node_with_dots")
@@ -797,7 +797,7 @@ describe("renderDagForGitHub", () => {
   it("does not apply current class when currentNodeId is not set", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "A", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     const result = renderDagForGitHub(graph)
     expect(result).not.toMatch(/class \w+ current/)
@@ -809,7 +809,7 @@ describe("renderDagForGitHub", () => {
       { id: "a", title: "A", description: "A", dependsOn: [] },
       { id: "b", title: "B", description: "B", dependsOn: ["a"] },
       { id: "c", title: "C", description: "C", dependsOn: ["b"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "failed"
     graph.nodes[1]!.status = "skipped"
@@ -864,7 +864,7 @@ describe("resetFailedNode", () => {
       { id: "a", title: "A", description: "", dependsOn: [] },
       { id: "b", title: "B", description: "", dependsOn: ["a"] },
       { id: "c", title: "C", description: "", dependsOn: ["b"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
   }
 
   it("resets a failed node to ready and un-skips dependents", () => {
@@ -906,7 +906,7 @@ describe("resetFailedNode", () => {
       { id: "b", title: "B", description: "", dependsOn: ["a"] },
       { id: "c", title: "C", description: "", dependsOn: ["a"] },
       { id: "d", title: "D", description: "", dependsOn: ["b", "c"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "done"
     graph.nodes[1]!.status = "failed"
@@ -927,7 +927,7 @@ describe("ci-pending and ci-failed statuses", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "", dependsOn: [] },
       { id: "b", title: "B", description: "", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "ci-failed"
     graph.nodes[1]!.status = "skipped"
@@ -939,7 +939,7 @@ describe("ci-pending and ci-failed statuses", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "", dependsOn: [] },
       { id: "b", title: "B", description: "", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "ci-pending"
     graph.nodes[1]!.status = "pending"
@@ -951,7 +951,7 @@ describe("ci-pending and ci-failed statuses", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "", dependsOn: [] },
       { id: "b", title: "B", description: "", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "ci-failed"
 
@@ -964,7 +964,7 @@ describe("ci-pending and ci-failed statuses", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "", dependsOn: [] },
       { id: "b", title: "B", description: "", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "ci-pending"
 
@@ -978,7 +978,7 @@ describe("ci-pending and ci-failed statuses", () => {
       { id: "a", title: "A", description: "", dependsOn: [] },
       { id: "b", title: "B", description: "", dependsOn: [] },
       { id: "c", title: "C", description: "", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "ci-pending"
     graph.nodes[1]!.status = "ci-failed"
@@ -995,7 +995,7 @@ describe("ci-pending and ci-failed statuses", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "", dependsOn: [] },
       { id: "b", title: "B", description: "", dependsOn: ["a"] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "ci-failed"
     graph.nodes[0]!.error = "CI checks failed"
@@ -1012,7 +1012,7 @@ describe("ci-pending and ci-failed statuses", () => {
     const graph = buildDag("test", [
       { id: "a", title: "A", description: "", dependsOn: [] },
       { id: "b", title: "B", description: "", dependsOn: [] },
-    ], 1, "repo")
+    ], "root-session", "repo")
 
     graph.nodes[0]!.status = "ci-pending"
     graph.nodes[1]!.status = "ci-failed"
@@ -1033,7 +1033,7 @@ describe("nodeIndex", () => {
       { id: "b", title: "B", description: "", dependsOn: ["a"] },
       { id: "c", title: "C", description: "", dependsOn: ["a"] },
     ]
-    const graph = buildDag("idx-test", items, 1, "repo")
+    const graph = buildDag("idx-test", items, "root-session", "repo")
     const idx = nodeIndex(graph)
 
     expect(idx.size).toBe(3)
@@ -1047,7 +1047,7 @@ describe("nodeIndex", () => {
     const items: DagInput[] = [
       { id: "x", title: "X", description: "", dependsOn: [] },
     ]
-    const graph = buildDag("mut-test", items, 1, "repo")
+    const graph = buildDag("mut-test", items, "root-session", "repo")
     const idx = nodeIndex(graph)
 
     idx.get("x")!.status = "running"

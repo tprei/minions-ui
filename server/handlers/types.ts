@@ -15,6 +15,7 @@ export interface CompletionHandler {
 
 export interface DagScheduler {
   onSessionCompleted(sessionId: string, state: string): Promise<void>
+  start(dagId: string): Promise<void>
 }
 
 export interface LoopScheduler {

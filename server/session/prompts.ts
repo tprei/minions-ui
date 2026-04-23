@@ -32,6 +32,12 @@ export const MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
     disallowedTools: [],
     autoExitOnComplete: false,
   },
+  'dag-task': {
+    systemPrompt: DEFAULT_TASK_PROMPT,
+    model: envModel('CLAUDE_TASK_MODEL', 'claude-sonnet-4-5-20250929'),
+    disallowedTools: [],
+    autoExitOnComplete: true,
+  },
   plan: {
     systemPrompt: DEFAULT_PLAN_PROMPT,
     model: envModel('CLAUDE_PLAN_MODEL', 'claude-opus-4-1-20250805'),
@@ -54,19 +60,19 @@ export const MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
     systemPrompt: DEFAULT_SHIP_THINK_PROMPT,
     model: envModel('CLAUDE_SHIP_THINK_MODEL', 'claude-opus-4-1-20250805'),
     disallowedTools: [...READONLY_DISALLOWED_TOOLS],
-    autoExitOnComplete: false,
+    autoExitOnComplete: true,
   },
   'ship-plan': {
     systemPrompt: DEFAULT_SHIP_PLAN_PROMPT,
     model: envModel('CLAUDE_SHIP_PLAN_MODEL', 'claude-opus-4-1-20250805'),
     disallowedTools: [...READONLY_DISALLOWED_TOOLS],
-    autoExitOnComplete: false,
+    autoExitOnComplete: true,
   },
   'ship-verify': {
     systemPrompt: DEFAULT_SHIP_VERIFY_PROMPT,
     model: envModel('CLAUDE_SHIP_VERIFY_MODEL', 'claude-sonnet-4-5-20250929'),
     disallowedTools: [],
-    autoExitOnComplete: false,
+    autoExitOnComplete: true,
   },
   'ci-fix': {
     systemPrompt: DEFAULT_CI_FIX_PROMPT,

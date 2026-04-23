@@ -12,6 +12,7 @@ function makeScheduler(shouldFail = false): DagScheduler {
       if (shouldFail) throw new Error(`cannot retry ${nodeId} in ${dagId}`)
     },
     async forceNodeLanded() {},
+    async reconcileOnBoot() {},
   }
 }
 

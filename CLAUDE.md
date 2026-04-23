@@ -1,6 +1,6 @@
 # minions-ui — Claude guidance
 
-Standalone PWA that replaces the Telegram Mini App frontend for [`@tprei/telegram-minions`](https://github.com/tprei/telegram-minions). Works in any browser; installs as a PWA on phone and desktop; connects to N minion deployments via bearer-token auth.
+Standalone PWA frontend for the minions engine (see `server/`). Works in any browser; installs as a PWA on phone and desktop; connects to N minion deployments via bearer-token auth.
 
 ## Stack
 
@@ -40,7 +40,7 @@ src/
   api/
     client.ts       — createApiClient({ baseUrl, token })
     sse.ts          — openEventStream with full-jitter backoff
-    types.ts        — mirrors telegram-minions/src/api-server.ts SseEvent/ApiSession/etc
+    types.ts        — mirrors server/src/api-server.ts SseEvent/ApiSession/etc
   state/
     store.ts        — createConnectionStore(client) → signals + SSE wiring
     persist.ts      — IDB snapshot cache via idb-keyval
@@ -96,7 +96,7 @@ public/
 
 ## Library compatibility
 
-This UI must stay wire-compatible with `@tprei/telegram-minions`. The API surface we depend on:
+This UI must stay wire-compatible with the engine. The API surface we depend on:
 
 - `GET /api/sessions` → `{ data: ApiSession[] }`
 - `GET /api/dags` → `{ data: ApiDagGraph[] }`
@@ -105,13 +105,13 @@ This UI must stay wire-compatible with `@tprei/telegram-minions`. The API surfac
 - `POST /api/messages` → `{ data: { ok: true, sessionId } }` *(added in library v1.110.x)*
 - `GET /api/version` → `{ data: { apiVersion, libraryVersion, features: string[] } }` *(added in library v1.110.x)*
 
-Types mirror `telegram-minions/src/api-server.ts` lines 13–99. When they diverge, **read that file first** before touching our `src/api/types.ts`.
+Types mirror `server/src/api-server.ts`. When they diverge, **read that file first** before touching our `src/api/types.ts`.
 
 When `/api/version.features` is missing a capability (e.g. `messages`), gate the UI and display "needs library ≥ X.Y" rather than calling a non-existent endpoint.
 
-## Port source
+## Legacy port source
 
-The original Telegram Mini App lives at `/home/prei/telegram-minions/ui/`. If you need to re-port a component, that's the reference — strip Telegram SDK coupling (`@twa-dev/sdk`, `WebApp.*`, `tg.*`, `--tg-theme-*`, `colors.telegram.*`) on the way in.
+The original Telegram Mini App source is no longer maintained. All components have been ported and updated for standalone PWA use.
 
 ## SSE transport
 
@@ -136,6 +136,6 @@ To start the engine locally:
 cd docker && docker compose up --build
 ```
 
-## Two-repo changes
+## Monorepo structure
 
-See `docs/two-repo-prs.md` for the workflow when a feature spans `telegram-minions` + `minions-ui`.
+The engine lives in `server/`, the UI in `src/`. Changes spanning both go in a single PR — there is no separate `telegram-minions` repo to coordinate with.

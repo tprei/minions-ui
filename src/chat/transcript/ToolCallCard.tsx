@@ -10,14 +10,18 @@ interface Props {
   result: ToolResultEvent | null
   defaultOpen?: boolean
   variant?: 'standalone' | 'grouped'
+  sessionTerminal?: boolean
 }
 
-export function ToolCallCard({ call, result, defaultOpen = false, variant = 'standalone' }: Props) {
+type DisplayStatus = 'pending' | 'ok' | 'error' | 'aborted'
+
+export function ToolCallCard({ call, result, defaultOpen = false, variant = 'standalone', sessionTerminal = false }: Props) {
   const [open, setOpen] = useState(defaultOpen)
   const [resultOpen, setResultOpen] = useState(() => !isBigResult(result))
   const summary = call.call
 
-  const status: 'pending' | 'ok' | 'error' = result?.result.status ?? 'pending'
+  const baseStatus = result?.result.status ?? 'pending'
+  const status: DisplayStatus = baseStatus === 'pending' && sessionTerminal ? 'aborted' : baseStatus
   const preview = buildResultPreview(result)
   const statusBadge = (
     <span
@@ -26,7 +30,9 @@ export function ToolCallCard({ call, result, defaultOpen = false, variant = 'sta
           ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
           : status === 'error'
             ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
-            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 animate-pulse'
+            : status === 'aborted'
+              ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 animate-pulse'
       }`}
       data-testid={`transcript-tool-status-${status}`}
     >
@@ -109,9 +115,9 @@ export function ToolCallCard({ call, result, defaultOpen = false, variant = 'sta
           ) : (
             <div
               class="border-t border-slate-200 dark:border-slate-700 px-3 py-2 text-[11px] italic text-slate-500 dark:text-slate-400"
-              data-testid="transcript-tool-call-pending"
+              data-testid={status === 'aborted' ? 'transcript-tool-call-aborted' : 'transcript-tool-call-pending'}
             >
-              Waiting for result…
+              {status === 'aborted' ? 'Aborted — session ended before tool finished.' : 'Waiting for result…'}
             </div>
           )}
         </div>

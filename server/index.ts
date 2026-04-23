@@ -25,6 +25,7 @@ import {
   createDefaultConfig,
 } from './handlers/stubs'
 import { createDagScheduler } from './dag/scheduler'
+import { createLandingManager } from './dag/landing'
 import { LoopScheduler } from './loops/scheduler'
 import { ResourceMonitor } from './metrics/resource'
 import { createDigestBuilder } from './digest/digest'
@@ -64,6 +65,7 @@ const reconciled = reconciledRows?.count ?? 0
 console.log(`[minion] engine on :${PORT}, ${reconciled} sessions resumed`)
 
 const scheduler = createDagScheduler({ registry, db, bus, workspace: WORKSPACE_ROOT })
+await scheduler.reconcileOnBoot()
 
 const loopScheduler = new LoopScheduler({
   db,
@@ -118,14 +120,21 @@ dispatcher.register(digestHandler)
 dispatcher.register(ciBabysitHandler)
 dispatcher.register(parentNotifyHandler)
 
-loopScheduler.start()
+const loopsEnabled = (process.env['ENABLE_LOOPS'] ?? 'false').toLowerCase() === 'true'
+if (loopsEnabled) {
+  loopScheduler.start()
+  console.log('[minion] loop scheduler started')
+} else {
+  console.log('[minion] loop scheduler disabled (set ENABLE_LOOPS=true to enable)')
+}
 
 const resourceMonitor = new ResourceMonitor(bus)
 resourceMonitor.start()
 
 startPushNotifier(bus)
 
-registerApiRoutes(app, registry, () => db, scheduler)
+const landingManager = createLandingManager({ bus })
+registerApiRoutes(app, registry, () => db, scheduler, landingManager)
 registerSseRoute(app, () => db)
 
 export default { port: PORT, fetch: app.fetch, idleTimeout: 0 }

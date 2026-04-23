@@ -30,6 +30,7 @@ export interface DagNode {
   dependsOn: string[]
   status: DagNodeStatus
   threadId?: number
+  sessionId?: string
   branch?: string
   prUrl?: string
   error?: string
@@ -43,7 +44,7 @@ export interface DagNode {
 export interface DagGraph {
   id: string
   nodes: DagNode[]
-  parentThreadId: number
+  rootSessionId: string
   repoUrl?: string
   repo: string
   createdAt: number
@@ -99,7 +100,7 @@ function findCycle(nodes: DagNode[] | DagInput[]): string[] {
 export function buildDag(
   dagId: string,
   items: DagInput[],
-  parentThreadId: number,
+  rootSessionId: string,
   repo: string,
   repoUrl?: string,
 ): DagGraph {
@@ -127,7 +128,7 @@ export function buildDag(
   const graph: DagGraph = {
     id: dagId,
     nodes,
-    parentThreadId,
+    rootSessionId,
     repo,
     repoUrl,
     createdAt: Date.now(),
@@ -151,7 +152,7 @@ export function buildDag(
 export function buildLinearDag(
   dagId: string,
   items: { title: string; description: string }[],
-  parentThreadId: number,
+  rootSessionId: string,
   repo: string,
   repoUrl?: string,
 ): DagGraph {
@@ -162,7 +163,7 @@ export function buildLinearDag(
     dependsOn: i > 0 ? [`step-${i - 1}`] : [],
   }))
 
-  return buildDag(dagId, dagItems, parentThreadId, repo, repoUrl)
+  return buildDag(dagId, dagItems, rootSessionId, repo, repoUrl)
 }
 
 export function topologicalSort(graph: DagGraph): string[] {

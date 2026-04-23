@@ -4,10 +4,12 @@ import type { DagGraph, DagNode } from "./dag"
 import { prepared, getDb } from "../db/sqlite"
 
 function graphToRows(graph: DagGraph): { dagRow: Parameters<typeof prepared.insertDag>[1]; nodeRows: Parameters<typeof prepared.upsertDagNode>[1][] } {
+  const repo = graph.repoUrl ?? graph.repo ?? null
   const dagRow = {
     id: graph.id,
-    root_task_id: String(graph.parentThreadId),
+    root_task_id: graph.rootSessionId,
     status: "running" as const,
+    repo: repo && repo.length > 0 ? repo : null,
     created_at: graph.createdAt,
     updated_at: Date.now(),
   }
@@ -23,7 +25,7 @@ function graphToRows(graph: DagGraph): { dagRow: Parameters<typeof prepared.inse
       id: node.id,
       slug: node.id,
       status: mapNodeStatus(node.status),
-      session_id: null,
+      session_id: node.sessionId ?? null,
       dependencies: node.dependsOn,
       dependents,
       payload: nodeToPayload(node),
@@ -109,14 +111,15 @@ export function loadDag(id: string, db?: Database): DagGraph | null {
       headSha: fields.headSha,
       prCommentId: fields.prCommentId,
       threadId: fields.threadId,
+      sessionId: row.session_id ?? undefined,
     }
   })
 
   return {
     id: dagRow.id,
     nodes,
-    parentThreadId: Number(dagRow.root_task_id),
-    repo: "",
+    rootSessionId: dagRow.root_task_id,
+    repo: dagRow.repo ?? "",
     createdAt: dagRow.created_at,
   }
 }
@@ -131,6 +134,7 @@ export function saveDag(graph: DagGraph, db?: Database): void {
       id: dagRow.id,
       root_task_id: dagRow.root_task_id,
       status: dagRow.status,
+      repo: dagRow.repo,
       updated_at: dagRow.updated_at,
     })
   } else {
