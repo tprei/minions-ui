@@ -412,4 +412,74 @@ describe('SessionRuntime', () => {
       expect(completed[0]?.state).toBe('stream_stalled')
     }, 5000)
   })
+
+  describe('error event recovery', () => {
+    test('result{is_error:true} closes the open turn and stops the subprocess', async () => {
+      const bus = getEventBus()
+      const streamEvents: TranscriptEvent[] = []
+      bus.onKind('session.stream', (e) => { streamEvents.push(e.event) })
+      const completed: Array<Extract<EngineEvent, { kind: 'session.completed' }>> = []
+      bus.onKind('session.completed', (e) => { completed.push(e) })
+
+      let stdoutCtrl!: ReadableStreamDefaultController<Uint8Array>
+      let stderrCtrl!: ReadableStreamDefaultController<Uint8Array>
+      let resolveExit!: (code: number) => void
+      const exitedPromise = new Promise<number>((r) => { resolveExit = r })
+
+      const errorProc: SubprocessHandle = {
+        pid: 777,
+        killed: false,
+        stdin: {
+          async write(d: string) { void d },
+          flush() {},
+        },
+        stdout: new ReadableStream<Uint8Array>({ start(c) { stdoutCtrl = c } }),
+        stderr: new ReadableStream<Uint8Array>({ start(c) { stderrCtrl = c } }),
+        exited: exitedPromise,
+        kill() {
+          this.killed = true
+          stderrCtrl.close()
+          stdoutCtrl.close()
+          resolveExit(1)
+        },
+      }
+
+      const errorLine = JSON.stringify({
+        type: 'result',
+        is_error: true,
+        result: 'API Error: Stream idle timeout - partial response received',
+      }) + '\n'
+
+      void (async () => {
+        await new Promise<void>((r) => setTimeout(r, 5))
+        stdoutCtrl.enqueue(new TextEncoder().encode(errorLine))
+      })()
+
+      const rt = new SessionRuntime({
+        sessionId: SESS_ID,
+        mode: 'task',
+        cwd: '/tmp/test-cwd',
+        initialPrompt: 'hi',
+        inactivityTimeoutMs: 60_000,
+        sessionTimeoutMs: 120_000,
+        spawnFn: () => errorProc,
+        getDb: () => db,
+      })
+
+      await rt.start()
+
+      const errorStatus = streamEvents.find(
+        (e) => e.type === 'status' && e.kind === 'session_error',
+      )
+      expect(errorStatus).toBeDefined()
+
+      const errorTurnClose = streamEvents.find(
+        (e) => e.type === 'turn_completed' && (e as { errored?: boolean }).errored === true,
+      )
+      expect(errorTurnClose).toBeDefined()
+
+      expect(errorProc.killed).toBe(true)
+      expect(completed).toHaveLength(1)
+    })
+  })
 })

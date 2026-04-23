@@ -158,7 +158,7 @@ describe('TranscriptTranslator', () => {
   })
 
   describe('error event', () => {
-    it('emits status with severity error and kind session_error', () => {
+    it('emits status with severity error and kind session_error when no turn is open', () => {
       const t = makeTranslator()
       const events = t.handle({ kind: 'error', error: 'Something went wrong' } satisfies ParsedStreamEvent)
 
@@ -168,6 +168,30 @@ describe('TranscriptTranslator', () => {
       expect(status.severity).toBe('error')
       expect(status.kind).toBe('session_error')
       expect(status.message).toBe('Something went wrong')
+    })
+
+    it('closes the open turn with errored:true and flushes buffered text', () => {
+      const t = makeTranslator()
+      t.startTurn('user_message')
+      t.handle({ kind: 'text_delta', text: 'partial ' })
+      t.handle({ kind: 'text_delta', text: 'response' })
+
+      const events = t.handle({
+        kind: 'error',
+        error: 'API Error: Stream idle timeout - partial response received',
+      } satisfies ParsedStreamEvent)
+
+      const flushed = events.find((e) => e.type === 'assistant_text') as AssistantTextEvent | undefined
+      expect(flushed?.final).toBe(true)
+      expect(flushed?.text).toBe('partial response')
+
+      const status = events.find((e) => e.type === 'status') as StatusEvent | undefined
+      expect(status?.severity).toBe('error')
+      expect(status?.kind).toBe('session_error')
+
+      const closed = events.find((e) => e.type === 'turn_completed') as TurnCompletedEvent | undefined
+      expect(closed).toBeDefined()
+      expect(closed?.errored).toBe(true)
     })
   })
 

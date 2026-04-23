@@ -96,8 +96,13 @@ export class TranscriptTranslator {
         return out
       }
 
-      case 'error':
-        return [this.status('session_error', event.error, { severity: 'error' })]
+      case 'error': {
+        const out: TranscriptEvent[] = [...this.flushAllBuffers()]
+        out.push(this.status('session_error', event.error, { severity: 'error' }))
+        const closed = this.closeTurn(undefined, undefined, true)
+        if (closed) out.push(closed)
+        return out
+      }
 
       case 'session_id':
         return []

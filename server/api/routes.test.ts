@@ -307,6 +307,24 @@ describe('Deferred routes return 501', () => {
     expect(res.status).toBe(404)
   })
 
+  test('session-scoped routes accept either id or slug', async () => {
+    const app = makeApp(testDb)
+    const now = Date.now()
+    testDb.run(
+      `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, quota_sleep_until, quota_retry_count, metadata, pipeline_advancing)
+       VALUES ('sess-uuid-aaa', 'nice-slug-0001', 'running', 'hi', 'task', null, null, null, null, null, null, null, ${now}, ${now}, 0, '[]', '[]', '[]', null, 0, '{}', 0)`,
+    )
+
+    const bySlug = await app.fetch(new Request('http://localhost/api/sessions/nice-slug-0001/transcript'))
+    expect(bySlug.status).toBe(200)
+
+    const byId = await app.fetch(new Request('http://localhost/api/sessions/sess-uuid-aaa/transcript'))
+    expect(byId.status).toBe(200)
+
+    const missing = await app.fetch(new Request('http://localhost/api/sessions/not-a-thing/transcript'))
+    expect(missing.status).toBe(404)
+  })
+
   test('POST /api/sessions/variants with no body → 400', async () => {
     const app = makeApp(testDb)
     const res = await app.fetch(

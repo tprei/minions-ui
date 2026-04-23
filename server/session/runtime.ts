@@ -268,7 +268,7 @@ export class SessionRuntime {
 
         if (event.kind === 'error') {
           if (this.state !== 'stopping' && this.state !== 'done') {
-            this.state = 'idle'
+            void this.stop('session_error')
           }
         }
       }
