@@ -28,6 +28,7 @@ import { ConfirmRoot } from './hooks/useConfirm'
 import { InstallPrompt } from './pwa/InstallPrompt'
 import { useOnlineStatus } from './pwa/useOnlineStatus'
 import { useMediaQuery } from './hooks/useMediaQuery'
+import { usePullToRefresh } from './hooks/usePullToRefresh'
 import { WorktreeHeader } from './components/WorktreeHeader'
 import { DagStatusPanel } from './chat/DagStatusPanel'
 import { ThemeToggle } from './chat/ThemeToggle'
@@ -712,6 +713,12 @@ function ActiveView() {
   const selected = sessionId ? sessions.find((s) => s.id === sessionId) ?? null : null
   const isGroupRoute = route.name === 'group'
 
+  const pullToRefresh = usePullToRefresh({
+    onRefresh: () => store.refresh(),
+    enabled: !isDesktop.value && mode === 'list' && !isGroupRoute,
+    threshold: 80,
+  })
+
   const handleAttentionSelect = (
     reason: AttentionReason | null,
     firstMatchId: string | null,
@@ -823,30 +830,57 @@ function ActiveView() {
           />
         )
       ) : (
-        <div class="flex flex-col flex-1 min-h-0">
-          <AttentionBar
-            sessions={sessions}
-            filter={attentionFilter}
-            onSelect={handleAttentionSelect}
-          />
-          <MobileSessionStrip
-            sessions={visibleSessions}
-            dags={store.dags.value}
-            activeSessionId={sessionId}
-            onSelect={setSessionId}
-          />
-          {selected ? (
-            <ChatPane
-              key={selected.id}
-              session={selected}
-              store={store}
-              onSend={handleSendMessage}
-              onCommand={handleCommand}
-              onNavigate={setSessionId}
-            />
-          ) : (
-            <EmptyPane />
+        <div class="flex flex-col flex-1 min-h-0 relative overflow-hidden">
+          {pullToRefresh.pullDistance > 0 && (
+            <div
+              class="absolute top-0 left-0 right-0 flex items-center justify-center transition-opacity z-10"
+              style={{
+                height: `${pullToRefresh.pullDistance}px`,
+                opacity: Math.min(pullToRefresh.pullDistance / 80, 1),
+              }}
+            >
+              <div class="flex items-center justify-center bg-white dark:bg-slate-800 rounded-full w-8 h-8 shadow-md">
+                <span
+                  class={`text-base ${pullToRefresh.isRefreshing ? 'animate-spin' : ''}`}
+                  aria-hidden="true"
+                >
+                  🔄
+                </span>
+              </div>
+            </div>
           )}
+          <div
+            {...pullToRefresh.containerProps}
+            class="flex flex-col flex-1 min-h-0 overflow-y-auto"
+            style={{
+              transform: pullToRefresh.pullDistance > 0 ? `translateY(${pullToRefresh.pullDistance}px)` : undefined,
+              transition: pullToRefresh.isRefreshing || pullToRefresh.pullDistance === 0 ? 'transform 0.2s ease-out' : 'none',
+            }}
+          >
+            <AttentionBar
+              sessions={sessions}
+              filter={attentionFilter}
+              onSelect={handleAttentionSelect}
+            />
+            <MobileSessionStrip
+              sessions={visibleSessions}
+              dags={store.dags.value}
+              activeSessionId={sessionId}
+              onSelect={setSessionId}
+            />
+            {selected ? (
+              <ChatPane
+                key={selected.id}
+                session={selected}
+                store={store}
+                onSend={handleSendMessage}
+                onCommand={handleCommand}
+                onNavigate={setSessionId}
+              />
+            ) : (
+              <EmptyPane />
+            )}
+          </div>
         </div>
       )}
       {!isDesktop.value && mode === 'canvas' && (
