@@ -8,6 +8,7 @@ interface NodeDetailPopupProps {
   session: ApiSession
   onClose: () => void
   onOpenChat?: (sessionId: string) => void
+  onViewLogs?: (sessionId: string) => void
   sessions?: ApiSession[]
   dags?: ApiDagGraph[]
   onSelectSession?: (session: ApiSession) => void
@@ -71,6 +72,7 @@ export function NodeDetailPopup({
   session,
   onClose,
   onOpenChat,
+  onViewLogs,
   sessions,
   dags,
   onSelectSession,
@@ -121,6 +123,7 @@ export function NodeDetailPopup({
     : session.command
 
   const hasChatAction = Boolean(onOpenChat)
+  const hasLogsAction = Boolean(onViewLogs)
 
   const hasHierarchyMeta =
     parentSession !== undefined ||
@@ -239,24 +242,33 @@ export function NodeDetailPopup({
           </MetaRow>
         </div>
 
-        <div class="px-4 py-3 flex gap-2">
+        <div class="px-4 py-3 flex flex-wrap gap-2">
           {hasChatAction && (
             <button
               onClick={() => onOpenChat!(session.id)}
-              class={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
+              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
             >
               <span>Open Chat</span>
+            </button>
+          )}
+          {hasLogsAction && (
+            <button
+              onClick={() => onViewLogs!(session.id)}
+              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isDark ? 'bg-slate-700 hover:bg-slate-600 text-slate-100' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}`}
+              data-testid="node-detail-view-logs-btn"
+            >
+              <span>View Logs</span>
             </button>
           )}
           {session.prUrl && (
             <button
               onClick={() => window.open(session.prUrl!, '_blank', 'noopener,noreferrer')}
-              class={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-800'}`}
+              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-800'}`}
             >
               <span>View PR</span>
             </button>
           )}
-          {!hasChatAction && !session.prUrl && (
+          {!hasChatAction && !hasLogsAction && !session.prUrl && (
             <div class={`flex-1 text-center text-sm py-2 ${mutedText}`}>
               No actions available
             </div>

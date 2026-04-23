@@ -325,4 +325,35 @@ describe('NodeDetailPopup hierarchy metadata', () => {
     render(<NodeDetailPopup session={session} onClose={vi.fn()} />)
     expect(document.querySelector('[data-testid="node-detail-hierarchy"]')).toBeFalsy()
   })
+
+  it('renders View Logs button when onViewLogs is provided', () => {
+    const session = makeSession({ id: 's-logs', slug: 'logs-slug' })
+    const onViewLogs = vi.fn()
+    render(
+      <NodeDetailPopup
+        session={session}
+        onClose={vi.fn()}
+        onViewLogs={onViewLogs}
+        sessions={[session]}
+        dags={[]}
+      />
+    )
+    const btn = document.querySelector('[data-testid="node-detail-view-logs-btn"]') as HTMLButtonElement | null
+    expect(btn).toBeTruthy()
+    fireEvent.click(btn!)
+    expect(onViewLogs).toHaveBeenCalledWith('s-logs')
+  })
+
+  it('omits View Logs button when onViewLogs is not provided', () => {
+    const session = makeSession()
+    render(
+      <NodeDetailPopup
+        session={session}
+        onClose={vi.fn()}
+        sessions={[session]}
+        dags={[]}
+      />
+    )
+    expect(document.querySelector('[data-testid="node-detail-view-logs-btn"]')).toBeFalsy()
+  })
 })
