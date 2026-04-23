@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS dags (
   id TEXT PRIMARY KEY,
   root_task_id TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('pending','running','completed','failed')),
+  repo TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

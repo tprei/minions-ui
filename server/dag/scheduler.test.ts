@@ -91,6 +91,25 @@ describe("DagScheduler", () => {
     expect(created).toHaveLength(2)
   })
 
+  it("passes the DAG's repo URL to registry.create after save/load round-trip", async () => {
+    const repoUrl = "https://github.com/org/repo"
+    const graph = buildDag("dag-repo", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], 1, repoUrl)
+    saveDag(graph, db)
+
+    const repos: string[] = []
+    const registry = makeRegistry(async (opts) => {
+      repos.push(opts.repo)
+      return { session: makeSession("s-" + opts.prompt), runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-repo")
+
+    expect(repos).toEqual([repoUrl])
+  })
+
   it("respects MAX_DAG_CONCURRENCY limit", async () => {
     const nodes = Array.from({ length: 6 }, (_, i) => ({
       id: `n${i}`,
