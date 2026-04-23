@@ -18,6 +18,7 @@ interface DagStatusPanelProps {
   session: ApiSession
   store: ConnectionStore
   onSelect?: (sessionId: string) => void
+  onLand?: (dagId: string, nodeId: string) => Promise<void>
 }
 
 // Finds the DAG for an active session. Either the active session IS the DAG
@@ -82,7 +83,7 @@ const DAG_NODE_LABELS: Record<ApiDagNode['status'], string> = {
   skipped: 'skipped',
 }
 
-export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps) {
+export function DagStatusPanel({ session, store, onSelect, onLand }: DagStatusPanelProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const collapsed = useSignal(readInitialCollapsed(isDesktop.value))
 
@@ -218,8 +219,10 @@ export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps
             <DagNodeRow
               key={node.id}
               node={node}
+              dagId={graph.id}
               isActive={!!node.session && node.session.id === session.id}
               onSelect={onSelect}
+              onLand={onLand}
             />
           ))}
         </ul>
@@ -230,18 +233,24 @@ export function DagStatusPanel({ session, store, onSelect }: DagStatusPanelProps
 
 function DagNodeRow({
   node,
+  dagId,
   isActive,
   onSelect,
+  onLand,
 }: {
   node: ApiDagNode
+  dagId: string
   isActive: boolean
   onSelect?: (sessionId: string) => void
+  onLand?: (dagId: string, nodeId: string) => Promise<void>
 }) {
+  const landing = useSignal(false)
   const dot = DAG_NODE_COLORS[node.status]
   const label = DAG_NODE_LABELS[node.status]
   const sess = node.session
   const prUrl = sess?.prUrl
   const deps = node.dependencies
+  const canLand = !!onLand && node.status === 'completed' && !!prUrl
   const tone =
     node.status === 'failed' || node.status === 'ci-failed'
       ? 'bg-red-50/60 dark:bg-red-950/30'
@@ -300,6 +309,32 @@ function DagNodeRow({
         >
           PR ↗
         </a>
+      )}
+      {canLand && (
+        <button
+          type="button"
+          disabled={landing.value}
+          onClick={async (e) => {
+            e.stopPropagation()
+            if (landing.value) return
+            landing.value = true
+            try {
+              await onLand!(dagId, node.id)
+            } finally {
+              landing.value = false
+            }
+          }}
+          class="rounded-md border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          data-testid={`dag-status-land-${node.id}`}
+          title="Merge this node's PR"
+        >
+          {landing.value ? 'Landing…' : 'Land'}
+        </button>
+      )}
+      {node.status === 'landed' && (
+        <span class="text-[10px] uppercase tracking-wide font-semibold text-emerald-700 dark:text-emerald-400 shrink-0">
+          landed
+        </span>
       )}
     </li>
   )

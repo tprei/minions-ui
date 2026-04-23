@@ -22,6 +22,8 @@ import { fetchPrPreview } from '../github/pr-preview'
 import { computeWorkspaceDiff } from '../workspace/diff'
 import { handleExecute, handleSplit, handleStack, handleDag } from '../commands/plan-actions'
 import type { PlanScheduler } from '../commands/plan-actions'
+import { handleLandCommand } from '../commands/land'
+import type { LandingManager } from '../dag/landing'
 import { loadOverrides, saveOverrides } from '../config/runtime-overrides'
 import { applyOverrides } from '../config/apply'
 import { RuntimeOverridesSchema } from '../config/schema'
@@ -71,6 +73,7 @@ const CommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('stop'), sessionId: z.string() }),
   z.object({ action: z.literal('close'), sessionId: z.string() }),
   z.object({ action: z.literal('plan_action'), sessionId: z.string(), planAction: z.enum(['execute', 'split', 'stack', 'dag']), markdown: z.string().optional() }),
+  z.object({ action: z.literal('land'), dagId: z.string(), nodeId: z.string() }),
 ])
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -113,6 +116,7 @@ export function registerApiRoutes(
   registry: SessionRegistry,
   dbProvider?: () => Database,
   scheduler?: PlanScheduler,
+  landingManager?: LandingManager,
 ): void {
   const resolveDb = dbProvider ?? getDb
 
@@ -243,6 +247,27 @@ export function registerApiRoutes(
           data: result.ok
             ? { success: true, dagId: result.dagId }
             : { success: false, error: result.reason ?? 'plan_action failed' },
+        }
+        return c.json(body)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ data: { success: false, error: message } } satisfies ApiResponse<CommandResult>)
+      }
+    }
+
+    if (command.action === 'land') {
+      if (!landingManager) {
+        return c.json({
+          data: { success: false, error: 'landing is not configured on this engine' },
+        } satisfies ApiResponse<CommandResult>)
+      }
+      try {
+        const result = await handleLandCommand(command.nodeId, command.dagId, {
+          landingManager,
+          db: resolveDb(),
+        })
+        const body: ApiResponse<CommandResult> = {
+          data: result.ok ? { success: true } : { success: false, error: result.error ?? 'land failed' },
         }
         return c.json(body)
       } catch (err) {
