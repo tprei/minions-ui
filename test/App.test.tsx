@@ -209,7 +209,9 @@ describe('App', () => {
     const App = (await import('../src/App')).default
     render(<App />)
     await screen.findByText('My Minion')
-    expect(screen.queryByTestId('header-clean-btn')).toBeNull()
+    fireEvent.click(screen.getByTestId('header-menu-btn'))
+    await screen.findByTestId('header-menu-dropdown')
+    expect(screen.queryByTestId('menu-clean')).toBeNull()
   })
 
   it('clicking Clean sends /clean via /api/messages after confirmation', { timeout: 15000 }, async () => {
@@ -245,7 +247,8 @@ describe('App', () => {
     const App = (await import('../src/App')).default
     render(<App />)
 
-    const cleanBtn = await screen.findByTestId('header-clean-btn')
+    fireEvent.click(await screen.findByTestId('header-menu-btn'))
+    const cleanBtn = await screen.findByTestId('menu-clean')
     fireEvent.click(cleanBtn)
 
     const dialog = await screen.findByRole('dialog')
