@@ -62,11 +62,38 @@ const FEATURES = [
   'runtime-config',
 ]
 
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024
+
+const ImageSchema = z.object({
+  mediaType: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']),
+  dataBase64: z.string().min(1),
+})
+
+function validateImagePayloads(
+  images: Array<{ dataBase64: string }> | undefined,
+): string | null {
+  if (!images) return null
+  let total = 0
+  for (const img of images) {
+    const bytes = Math.floor((img.dataBase64.length * 3) / 4)
+    if (bytes > MAX_IMAGE_BYTES) {
+      return `Image exceeds 5 MB limit (decoded ~${bytes} bytes)`
+    }
+    total += bytes
+  }
+  if (total > MAX_TOTAL_IMAGE_BYTES) {
+    return `Total image payload exceeds 20 MB (decoded ~${total} bytes)`
+  }
+  return null
+}
+
 const CreateSessionSchema = z.object({
   prompt: z.string().min(1),
   mode: z.enum(['task', 'plan', 'think', 'review', 'ship-think']),
   repo: z.string().min(1).optional(),
   profileId: z.string().optional(),
+  images: z.array(ImageSchema).optional(),
 })
 
 const CommandSchema = z.discriminatedUnion('action', [
@@ -76,14 +103,6 @@ const CommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('plan_action'), sessionId: z.string(), planAction: z.enum(['execute', 'split', 'stack', 'dag']), markdown: z.string().optional() }),
   z.object({ action: z.literal('land'), dagId: z.string(), nodeId: z.string() }),
 ])
-
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024
-const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024
-
-const ImageSchema = z.object({
-  mediaType: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']),
-  dataBase64: z.string().min(1),
-})
 
 const MessageSchema = z.object({
   text: z.string().min(1),
@@ -153,13 +172,20 @@ export function registerApiRoutes(
     if (!parsed.success) {
       return c.json({ error: formatZod(parsed.error.issues) }, 400)
     }
-    const { prompt, mode, repo } = parsed.data
+    const { prompt, mode, repo, images } = parsed.data
+    const imgErr = validateImagePayloads(images)
+    if (imgErr) return c.json({ error: imgErr }, 400)
     const resolvedRepo = repo ?? process.env['DEFAULT_REPO']
     if (!resolvedRepo) {
       return c.json({ error: 'repo is required (or set DEFAULT_REPO on the engine)' }, 400)
     }
     try {
-      const { session } = await registry.create({ mode, prompt, repo: resolvedRepo })
+      const { session } = await registry.create({
+        mode,
+        prompt,
+        repo: resolvedRepo,
+        initialImages: images,
+      })
       const body: ApiResponse<{ sessionId: string; slug: string }> = {
         data: { sessionId: session.id, slug: session.slug },
       }
@@ -617,6 +643,7 @@ export function registerApiRoutes(
     repo: z.string().min(1).optional(),
     profileId: z.string().optional(),
     count: z.number().int().min(2).max(10),
+    images: z.array(ImageSchema).optional(),
   })
 
   app.post('/api/sessions/variants', async (c) => {
@@ -625,14 +652,16 @@ export function registerApiRoutes(
     if (!parsed.success) {
       return c.json({ error: formatZod(parsed.error.issues) }, 400)
     }
-    const { prompt, mode, repo, count } = parsed.data
+    const { prompt, mode, repo, count, images } = parsed.data
+    const imgErr = validateImagePayloads(images)
+    if (imgErr) return c.json({ error: imgErr }, 400)
     const resolvedRepo = repo ?? process.env['DEFAULT_REPO']
     if (!resolvedRepo) {
       return c.json({ error: 'repo is required (or set DEFAULT_REPO on the engine)' }, 400)
     }
     try {
       const result = await createSessionVariants(
-        { prompt, mode, repo: resolvedRepo, count },
+        { prompt, mode, repo: resolvedRepo, count, initialImages: images },
         registry,
         resolveDb,
       )

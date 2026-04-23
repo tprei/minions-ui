@@ -176,12 +176,16 @@ export function NewTaskBar({
     error.value = null
     try {
       const selectedRepo = repo.value || undefined
+      const imagesPayload = attachments.length > 0
+        ? attachments.map((a) => ({ mediaType: a.mediaType, dataBase64: a.dataBase64 }))
+        : undefined
       if (wantVariants.value) {
         const out = await store.client.createSessionVariants({
           prompt: p,
           mode: mode.value,
           repo: selectedRepo,
           count: variantCount.value,
+          images: imagesPayload,
         })
         const slugs: string[] = []
         const errors: string[] = []
@@ -214,6 +218,7 @@ export function NewTaskBar({
           prompt: p,
           mode: mode.value,
           repo: selectedRepo,
+          images: imagesPayload,
         })
         store.applySessionCreated(created)
         prompt.value = ''
