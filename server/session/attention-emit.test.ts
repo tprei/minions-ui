@@ -40,6 +40,8 @@ function makeRow(overrides: Partial<SessionRow> = {}): SessionRow {
     quota_retry_count: 0,
     metadata: {},
     pipeline_advancing: false,
+    stage: null,
+    coordinator_children: [],
     ...overrides,
   }
 }
@@ -57,8 +59,8 @@ describe('maybeEmitAttention', () => {
     clearAttentionCache()
 
     db.run(
-      `INSERT INTO sessions (id, slug, status, command, mode, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, quota_retry_count, metadata, pipeline_advancing)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, '[]', '[]', '[]', 0, '{}', 0)`,
+      `INSERT INTO sessions (id, slug, status, command, mode, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, quota_retry_count, metadata, pipeline_advancing, stage, coordinator_children)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, '[]', '[]', '[]', 0, '{}', 0, null, null)`,
       ['sess-attn', 'attn-slug', 'failed', 'do thing', 'task', Date.now() - 10000, Date.now() - 10000],
     )
   })

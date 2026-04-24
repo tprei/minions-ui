@@ -82,6 +82,8 @@ test('insertSession + getSession round-trips correctly', () => {
     quota_retry_count: 0,
     metadata: {},
     pipeline_advancing: false,
+    stage: null,
+    coordinator_children: [],
   })
 
   const row = prepared.getSession(db, 'sess-1')
@@ -98,6 +100,8 @@ test('insertSession + getSession round-trips correctly', () => {
   expect(row!.attention_reasons).toEqual(['failed'])
   expect(row!.conversation).toEqual([])
   expect(row!.created_at).toBe(now)
+  expect(row!.stage).toBe(null)
+  expect(row!.coordinator_children).toEqual([])
 })
 
 test('insertEvent + nextSeq returns monotonically increasing integers per session', () => {
@@ -126,6 +130,8 @@ test('insertEvent + nextSeq returns monotonically increasing integers per sessio
     quota_retry_count: 0,
     metadata: {},
     pipeline_advancing: false,
+    stage: null,
+    coordinator_children: [],
   })
 
   const seq1 = prepared.nextSeq(db, 'sess-seq')
@@ -189,6 +195,8 @@ test('listEvents(sid, afterSeq: 5) returns only events with seq > 5, ordered by 
     quota_retry_count: 0,
     metadata: {},
     pipeline_advancing: false,
+    stage: null,
+    coordinator_children: [],
   })
 
   for (let i = 1; i <= 10; i++) {
@@ -213,4 +221,147 @@ test('listEvents(sid, afterSeq: 5) returns only events with seq > 5, ordered by 
   }
 
   expect(events[0]!.payload).toEqual({ index: 6 })
+})
+
+test('migration 0007 migrates legacy ship modes to ship with stage', () => {
+  const dbPath = tempPath()
+  const testDb = openDatabase(dbPath)
+  runMigrations(testDb)
+  const now = Date.now()
+
+  try {
+
+    testDb.exec('DELETE FROM sessions')
+
+    testDb.run(
+      `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, quota_sleep_until, quota_retry_count, metadata, pipeline_advancing, stage, coordinator_children)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'ship-think-id',
+        'ship-think-slug',
+        'completed',
+        'ship feature X',
+        'ship-think',
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        now,
+        now,
+        0,
+        '[]',
+        '[]',
+        '[]',
+        null,
+        0,
+        '{}',
+        0,
+        null,
+        null,
+      ],
+    )
+
+    testDb.run(
+      `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, quota_sleep_until, quota_retry_count, metadata, pipeline_advancing, stage, coordinator_children)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'ship-plan-id',
+        'ship-plan-slug',
+        'running',
+        'ship feature Y',
+        'ship-plan',
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        now,
+        now,
+        0,
+        '[]',
+        '[]',
+        '[]',
+        null,
+        0,
+        '{}',
+        0,
+        null,
+        null,
+      ],
+    )
+
+    testDb.run(
+      `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, quota_sleep_until, quota_retry_count, metadata, pipeline_advancing, stage, coordinator_children)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'ship-verify-id',
+        'ship-verify-slug',
+        'pending',
+        'ship feature Z',
+        'ship-verify',
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        now,
+        now,
+        0,
+        '[]',
+        '[]',
+        '[]',
+        null,
+        0,
+        '{}',
+        0,
+        null,
+        null,
+      ],
+    )
+
+    const updateSql = `
+      UPDATE sessions
+      SET mode = 'ship',
+          stage = CASE mode
+            WHEN 'ship-think' THEN 'think'
+            WHEN 'ship-plan' THEN 'plan'
+            WHEN 'ship-verify' THEN 'verify'
+            ELSE stage
+          END
+      WHERE mode IN ('ship-think', 'ship-plan', 'ship-verify')
+    `
+    testDb.run(updateSql)
+
+    const thinkRow = prepared.getSession(testDb, 'ship-think-id')
+    expect(thinkRow).not.toBeNull()
+    expect(thinkRow!.mode).toBe('ship')
+    expect(thinkRow!.stage).toBe('think')
+
+    const planRow = prepared.getSession(testDb, 'ship-plan-id')
+    expect(planRow).not.toBeNull()
+    expect(planRow!.mode).toBe('ship')
+    expect(planRow!.stage).toBe('plan')
+
+    const verifyRow = prepared.getSession(testDb, 'ship-verify-id')
+    expect(verifyRow).not.toBeNull()
+    expect(verifyRow!.mode).toBe('ship')
+    expect(verifyRow!.stage).toBe('verify')
+  } finally {
+    testDb.close()
+    try {
+      unlinkSync(dbPath)
+    } catch (e) {
+      void e
+    }
+  }
 })

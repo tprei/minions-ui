@@ -58,6 +58,8 @@ function makeSession(id: string, db?: Database): ApiSession {
       quota_retry_count: 0,
       metadata: {},
       pipeline_advancing: false,
+      stage: null,
+      coordinator_children: [],
     })
   }
   return session
