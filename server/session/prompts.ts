@@ -4,14 +4,12 @@ export const DEFAULT_TASK_PROMPT = 'You are executing a coding task. Work autono
 export const DEFAULT_PLAN_PROMPT = 'You produce a detailed implementation plan without modifying files.'
 export const DEFAULT_THINK_PROMPT = 'You think carefully about the problem and respond with analysis.'
 export const DEFAULT_REVIEW_PROMPT = 'You perform a thorough code review.'
-export const DEFAULT_SHIP_THINK_PROMPT = 'You produce a design for shipping a feature end-to-end.'
-export const DEFAULT_SHIP_PLAN_PROMPT = 'You produce a DAG of tasks for shipping a feature.'
-export const DEFAULT_SHIP_VERIFY_PROMPT = 'You verify that the shipped feature meets the acceptance criteria.'
+export const DEFAULT_SHIP_PROMPT = 'You coordinate a multi-stage ship workflow, progressing through think → plan → dag → verify stages.'
 export const DEFAULT_CI_FIX_PROMPT = 'You fix failing CI jobs. When all checks pass, announce success and exit.'
 
 const READONLY_DISALLOWED_TOOLS = ['Edit', 'Write', 'NotebookEdit'] as const
 
-export type AllSessionMode = CreateSessionMode | 'ship-plan' | 'ship-verify' | 'ci-fix'
+export type AllSessionMode = CreateSessionMode | 'ci-fix'
 
 export interface ModeConfig {
   systemPrompt: string
@@ -56,23 +54,11 @@ export const MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
     disallowedTools: [...READONLY_DISALLOWED_TOOLS],
     autoExitOnComplete: false,
   },
-  'ship-think': {
-    systemPrompt: DEFAULT_SHIP_THINK_PROMPT,
-    model: envModel('CLAUDE_SHIP_THINK_MODEL', 'claude-opus-4-1-20250805'),
-    disallowedTools: [...READONLY_DISALLOWED_TOOLS],
-    autoExitOnComplete: true,
-  },
-  'ship-plan': {
-    systemPrompt: DEFAULT_SHIP_PLAN_PROMPT,
-    model: envModel('CLAUDE_SHIP_PLAN_MODEL', 'claude-opus-4-1-20250805'),
-    disallowedTools: [...READONLY_DISALLOWED_TOOLS],
-    autoExitOnComplete: true,
-  },
-  'ship-verify': {
-    systemPrompt: DEFAULT_SHIP_VERIFY_PROMPT,
-    model: envModel('CLAUDE_SHIP_VERIFY_MODEL', 'claude-sonnet-4-5-20250929'),
+  ship: {
+    systemPrompt: DEFAULT_SHIP_PROMPT,
+    model: envModel('CLAUDE_SHIP_MODEL', 'claude-opus-4-1-20250805'),
     disallowedTools: [],
-    autoExitOnComplete: true,
+    autoExitOnComplete: false,
   },
   'ci-fix': {
     systemPrompt: DEFAULT_CI_FIX_PROMPT,
