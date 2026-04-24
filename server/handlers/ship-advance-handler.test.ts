@@ -199,4 +199,22 @@ describe('shipAdvanceHandler', () => {
     expect(registryCalls.create).toHaveLength(0)
     expect(schedulerCalls.start).toHaveLength(0)
   })
+
+  test('spawns ship-verify session when ship-plan completes', async () => {
+    seedSession(db, 'sess-plan', 'ship-plan')
+    seedAssistantMessage(db, 'sess-plan', 'DAG of tasks: 1. implement auth, 2. add tests, 3. deploy')
+
+    const registryCalls = { stop: [] as string[], create: [] as Array<{ mode: string; prompt: string; parentId?: string }> }
+    const schedulerCalls = { start: [] as string[], onSessionCompleted: [] as string[] }
+    const ctx = makeCtx(db, registryCalls, schedulerCalls)
+
+    const ev: SessionCompletedEvent = { kind: 'session.completed', sessionId: 'sess-plan', state: 'completed', durationMs: 0 }
+    await shipAdvanceHandler.handle(ev, ctx)
+
+    expect(registryCalls.create).toHaveLength(1)
+    expect(registryCalls.create[0]?.mode).toBe('ship-verify')
+    expect(registryCalls.create[0]?.prompt).toContain('DAG of tasks')
+    expect(registryCalls.create[0]?.parentId).toBe('sess-plan')
+    expect(schedulerCalls.start).toHaveLength(0)
+  })
 })
