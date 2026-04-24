@@ -6,6 +6,7 @@ function makeScheduler(shouldFail = false): DagScheduler {
   return {
     async start() {},
     async onSessionCompleted() {},
+    async onSessionResumed() {},
     async cancel() {},
     status() { return { dagId: '', nodes: [] } },
     async retryNode(nodeId, dagId) {
