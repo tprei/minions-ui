@@ -74,19 +74,19 @@ const CODEX_REASONING_EFFORT = envReasoningEffort('CODEX_REASONING_EFFORT', 'hig
 export const CODEX_MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
   task: {
     systemPrompt: DEFAULT_TASK_PROMPT,
-    model: envModel('CODEX_TASK_MODEL', 'gpt-5.1-codex'),
+    model: envModel('CODEX_TASK_MODEL', 'gpt-5.3-codex'),
     disallowedTools: [],
     autoExitOnComplete: false,
   },
   'dag-task': {
     systemPrompt: DEFAULT_TASK_PROMPT,
-    model: envModel('CODEX_TASK_MODEL', 'gpt-5.1-codex'),
+    model: envModel('CODEX_TASK_MODEL', 'gpt-5.3-codex'),
     disallowedTools: [],
     autoExitOnComplete: true,
   },
   plan: {
     systemPrompt: DEFAULT_PLAN_PROMPT,
-    model: envModel('CODEX_PLAN_MODEL', 'gpt-5.1-codex'),
+    model: envModel('CODEX_PLAN_MODEL', 'gpt-5.3-codex'),
     disallowedTools: [],
     autoExitOnComplete: false,
     reasoningEffort: CODEX_REASONING_EFFORT,
@@ -94,7 +94,7 @@ export const CODEX_MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
   },
   think: {
     systemPrompt: DEFAULT_THINK_PROMPT,
-    model: envModel('CODEX_THINK_MODEL', 'gpt-5.1-codex'),
+    model: envModel('CODEX_THINK_MODEL', 'gpt-5.3-codex'),
     disallowedTools: [],
     autoExitOnComplete: false,
     reasoningEffort: CODEX_REASONING_EFFORT,
@@ -102,7 +102,7 @@ export const CODEX_MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
   },
   review: {
     systemPrompt: DEFAULT_REVIEW_PROMPT,
-    model: envModel('CODEX_REVIEW_MODEL', 'gpt-5.1-codex'),
+    model: envModel('CODEX_REVIEW_MODEL', 'gpt-5.3-codex'),
     disallowedTools: [],
     autoExitOnComplete: false,
     reasoningEffort: CODEX_REASONING_EFFORT,
@@ -110,14 +110,14 @@ export const CODEX_MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
   },
   ship: {
     systemPrompt: DEFAULT_SHIP_PROMPT,
-    model: envModel('CODEX_SHIP_MODEL', 'gpt-5.1-codex'),
+    model: envModel('CODEX_SHIP_MODEL', 'gpt-5.3-codex'),
     disallowedTools: [],
     autoExitOnComplete: false,
     reasoningEffort: CODEX_REASONING_EFFORT,
   },
   'ci-fix': {
     systemPrompt: DEFAULT_CI_FIX_PROMPT,
-    model: envModel('CODEX_CI_FIX_MODEL', 'gpt-5.1-codex'),
+    model: envModel('CODEX_CI_FIX_MODEL', 'gpt-5.3-codex'),
     disallowedTools: [],
     autoExitOnComplete: true,
   },

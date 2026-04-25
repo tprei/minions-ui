@@ -59,7 +59,7 @@ describe('getModeConfig', () => {
       expect(cfg.disallowedTools).toHaveLength(0)
     })
 
-    test('codex task model uses gpt-5.1-codex default', () => {
+    test('codex task model uses gpt-5.3-codex default', () => {
       const cfg = getModeConfig('codex', 'task')
       expect(cfg.model).toBe(CODEX_MODE_CONFIGS['task'].model)
     })

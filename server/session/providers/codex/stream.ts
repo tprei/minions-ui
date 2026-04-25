@@ -103,13 +103,24 @@ export function translateCodexLine(
       break
     }
 
-    case 'turn/completed':
+    case 'turn/completed': {
+      const turn = (raw.params as { turn?: { status?: string; error?: { message?: string } } }).turn
+      if (turn?.status === 'failed') {
+        events.push({ kind: 'error', error: extractCodexErrorMessage(turn.error?.message) ?? 'turn failed' })
+      }
       events.push({ kind: 'turn_complete', totalTokens: null, totalCostUsd: null, numTurns: null })
       break
+    }
 
     case 'turn/failed': {
       const turn = raw.params.turn
-      events.push({ kind: 'error', error: turn.error?.message ?? 'turn failed' })
+      events.push({ kind: 'error', error: extractCodexErrorMessage(turn.error?.message) ?? 'turn failed' })
+      break
+    }
+
+    case 'error': {
+      const params = raw.params as { error?: { message?: string } }
+      events.push({ kind: 'error', error: extractCodexErrorMessage(params.error?.message) ?? 'codex error' })
       break
     }
 
@@ -198,6 +209,21 @@ function itemToProviderEvents(item: ThreadItem, phase: 'started' | 'completed'):
   }
 
   return []
+}
+
+function extractCodexErrorMessage(raw: string | undefined): string | null {
+  if (!raw) return null
+  // Codex wraps backend HTTP errors as a JSON-encoded string with shape
+  // { type, status, error: { type, message } }. Pull the inner message when
+  // present so the user sees something readable instead of the raw envelope.
+  try {
+    const parsed = JSON.parse(raw) as { error?: { message?: string } }
+    const inner = parsed.error?.message
+    if (typeof inner === 'string' && inner.length > 0) return inner
+  } catch {
+    // not JSON; fall through
+  }
+  return raw
 }
 
 function stringifyReasoning(item: Record<string, unknown>): string {
