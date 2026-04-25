@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { formatDoctorReport } from './doctor'
 import type { DoctorReport } from './doctor'
+import type { AgentProvider } from '../session/providers/types'
 
 function makeTmpDir(): string {
   const dir = join(tmpdir(), `doctor-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
@@ -89,9 +90,9 @@ describe('runDoctor', () => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  test('returns a DoctorReport with all expected check names', async () => {
+  test('returns a DoctorReport with all expected check names (claude provider)', async () => {
     const { runDoctor } = await import('./doctor')
-    const report = await runDoctor()
+    const report = await runDoctor({ name: 'claude' } as AgentProvider)
     const names = report.checks.map((c) => c.name)
     expect(names.some((n) => n.includes('Node'))).toBe(true)
     expect(names.some((n) => n.includes('WORKSPACE_ROOT'))).toBe(true)
@@ -99,6 +100,22 @@ describe('runDoctor', () => {
     expect(names.some((n) => n.includes('MINION_API_TOKEN'))).toBe(true)
     expect(names.some((n) => n.includes('GITHUB_TOKEN'))).toBe(true)
     expect(names.some((n) => n.includes('claude'))).toBe(true)
+  })
+
+  test('codex provider includes codex CLI and auth checks instead of claude', async () => {
+    const { runDoctor } = await import('./doctor')
+    const report = await runDoctor({ name: 'codex' } as AgentProvider)
+    const names = report.checks.map((c) => c.name)
+    expect(names.some((n) => n.includes('codex'))).toBe(true)
+    expect(names.every((n) => !n.includes('claude'))).toBe(true)
+  })
+
+  test('codex provider includes both binary and auth checks', async () => {
+    const { runDoctor } = await import('./doctor')
+    const report = await runDoctor({ name: 'codex' } as AgentProvider)
+    const names = report.checks.map((c) => c.name)
+    expect(names.some((n) => n === 'codex CLI')).toBe(true)
+    expect(names.some((n) => n === 'codex auth')).toBe(true)
   })
 
   test('WORKSPACE_ROOT writable check passes for writable dir', async () => {

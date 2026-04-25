@@ -1,6 +1,10 @@
 import { execFile as execFileCb } from 'node:child_process'
 import { access, constants } from 'node:fs/promises'
 import { createServer } from 'node:net'
+import os from 'node:os'
+import path from 'node:path'
+import { getProvider } from '../session/providers/index.js'
+import type { AgentProvider } from '../session/providers/types.js'
 
 export interface DoctorCheck {
   name: string
@@ -80,7 +84,7 @@ async function checkGithubToken(): Promise<DoctorCheck> {
   return { name: 'GITHUB_TOKEN', status: 'warn', detail: 'not set and gh auth token failed' }
 }
 
-async function checkClaudeAuth(): Promise<DoctorCheck> {
+async function checkClaude(): Promise<DoctorCheck> {
   const result = await execAsync('claude', ['--version'], 5000).catch(() => null)
   if (result !== null) {
     return { name: 'claude CLI', status: 'ok', detail: result.stdout.split('\n')[0] ?? result.stdout }
@@ -88,14 +92,53 @@ async function checkClaudeAuth(): Promise<DoctorCheck> {
   return { name: 'claude CLI', status: 'fail', detail: 'claude --version failed — is claude CLI installed and on PATH?' }
 }
 
-export async function runDoctor(): Promise<DoctorReport> {
+async function checkCodexBinary(): Promise<DoctorCheck> {
+  const result = await execAsync('codex', ['--version'], 5000).catch(() => null)
+  if (result !== null) {
+    return { name: 'codex CLI', status: 'ok', detail: result.stdout.split('\n')[0] ?? result.stdout }
+  }
+  return { name: 'codex CLI', status: 'fail', detail: 'codex --version failed — is @openai/codex installed and on PATH?' }
+}
+
+async function checkCodexAuth(): Promise<DoctorCheck> {
+  const codexHome = process.env['CODEX_HOME'] ?? path.join(os.homedir(), '.codex')
+  const authPath = path.join(codexHome, 'auth.json')
+  const hasAuth = await access(authPath, constants.R_OK).then(() => true).catch(() => false)
+
+  if (hasAuth) {
+    return { name: 'codex auth', status: 'ok', detail: authPath }
+  }
+
+  if (process.env['OPENAI_API_KEY']) {
+    return {
+      name: 'codex auth',
+      status: 'warn',
+      detail: `${authPath} not found but OPENAI_API_KEY is set — Codex will use PAYG API, not ChatGPT plan auth. Run \`codex login\` on the host.`,
+    }
+  }
+
+  return {
+    name: 'codex auth',
+    status: 'fail',
+    detail: `${authPath} not found — run \`codex login\` on the host then redeploy`,
+  }
+}
+
+export async function runDoctor(provider?: AgentProvider): Promise<DoctorReport> {
+  const activeProvider = provider ?? getProvider()
+
+  const providerChecks: Promise<DoctorCheck>[] =
+    activeProvider.name === 'claude'
+      ? [checkClaude()]
+      : [checkCodexBinary(), checkCodexAuth()]
+
   const checks = await Promise.all([
     checkNodeVersion(),
     checkWorkspaceWritable(),
     checkPortFreeCheck(),
     checkApiToken(),
     checkGithubToken(),
-    checkClaudeAuth(),
+    ...providerChecks,
   ])
 
   return { checks }
