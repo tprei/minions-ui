@@ -39,21 +39,21 @@ export function InstallPrompt() {
 
   return (
     <div
-      class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg bg-slate-800 text-slate-100 text-sm"
+      class="pointer-events-none fixed left-3 right-3 top-[calc(env(safe-area-inset-top)+4rem)] z-50 flex items-center gap-3 rounded-xl bg-slate-800 px-4 py-3 text-sm text-slate-100 shadow-lg sm:left-1/2 sm:right-auto sm:top-16 sm:w-[min(24rem,calc(100vw-2rem))] sm:-translate-x-1/2"
       role="banner"
       data-testid="install-prompt"
     >
       <span>Install minions-ui for quick access</span>
       <button
         onClick={() => void handleInstall()}
-        class="font-medium px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+        class="pointer-events-auto rounded-lg bg-indigo-600 px-3 py-1 font-medium text-white transition-colors hover:bg-indigo-700"
         data-testid="install-btn"
       >
         Install
       </button>
       <button
         onClick={handleDismiss}
-        class="text-slate-400 hover:text-slate-200 transition-colors"
+        class="pointer-events-auto text-slate-400 transition-colors hover:text-slate-200"
         aria-label="Dismiss install prompt"
         data-testid="install-dismiss-btn"
       >

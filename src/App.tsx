@@ -996,7 +996,7 @@ function PwaController() {
 
   return (
     <div
-      class="fixed left-3 right-3 bottom-3 z-50 flex items-center gap-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 shadow-lg"
+      class="pointer-events-none fixed left-3 right-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-50 flex items-center gap-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 shadow-lg sm:left-auto sm:right-4 sm:top-4 sm:w-[min(24rem,calc(100vw-2rem))]"
       role="status"
       data-testid="pwa-status-banner"
     >
@@ -1007,7 +1007,7 @@ function PwaController() {
         <button
           type="button"
           onClick={() => void sw.updateServiceWorker(true)}
-          class="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+          class="pointer-events-auto rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700"
           data-testid="pwa-update-reload"
         >
           Reload
@@ -1016,7 +1016,7 @@ function PwaController() {
       <button
         type="button"
         onClick={close}
-        class="rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
+        class="pointer-events-auto rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
         data-testid="pwa-status-dismiss"
       >
         Dismiss
