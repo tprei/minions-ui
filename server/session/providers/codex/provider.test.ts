@@ -111,14 +111,16 @@ describe('serializeInitialInput — fresh session', () => {
     expect(params.approvalPolicy).toBe('never')
   })
 
-  test('defaults sandbox to workspace-write when not set', () => {
+  test('defaults sandbox to danger-full-access when no env override and no mode hint', () => {
+    delete process.env['CODEX_SANDBOX_MODE']
     const provider = makeCodexProvider()
     const raw = provider.serializeInitialInput('prompt', undefined, makeOpts())
     const params = splitFrames(raw)[1]!.params as { sandbox: string }
-    expect(params.sandbox).toBe('workspace-write')
+    expect(params.sandbox).toBe('danger-full-access')
   })
 
-  test('forwards read-only sandbox', () => {
+  test('forwards read-only sandbox when mode hint asks for it', () => {
+    delete process.env['CODEX_SANDBOX_MODE']
     const provider = makeCodexProvider()
     const opts = makeOpts({
       modeConfig: { systemPrompt: '', model: 'gpt-5.3-codex', disallowedTools: [], autoExitOnComplete: false, sandbox: 'read-only' },
@@ -126,6 +128,33 @@ describe('serializeInitialInput — fresh session', () => {
     const raw = provider.serializeInitialInput('prompt', undefined, opts)
     const params = splitFrames(raw)[1]!.params as { sandbox: string }
     expect(params.sandbox).toBe('read-only')
+  })
+
+  test('CODEX_SANDBOX_MODE env overrides everything', () => {
+    process.env['CODEX_SANDBOX_MODE'] = 'workspace-write'
+    try {
+      const provider = makeCodexProvider()
+      const opts = makeOpts({
+        modeConfig: { systemPrompt: '', model: 'gpt-5.3-codex', disallowedTools: [], autoExitOnComplete: false, sandbox: 'read-only' },
+      })
+      const raw = provider.serializeInitialInput('prompt', undefined, opts)
+      const params = splitFrames(raw)[1]!.params as { sandbox: string }
+      expect(params.sandbox).toBe('workspace-write')
+    } finally {
+      delete process.env['CODEX_SANDBOX_MODE']
+    }
+  })
+
+  test('CODEX_SANDBOX_MODE env ignores invalid values and falls back to default', () => {
+    process.env['CODEX_SANDBOX_MODE'] = 'totally-bogus'
+    try {
+      const provider = makeCodexProvider()
+      const raw = provider.serializeInitialInput('prompt', undefined, makeOpts())
+      const params = splitFrames(raw)[1]!.params as { sandbox: string }
+      expect(params.sandbox).toBe('danger-full-access')
+    } finally {
+      delete process.env['CODEX_SANDBOX_MODE']
+    }
   })
 
   test('includes reasoning effort in config when set', () => {

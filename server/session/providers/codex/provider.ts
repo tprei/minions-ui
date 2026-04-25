@@ -14,6 +14,25 @@ const MEDIA_EXT: Record<Image['mediaType'], string> = {
 
 type CodexInput = { type: 'text'; text: string } | { type: 'localImage'; path: string }
 
+type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
+
+function resolveSandbox(modeHint: string | undefined): CodexSandboxMode {
+  // Codex enforces 'read-only' and 'workspace-write' via bubblewrap, which needs
+  // unprivileged user namespaces. That doesn't work in many container setups
+  // (the engine container fails with `bwrap: No permissions to create a new
+  // namespace`). The container itself is the trust boundary, so default to
+  // 'danger-full-access'. Operators with bwrap-capable hosts can opt back in
+  // via CODEX_SANDBOX_MODE=workspace-write|read-only.
+  const env = process.env['CODEX_SANDBOX_MODE']
+  if (env === 'read-only' || env === 'workspace-write' || env === 'danger-full-access') {
+    return env
+  }
+  if (modeHint === 'read-only' || modeHint === 'workspace-write' || modeHint === 'danger-full-access') {
+    return modeHint as CodexSandboxMode
+  }
+  return 'danger-full-access'
+}
+
 export function makeCodexProvider(): AgentProvider {
   let idCounter = 0
   let imageSeq = 0
@@ -75,7 +94,7 @@ export function makeCodexProvider(): AgentProvider {
 
       pendingInitialInput = { prompt, images }
 
-      const sandbox = opts.modeConfig.sandbox === 'read-only' ? 'read-only' : 'workspace-write'
+      const sandbox = resolveSandbox(opts.modeConfig.sandbox)
       const params: Record<string, unknown> = {
         model: opts.modeConfig.model,
         cwd: opts.cwd,
