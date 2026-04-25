@@ -9,6 +9,7 @@ import { getDb, prepared } from '../db/sqlite'
 import { sessionRowToApi, dagToApi, eventRowToTranscript } from './wire-mappers'
 
 const PROXY_FLUSH_BYTES = 4096
+const PROXIED_RETRY_MS = 1000
 
 export function registerSseRoute(app: Hono, dbProvider?: () => Database): void {
   const resolveDb = dbProvider ?? getDb
@@ -23,7 +24,15 @@ function keepaliveData(): string {
   return JSON.stringify({ ts: Date.now() })
 }
 
+function isProxiedRequest(c: Context): boolean {
+  return c.req.query('lease') === 'snapshot'
+    || c.req.header('cf-ray') !== undefined
+    || c.req.header('cf-connecting-ip') !== undefined
+    || c.req.header('cf-visitor') !== undefined
+}
+
 async function sseHandler(c: Context, dbProvider: () => Database): Promise<Response> {
+  const closeAfterSnapshot = isProxiedRequest(c)
   const response = streamSSE(c, async (stream) => {
     await stream.write(proxyFlushFrame())
 
@@ -67,6 +76,15 @@ async function sseHandler(c: Context, dbProvider: () => Database): Promise<Respo
         const evt: SseEvent = { type: 'transcript_event', sessionId: sessionRow.id, event: transcriptEvent }
         await stream.writeSSE({ data: JSON.stringify(evt), event: 'message' })
       }
+    }
+
+    if (closeAfterSnapshot) {
+      await stream.writeSSE({
+        data: keepaliveData(),
+        event: 'keepalive',
+        retry: PROXIED_RETRY_MS,
+      })
+      return
     }
 
     const unsubscribe = getEventBus().on((engineEvent: EngineEvent) => {
