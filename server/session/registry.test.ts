@@ -170,6 +170,32 @@ describe('SessionRegistry', () => {
       expect(row?.bare_dir).toBeTruthy()
       expect(row?.bare_dir).toContain('.repos')
     }, 30_000)
+
+    test('injects shared agent assets into created worktree', async () => {
+      const bare = trackedDir('bare-assets')
+      const work = trackedDir('work-assets')
+      const workspaceRoot = trackedDir('ws-assets')
+      await initLocalBareRepo(bare, work)
+
+      const assetsRoot = path.join(workspaceRoot, '.agent-assets')
+      fs.mkdirSync(path.join(assetsRoot, '.codex', 'hooks'), { recursive: true })
+      fs.writeFileSync(path.join(assetsRoot, 'AGENT.md'), '# canonical agent')
+      fs.writeFileSync(path.join(assetsRoot, 'AGENT_RULES.txt'), 'shared rules')
+      fs.writeFileSync(path.join(assetsRoot, '.codex', 'hooks', 'pre.sh'), 'echo hook')
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
+      const { session } = await registry.create({
+        mode: 'task',
+        prompt: 'inject assets',
+        repo: bare,
+        workspaceRoot,
+      })
+
+      const cwd = path.join(workspaceRoot, session.slug)
+      expect(fs.readFileSync(path.join(cwd, 'AGENT_RULES.txt'), 'utf8')).toBe('shared rules')
+      expect(fs.readFileSync(path.join(cwd, 'AGENT.md'), 'utf8')).toBe('# canonical agent')
+      expect(fs.readFileSync(path.join(cwd, '.codex', 'hooks', 'pre.sh'), 'utf8')).toBe('echo hook')
+    }, 30_000)
   })
 
   describe('list', () => {

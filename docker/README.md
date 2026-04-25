@@ -117,6 +117,24 @@ Remove the `~/.claude` mount in `compose.dev.yaml` if you want full isolation pe
 
 - **Only option**: mount `~/.codex` — `compose.dev.yaml` and `compose.codex.yaml` both do this. Requires you've run `codex login` on the host. There is no API key fallback; Codex auth is tied to your ChatGPT coding plan.
 
+## Shared agent assets (`.agent-assets`)
+
+The engine now injects shared agent config into each session worktree on both create and resume.
+
+Resolution order:
+- `MINION_AGENT_ASSETS_DIR` (explicit override)
+- `<WORKSPACE_ROOT>/.agent-assets` (preferred shared location)
+- `<WORKSPACE_ROOT>/.claude-assets` (legacy fallback)
+
+Copy behavior:
+- Recursively copies all files and directories into the worktree
+- Never overwrites existing files in the worktree
+- Works for both provider trees (for example `.claude/*`, `.codex/*`, hooks, agents, skills)
+
+Instruction aliasing:
+- If `AGENT.md` exists in assets, it is copied to both `AGENTS.md` and `CLAUDE.md` when missing
+- If only one of `AGENTS.md` or `CLAUDE.md` exists in assets, it is mirrored to the other filename when missing
+
 ## Persistence
 
 Everything the engine persists (sessions, transcripts, DAGs, bare clones, node_modules caches) lives inside the `workspace` volume:
