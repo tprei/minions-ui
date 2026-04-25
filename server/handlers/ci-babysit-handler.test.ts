@@ -105,4 +105,20 @@ describe('ciBabysitHandler', () => {
     expect(babysitCalls).toHaveLength(0)
     expect(deferredCalls).toHaveLength(0)
   })
+
+  test('does not run again when ci babysit already started in metadata', async () => {
+    seedSession(db, 'sess-started', 'https://github.com/org/repo/pull/7', {
+      ciBabysitStartedAt: Date.now() - 1000,
+      ciBabysitTrigger: 'stream',
+    })
+    const babysitCalls: BabysitCall[] = []
+    const deferredCalls: DeferredCall[] = []
+    const ctx = makeCtx(db, makeCIBabysitter(babysitCalls, deferredCalls))
+
+    const ev: SessionCompletedEvent = { kind: 'session.completed', sessionId: 'sess-started', state: 'completed', durationMs: 0 }
+    await ciBabysitHandler.handle(ev, ctx)
+
+    expect(babysitCalls).toHaveLength(0)
+    expect(deferredCalls).toHaveLength(0)
+  })
 })

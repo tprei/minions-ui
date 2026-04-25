@@ -88,4 +88,6 @@ export interface SessionMetadata {
   dagNodeId?: string
   parentThreadId?: string
   pendingFeedback?: string[]
+  ciBabysitStartedAt?: number
+  ciBabysitTrigger?: 'stream' | 'completion'
 }
