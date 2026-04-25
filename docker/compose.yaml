@@ -23,6 +23,7 @@ services:
       ENABLE_CONTEXT7_MCP: ${ENABLE_CONTEXT7_MCP:-true}
       ENABLE_SUPABASE_MCP: ${ENABLE_SUPABASE_MCP:-false}
       ENABLE_LOOPS: ${ENABLE_LOOPS:-false}
+      AGENT_PROVIDER: ${AGENT_PROVIDER:-claude}
     volumes:
       - workspace:/workspace
 

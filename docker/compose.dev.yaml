@@ -4,5 +4,6 @@ services:
     volumes:
       - /home/prei/minions/minions-ui:/hostrepo:ro
       - ${HOME}/.claude:/workspace/home/.claude
+      - ${HOME}/.codex:/workspace/home/.codex
     environment:
       DEFAULT_REPO: file:///hostrepo
