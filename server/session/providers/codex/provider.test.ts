@@ -75,29 +75,47 @@ describe('buildSpawnArgs', () => {
 // ---------------------------------------------------------------------------
 
 describe('serializeInitialInput — fresh session', () => {
-  test('emits a single thread/start frame', () => {
+  function splitFrames(raw: string): Array<{ method: string; jsonrpc: string; id: number; params: Record<string, unknown> }> {
+    return raw.split('\n').map((line) => JSON.parse(line) as { method: string; jsonrpc: string; id: number; params: Record<string, unknown> })
+  }
+
+  test('emits initialize then thread/start joined by newline', () => {
     const provider = makeCodexProvider()
     const raw = provider.serializeInitialInput('do the thing', undefined, makeOpts())
-    const parsed = JSON.parse(raw) as { method: string; jsonrpc: string; id: number }
-    expect(parsed.method).toBe('thread/start')
-    expect(parsed.jsonrpc).toBe('2.0')
-    expect(parsed.id).toBeGreaterThan(0)
+    const frames = splitFrames(raw)
+    expect(frames).toHaveLength(2)
+    expect(frames[0]!.method).toBe('initialize')
+    expect(frames[0]!.jsonrpc).toBe('2.0')
+    expect(frames[1]!.method).toBe('thread/start')
+    expect(frames[1]!.jsonrpc).toBe('2.0')
+    expect(frames[0]!.id).toBeGreaterThan(0)
+    expect(frames[1]!.id).toBeGreaterThan(frames[0]!.id)
+  })
+
+  test('initialize frame includes clientInfo with name and version', () => {
+    const provider = makeCodexProvider()
+    const raw = provider.serializeInitialInput('prompt', undefined, makeOpts())
+    const initFrame = splitFrames(raw)[0]!
+    const clientInfo = initFrame.params['clientInfo'] as { name: string; version: string } | undefined
+    expect(clientInfo).toBeDefined()
+    expect(clientInfo!.name.length).toBeGreaterThan(0)
+    expect(clientInfo!.version.length).toBeGreaterThan(0)
   })
 
   test('thread/start params include model, cwd, and approvalPolicy', () => {
     const provider = makeCodexProvider()
     const raw = provider.serializeInitialInput('prompt', undefined, makeOpts())
-    const parsed = JSON.parse(raw) as { params: { model: string; cwd: string; approvalPolicy: string } }
-    expect(parsed.params.model).toBe('gpt-5.1-codex')
-    expect(parsed.params.cwd).toBe('/repo')
-    expect(parsed.params.approvalPolicy).toBe('never')
+    const params = splitFrames(raw)[1]!.params as { model: string; cwd: string; approvalPolicy: string }
+    expect(params.model).toBe('gpt-5.1-codex')
+    expect(params.cwd).toBe('/repo')
+    expect(params.approvalPolicy).toBe('never')
   })
 
   test('defaults sandbox to workspace-write when not set', () => {
     const provider = makeCodexProvider()
     const raw = provider.serializeInitialInput('prompt', undefined, makeOpts())
-    const parsed = JSON.parse(raw) as { params: { sandbox: string } }
-    expect(parsed.params.sandbox).toBe('workspace-write')
+    const params = splitFrames(raw)[1]!.params as { sandbox: string }
+    expect(params.sandbox).toBe('workspace-write')
   })
 
   test('forwards read-only sandbox', () => {
@@ -106,8 +124,8 @@ describe('serializeInitialInput — fresh session', () => {
       modeConfig: { systemPrompt: '', model: 'gpt-5.1-codex', disallowedTools: [], autoExitOnComplete: false, sandbox: 'read-only' },
     })
     const raw = provider.serializeInitialInput('prompt', undefined, opts)
-    const parsed = JSON.parse(raw) as { params: { sandbox: string } }
-    expect(parsed.params.sandbox).toBe('read-only')
+    const params = splitFrames(raw)[1]!.params as { sandbox: string }
+    expect(params.sandbox).toBe('read-only')
   })
 
   test('includes reasoning effort in config when set', () => {
@@ -116,15 +134,15 @@ describe('serializeInitialInput — fresh session', () => {
       modeConfig: { systemPrompt: '', model: 'gpt-5.1-codex', disallowedTools: [], autoExitOnComplete: false, reasoningEffort: 'high' },
     })
     const raw = provider.serializeInitialInput('prompt', undefined, opts)
-    const parsed = JSON.parse(raw) as { params: { config?: { model_reasoning_effort: string } } }
-    expect(parsed.params.config).toEqual({ model_reasoning_effort: 'high' })
+    const params = splitFrames(raw)[1]!.params as { config?: { model_reasoning_effort: string } }
+    expect(params.config).toEqual({ model_reasoning_effort: 'high' })
   })
 
   test('omits config when reasoningEffort not set', () => {
     const provider = makeCodexProvider()
     const raw = provider.serializeInitialInput('prompt', undefined, makeOpts())
-    const parsed = JSON.parse(raw) as { params: { config?: unknown } }
-    expect(parsed.params.config).toBeUndefined()
+    const params = splitFrames(raw)[1]!.params as { config?: unknown }
+    expect(params.config).toBeUndefined()
   })
 })
 
@@ -193,13 +211,16 @@ describe('onProviderEvent — session_id', () => {
 // ---------------------------------------------------------------------------
 
 describe('serializeInitialInput — resume', () => {
-  test('emits thread/resume then turn/start joined by newline', () => {
+  test('emits initialize, thread/resume then turn/start joined by newline', () => {
     const provider = makeCodexProvider()
     const raw = provider.serializeInitialInput('continue', undefined, makeOpts({ resumeSessionId: 'thr_existing' }))
     const lines = raw.split('\n')
-    const resume = JSON.parse(lines[0]!) as { method: string; params: { threadId: string } }
-    const turn = JSON.parse(lines[1]!) as { method: string; params: { threadId: string; input: unknown[] } }
+    expect(lines).toHaveLength(3)
+    const init = JSON.parse(lines[0]!) as { method: string }
+    const resume = JSON.parse(lines[1]!) as { method: string; params: { threadId: string } }
+    const turn = JSON.parse(lines[2]!) as { method: string; params: { threadId: string; input: unknown[] } }
 
+    expect(init.method).toBe('initialize')
     expect(resume.method).toBe('thread/resume')
     expect(resume.params.threadId).toBe('thr_existing')
     expect(turn.method).toBe('turn/start')
