@@ -8,6 +8,7 @@ import { buildMcpConfig, shouldAttachMcp } from '../mcp/config'
 import { getDb, prepared, type SessionRow } from '../db/sqlite'
 import { getEventBus } from '../events/bus'
 import type { Database } from 'bun:sqlite'
+import { injectAgentFiles } from './inject-assets'
 
 const ADJECTIVES = ['brisk','wide','quiet','loud','smart','bright','dim','warm','cool','fast','slow','neat','crisp','rough','sharp','soft']
 const NOUNS = ['ivy','oak','fern','river','meadow','peak','bay','cliff','dune','grove','lake','mesa','pond','reef','stream','wood']
@@ -133,6 +134,7 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       workspaceRoot,
       startRef: createOpts.startRef,
     })
+    injectAgentFiles(handle.cwd, undefined, workspaceRoot)
 
     const now = Date.now()
     const row: SessionRow = {
@@ -261,6 +263,7 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       const repoName = extractRepoName(row.repo)
       await rebootstrapIfMissing(cwd, repoName, row.workspace_root)
     }
+    injectAgentFiles(cwd, undefined, row.workspace_root)
 
     const runtime = makeRuntime({
       sessionId: row.id,
