@@ -88,12 +88,25 @@ export interface CodexItemCompleted {
 
 export interface CodexTurnCompleted {
   method: 'turn/completed'
-  params: { turn: { id: string; status: 'completed' } }
+  params: {
+    threadId?: string
+    turn: { id: string; status: 'completed' | 'failed'; error?: { message?: string } | null }
+  }
 }
 
 export interface CodexTurnFailed {
   method: 'turn/failed'
   params: { turn: { id: string; status: 'failed'; error?: { message: string } } }
+}
+
+export interface CodexError {
+  method: 'error'
+  params: {
+    threadId?: string
+    turnId?: string
+    willRetry?: boolean
+    error: { message?: string; codexErrorInfo?: string; additionalDetails?: unknown }
+  }
 }
 
 export type CodexNotification =
@@ -108,6 +121,7 @@ export type CodexNotification =
   | CodexItemCompleted
   | CodexTurnCompleted
   | CodexTurnFailed
+  | CodexError
 
 export interface CodexRpcResponse {
   id: number

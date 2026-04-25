@@ -282,6 +282,79 @@ describe('translateCodexLine — turn/failed', () => {
 })
 
 // ---------------------------------------------------------------------------
+// translateCodexLine — error notifications and failed turns
+// ---------------------------------------------------------------------------
+
+describe('translateCodexLine — error and failed turn surfacing', () => {
+  test('error notification emits error event with inner backend message', () => {
+    const raw = parseCodexLine(
+      JSON.stringify({
+        method: 'error',
+        params: {
+          threadId: 'thr_1',
+          turnId: 'r1',
+          willRetry: false,
+          error: {
+            message: '{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The \'foo-codex\' model is not supported when using Codex with a ChatGPT account."}}',
+            codexErrorInfo: 'other',
+            additionalDetails: null,
+          },
+        },
+      }),
+    )!
+    const { events } = translateCodexLine(raw)
+    expect(events).toEqual([{
+      kind: 'error',
+      error: "The 'foo-codex' model is not supported when using Codex with a ChatGPT account.",
+    }])
+  })
+
+  test('error notification falls back to raw message when not JSON-wrapped', () => {
+    const raw = parseCodexLine(
+      JSON.stringify({
+        method: 'error',
+        params: { error: { message: 'plain error string' } },
+      }),
+    )!
+    expect(translateCodexLine(raw).events).toEqual([{ kind: 'error', error: 'plain error string' }])
+  })
+
+  test('turn/completed status=failed emits error then turn_complete', () => {
+    const raw = parseCodexLine(
+      JSON.stringify({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_1',
+          turn: {
+            id: 'r1',
+            status: 'failed',
+            error: { message: 'something broke' },
+          },
+        },
+      }),
+    )!
+    const { events } = translateCodexLine(raw)
+    expect(events).toEqual([
+      { kind: 'error', error: 'something broke' },
+      { kind: 'turn_complete', totalTokens: null, totalCostUsd: null, numTurns: null },
+    ])
+  })
+
+  test('turn/completed status=completed emits only turn_complete', () => {
+    const raw = parseCodexLine(
+      JSON.stringify({
+        method: 'turn/completed',
+        params: { threadId: 'thr_1', turn: { id: 'r1', status: 'completed' } },
+      }),
+    )!
+    const { events } = translateCodexLine(raw)
+    expect(events).toEqual([
+      { kind: 'turn_complete', totalTokens: null, totalCostUsd: null, numTurns: null },
+    ])
+  })
+})
+
+// ---------------------------------------------------------------------------
 // translateCodexLine — JSON-RPC error response
 // ---------------------------------------------------------------------------
 

@@ -16,7 +16,7 @@ function makeOpts(overrides?: Partial<SpawnArgsOpts>): SpawnArgsOpts {
     parentHome: PARENT_HOME,
     modeConfig: {
       systemPrompt: 'Be helpful',
-      model: 'gpt-5.1-codex',
+      model: 'gpt-5.3-codex',
       disallowedTools: [],
       autoExitOnComplete: false,
     },
@@ -106,7 +106,7 @@ describe('serializeInitialInput — fresh session', () => {
     const provider = makeCodexProvider()
     const raw = provider.serializeInitialInput('prompt', undefined, makeOpts())
     const params = splitFrames(raw)[1]!.params as { model: string; cwd: string; approvalPolicy: string }
-    expect(params.model).toBe('gpt-5.1-codex')
+    expect(params.model).toBe('gpt-5.3-codex')
     expect(params.cwd).toBe('/repo')
     expect(params.approvalPolicy).toBe('never')
   })
@@ -121,7 +121,7 @@ describe('serializeInitialInput — fresh session', () => {
   test('forwards read-only sandbox', () => {
     const provider = makeCodexProvider()
     const opts = makeOpts({
-      modeConfig: { systemPrompt: '', model: 'gpt-5.1-codex', disallowedTools: [], autoExitOnComplete: false, sandbox: 'read-only' },
+      modeConfig: { systemPrompt: '', model: 'gpt-5.3-codex', disallowedTools: [], autoExitOnComplete: false, sandbox: 'read-only' },
     })
     const raw = provider.serializeInitialInput('prompt', undefined, opts)
     const params = splitFrames(raw)[1]!.params as { sandbox: string }
@@ -131,7 +131,7 @@ describe('serializeInitialInput — fresh session', () => {
   test('includes reasoning effort in config when set', () => {
     const provider = makeCodexProvider()
     const opts = makeOpts({
-      modeConfig: { systemPrompt: '', model: 'gpt-5.1-codex', disallowedTools: [], autoExitOnComplete: false, reasoningEffort: 'high' },
+      modeConfig: { systemPrompt: '', model: 'gpt-5.3-codex', disallowedTools: [], autoExitOnComplete: false, reasoningEffort: 'high' },
     })
     const raw = provider.serializeInitialInput('prompt', undefined, opts)
     const params = splitFrames(raw)[1]!.params as { config?: { model_reasoning_effort: string } }
