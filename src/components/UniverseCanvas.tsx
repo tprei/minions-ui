@@ -36,7 +36,7 @@ interface UniverseNodeData {
   label: string
   status: string
   groupId: string
-  nodeType: 'dag' | 'parent-child' | 'standalone'
+  nodeType: 'dag' | 'parent-child' | 'standalone' | 'ship'
   isDark: boolean
   onContextMenu: (session: ApiSession, position: { x: number; y: number }) => void
   onNodeClick: (session: ApiSession) => void
@@ -70,8 +70,12 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
 
   const hasSession = Boolean(session)
   const isActive = session?.status === 'running' || session?.status === 'pending'
+  const isCoordinator = data.nodeType === 'ship'
 
   const nodeTypeLabel = data.nodeType === 'dag' ? 'DAG' : data.nodeType === 'parent-child' ? 'Tree' : null
+
+  const nodeWidth = isCoordinator ? 300 : 240
+  const nodeHeight = isCoordinator ? 120 : 100
 
   return (
     <div
@@ -88,8 +92,8 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
         class={`${attentionRing}`}
         data-testid={`universe-node-${session?.id || data.label}`}
         style={{
-          width: 240,
-          height: 100,
+          width: nodeWidth,
+          height: nodeHeight,
           backgroundColor: colors.bg,
           borderColor: colors.border,
           color: colors.text,
@@ -126,6 +130,20 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
             <AttentionIconStack reasons={session.attentionReasons} darkMode={isDark} />
           )}
         </div>
+
+        {isCoordinator && session?.stage && (
+          <div class="mt-1">
+            <span
+              class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium"
+              style={{
+                backgroundColor: isDark ? 'rgba(167,139,250,0.2)' : 'rgba(124,58,237,0.1)',
+                color: isDark ? '#a78bfa' : '#7c3aed',
+              }}
+            >
+              stage: {session.stage}
+            </span>
+          </div>
+        )}
 
         <div class="flex items-center justify-between mt-1">
           {session?.prUrl ? (
