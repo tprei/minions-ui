@@ -90,7 +90,6 @@ export const CODEX_MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
     disallowedTools: [],
     autoExitOnComplete: false,
     reasoningEffort: CODEX_REASONING_EFFORT,
-    sandbox: 'read-only',
   },
   think: {
     systemPrompt: DEFAULT_THINK_PROMPT,
@@ -98,7 +97,6 @@ export const CODEX_MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
     disallowedTools: [],
     autoExitOnComplete: false,
     reasoningEffort: CODEX_REASONING_EFFORT,
-    sandbox: 'read-only',
   },
   review: {
     systemPrompt: DEFAULT_REVIEW_PROMPT,
@@ -106,7 +104,6 @@ export const CODEX_MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
     disallowedTools: [],
     autoExitOnComplete: false,
     reasoningEffort: CODEX_REASONING_EFFORT,
-    sandbox: 'read-only',
   },
   ship: {
     systemPrompt: DEFAULT_SHIP_PROMPT,
