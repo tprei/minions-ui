@@ -1,5 +1,5 @@
 import type { ProviderEvent } from '../types.js'
-import type { CodexLine } from './stream-types.js'
+import type { CodexLine, ThreadItem } from './stream-types.js'
 
 export function parseCodexLine(raw: string): CodexLine | null {
   const trimmed = raw.trim()
@@ -93,6 +93,16 @@ export function translateCodexLine(
       break
     }
 
+    case 'item/started': {
+      events.push(...itemToProviderEvents(raw.params.item, 'started'))
+      break
+    }
+
+    case 'item/completed': {
+      events.push(...itemToProviderEvents(raw.params.item, 'completed'))
+      break
+    }
+
     case 'turn/completed':
       events.push({ kind: 'turn_complete', totalTokens: null, totalCostUsd: null, numTurns: null })
       break
@@ -105,10 +115,106 @@ export function translateCodexLine(
 
     default: {
       const method = (raw as unknown as { method: string }).method
-      console.warn('[codex-stream] Unknown notification method:', method)
+      // Many codex notifications are observability-only (configWarning, warning,
+      // thread/status/changed, mcpServer/startupStatus/updated, item/* progress
+      // for non-text items, etc.). Drop them silently rather than logging on
+      // every line.
+      void method
       break
     }
   }
 
   return { events, sessionId }
+}
+
+function itemToProviderEvents(item: ThreadItem, phase: 'started' | 'completed'): ProviderEvent[] {
+  if (item.type === 'agentMessage') {
+    if (phase !== 'completed') return []
+    const text = (item as { text?: unknown }).text
+    if (typeof text !== 'string' || text.length === 0) return []
+    return [{ kind: 'text_delta', text }]
+  }
+
+  if (item.type === 'reasoning') {
+    if (phase !== 'completed') return []
+    const text = stringifyReasoning(item as Record<string, unknown>)
+    if (text.length === 0) return []
+    return [{ kind: 'thinking_block', text }]
+  }
+
+  if (item.type === 'commandExecution') {
+    const cmd = item as {
+      id: string
+      command: string
+      status?: string
+      aggregatedOutput?: string | null
+      exitCode?: number | null
+    }
+    if (!cmd.id) return []
+    if (phase === 'started') {
+      return [{ kind: 'tool_use', id: cmd.id, name: 'shell', input: { command: cmd.command } }]
+    }
+    const okStatus = cmd.status === 'completed'
+    if (!okStatus) {
+      return [{
+        kind: 'tool_result',
+        toolUseId: cmd.id,
+        content: { error: cmd.aggregatedOutput ?? `command ${cmd.status ?? 'failed'}`, exitCode: cmd.exitCode ?? null },
+      }]
+    }
+    return [{
+      kind: 'tool_result',
+      toolUseId: cmd.id,
+      content: { stdout: cmd.aggregatedOutput ?? '', exitCode: cmd.exitCode ?? 0 },
+    }]
+  }
+
+  if (item.type === 'fileChange') {
+    const fc = item as { id: string; status?: string; changes?: unknown[] }
+    if (!fc.id) return []
+    if (phase === 'started') {
+      return [{ kind: 'tool_use', id: fc.id, name: 'fileChange', input: { changes: fc.changes ?? [] } }]
+    }
+    if (fc.status === 'completed') {
+      return [{ kind: 'tool_result', toolUseId: fc.id, content: { ok: true, changes: fc.changes ?? [] } }]
+    }
+    return [{
+      kind: 'tool_result',
+      toolUseId: fc.id,
+      content: { error: `fileChange ${fc.status ?? 'failed'}`, changes: fc.changes ?? [] },
+    }]
+  }
+
+  if (item.type === 'mcpToolCall' || item.type === 'dynamicToolCall') {
+    const tc = item as { id: string; tool?: string; arguments?: unknown; status?: string; output?: unknown }
+    if (!tc.id) return []
+    if (phase === 'started') {
+      return [{ kind: 'tool_use', id: tc.id, name: tc.tool ?? item.type, input: (tc.arguments as Record<string, unknown>) ?? {} }]
+    }
+    if (tc.status === 'completed') {
+      return [{ kind: 'tool_result', toolUseId: tc.id, content: tc.output ?? null }]
+    }
+    return [{ kind: 'tool_result', toolUseId: tc.id, content: { error: tc.output ?? `${item.type} ${tc.status ?? 'failed'}` } }]
+  }
+
+  return []
+}
+
+function stringifyReasoning(item: Record<string, unknown>): string {
+  if (typeof item['text'] === 'string') return item['text'] as string
+  const summary = item['summary']
+  if (Array.isArray(summary)) {
+    const parts = summary
+      .map((s) => (typeof s === 'string' ? s : typeof (s as { text?: unknown })?.text === 'string' ? (s as { text: string }).text : ''))
+      .filter((s) => s.length > 0)
+    if (parts.length > 0) return parts.join('\n\n')
+  }
+  const content = item['content']
+  if (Array.isArray(content)) {
+    const parts = content
+      .map((c) => (typeof c === 'string' ? c : typeof (c as { text?: unknown })?.text === 'string' ? (c as { text: string }).text : ''))
+      .filter((s) => s.length > 0)
+    if (parts.length > 0) return parts.join('\n\n')
+  }
+  return ''
 }
