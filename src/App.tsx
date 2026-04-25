@@ -38,6 +38,7 @@ import { useResizable } from './hooks/useResizable'
 import { SessionList, statusDot } from './components/SessionList'
 import type { ApiDagGraph } from './api/types'
 import { currentRoute } from './routing/current'
+import { formatRoute } from './routing/route'
 import { VariantGroupView } from './groups/VariantGroupView'
 import type { ApiSession, AttentionReason, MinionCommand, QuickAction } from './api/types'
 import { HeaderMenu } from './components/HeaderMenu'
@@ -567,6 +568,8 @@ function MobileSessionStrip({
 function ActiveView() {
   const id = activeId.value
   const store = id ? getActiveStore() : null
+  const sessions = store?.sessions.value ?? []
+  const dags = store?.dags.value ?? []
   const conn = connections.value.find((c) => c.id === id)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [attentionFilter, setAttentionFilter] = useState<AttentionReason | null>(null)
@@ -593,19 +596,31 @@ function ActiveView() {
 
   useEffect(() => {
     if (route.name !== 'session') return
-    const match = store?.sessions.value.find((s) => s.slug === route.sessionSlug)
-    if (match && match.id !== sessionId) setSessionId(match.id)
-  }, [route, store, sessionId])
+    const match = sessions.find((s) => s.slug === route.sessionSlug)
+    if (!match) return
+    setSessionId((prev) => (prev === match.id ? prev : match.id))
+  }, [route, sessions])
 
   useEffect(() => {
     setAttentionFilter(null)
   }, [id])
 
-  const sessions = store?.sessions.value ?? []
-  const dags = store?.dags.value ?? []
   const visibleSessions = useMemo(
     () => filterSessionsByReason(sessions, attentionFilter),
     [sessions, attentionFilter],
+  )
+
+  const selectSession = useCallback(
+    (sid: string) => {
+      setSessionId(sid)
+      const session = sessions.find((s) => s.id === sid)
+      if (!session || typeof window === 'undefined') return
+      const nextHash = formatRoute({ name: 'session', sessionSlug: session.slug })
+      if (window.location.hash !== nextHash) {
+        window.location.hash = nextHash
+      }
+    },
+    [sessions],
   )
 
   const handleSendMessage = useCallback(
@@ -668,9 +683,9 @@ function ActiveView() {
   )
 
   const handleOpenChat = useCallback((sid: string) => {
-    setSessionId(sid)
+    selectSession(sid)
     viewMode.value = 'list'
-  }, [])
+  }, [selectSession])
 
   const handleOpenLogs = useCallback((sid: string) => {
     setLogsSessionId(sid)
@@ -716,7 +731,7 @@ function ActiveView() {
     firstMatchId: string | null,
   ) => {
     setAttentionFilter(reason)
-    if (firstMatchId !== null) setSessionId(firstMatchId)
+    if (firstMatchId !== null) selectSession(firstMatchId)
   }
 
 
@@ -826,7 +841,7 @@ function ActiveView() {
             visibleSessions={visibleSessions}
             dags={store.dags.value}
             sessionId={sessionId}
-            setSessionId={setSessionId}
+            setSessionId={selectSession}
             selected={selected}
             store={store}
             onSend={handleSendMessage}
@@ -872,7 +887,7 @@ function ActiveView() {
               sessions={visibleSessions}
               dags={store.dags.value}
               activeSessionId={sessionId}
-              onSelect={setSessionId}
+              onSelect={selectSession}
             />
             {selected ? (
               <ChatPane
@@ -881,7 +896,7 @@ function ActiveView() {
                 store={store}
                 onSend={handleSendMessage}
                 onCommand={handleCommand}
-                onNavigate={setSessionId}
+                onNavigate={selectSession}
               />
             ) : (
               <EmptyPane />
