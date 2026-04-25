@@ -287,4 +287,33 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('session-item-s2'))
     await screen.findByTestId('transcript-upgrade-notice')
   })
+
+  it('updates the route hash when switching sessions from a routed session page', { timeout: 15000 }, async () => {
+    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
+      version: 1,
+      connections: [
+        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+      ],
+      activeId: 'c1',
+    }))
+    stubFetch([
+      session({ id: 's1', slug: 'brave-fox' }),
+      session({ id: 's2', slug: 'swift-cat' }),
+    ])
+    window.location.hash = '#/s/brave-fox'
+    try {
+      const App = (await import('../src/App')).default
+      render(<App />)
+
+      fireEvent.click(await screen.findByTestId('session-item-s2'))
+      await vi.waitFor(() => {
+        expect(window.location.hash).toBe('#/s/swift-cat')
+      })
+      await vi.waitFor(() => {
+        expect(screen.getByTestId('chat-pane').textContent).toContain('swift-cat')
+      })
+    } finally {
+      window.location.hash = ''
+    }
+  })
 })
