@@ -1,4 +1,5 @@
 import type { CompletionHandler, HandlerCtx, SessionCompletedEvent, SessionMetadata } from './types'
+import { prepared } from '../db/sqlite'
 
 export const ciBabysitHandler: CompletionHandler = {
   name: 'ci-babysit',
@@ -17,7 +18,22 @@ export const ciBabysitHandler: CompletionHandler = {
 
     if (!row?.pr_url) return
 
-    const meta = JSON.parse(row.metadata) as SessionMetadata
+    let meta: SessionMetadata
+    try {
+      meta = JSON.parse(row.metadata) as SessionMetadata
+    } catch {
+      meta = {}
+    }
+    if (meta.ciBabysitStartedAt) return
+
+    const now = Date.now()
+    meta.ciBabysitStartedAt = now
+    meta.ciBabysitTrigger = 'completion'
+    prepared.updateSession(ctx.db, {
+      id: ev.sessionId,
+      metadata: { ...meta },
+      updated_at: now,
+    })
 
     if (meta.parentThreadId) {
       await ctx.ciBabysitter.queueDeferredBabysit(ev.sessionId, meta.parentThreadId)

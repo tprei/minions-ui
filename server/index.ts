@@ -37,6 +37,7 @@ import { ReplyQueue as DiskReplyQueue } from './session/reply-queue'
 import { startPushNotifier } from './push/notifier'
 import { startTokenProvider } from './github/token-provider'
 import { installAskpass } from './github/askpass'
+import { wirePrLifecycle } from './ci/pr-lifecycle'
 
 const PORT = Number(process.env['PORT'] ?? 8080)
 const WORKSPACE_ROOT = process.env['WORKSPACE_ROOT'] ?? '/tmp/minion-workspace'
@@ -131,6 +132,13 @@ dispatcher.register(qualityGateHandler)
 dispatcher.register(digestHandler)
 dispatcher.register(ciBabysitHandler)
 dispatcher.register(parentNotifyHandler)
+
+wirePrLifecycle({
+  bus,
+  db,
+  ciBabysitter: ctx.ciBabysitter,
+  stopSession: (sessionId, reason) => ctx.registry.stop(sessionId, reason),
+})
 
 const loopsEnabled = (process.env['ENABLE_LOOPS'] ?? 'false').toLowerCase() === 'true'
 if (loopsEnabled) {
