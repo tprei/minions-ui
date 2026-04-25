@@ -52,7 +52,7 @@ export const NEW_TASK_MODES: ModeOption[] = [
   { value: 'task', label: 'Task', hint: 'Execute end-to-end' },
   { value: 'plan', label: 'Plan', hint: 'Produce a plan; no execution' },
   { value: 'think', label: 'Think', hint: 'Deliberate; no side effects' },
-  { value: 'ship-think', label: 'Ship', hint: 'Finish with a PR' },
+  { value: 'ship', label: 'Ship', hint: 'Finish with a PR' },
 ]
 
 export const VARIANT_COUNTS: ReadonlyArray<number> = [1, 2, 3, 4]

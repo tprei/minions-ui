@@ -166,7 +166,7 @@ try {
 
 startPushNotifier(bus)
 
-const landingManager = createLandingManager({ bus })
+const landingManager = createLandingManager({ bus, workspaceRoot: WORKSPACE_ROOT })
 registerApiRoutes(app, registry, () => db, scheduler, landingManager, {
   loopRuntime: loopScheduler,
   resourceMonitor,

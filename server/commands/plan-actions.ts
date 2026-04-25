@@ -182,19 +182,6 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
     }
   }
 
-  if (mode === "ship-plan") {
-    setPipelineAdvancing(ctx, sessionId, true)
-    try {
-      await killAndWait(sessionId, ctx)
-      const result = await handoffShipPhase(sessionId, "ship-verify", ctx)
-      if (!result.ok) setPipelineAdvancing(ctx, sessionId, false)
-      return result
-    } catch (err) {
-      setPipelineAdvancing(ctx, sessionId, false)
-      throw err
-    }
-  }
-
   if (mode === "think" || mode === "plan" || mode === "review") {
     setPipelineAdvancing(ctx, sessionId, true)
     try {

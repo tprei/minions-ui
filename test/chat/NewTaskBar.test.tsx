@@ -124,7 +124,7 @@ describe('NewTaskBar', () => {
     expect(screen.getByTestId('mode-task')).toBeTruthy()
     expect(screen.getByTestId('mode-plan')).toBeTruthy()
     expect(screen.getByTestId('mode-think')).toBeTruthy()
-    expect(screen.getByTestId('mode-ship-think')).toBeTruthy()
+    expect(screen.getByTestId('mode-ship')).toBeTruthy()
     expect(screen.getByTestId('mode-task').getAttribute('aria-checked')).toBe('true')
   })
 
