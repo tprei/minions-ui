@@ -29,8 +29,16 @@ function mapStatus(status: SessionRow['status']): ApiSession['status'] {
   return status
 }
 
-function rowToApi(row: SessionRow): ApiSession {
-  return {
+function rowToApi(row: SessionRow, db?: Database): ApiSession {
+  const database = db ?? getDb()
+  const childRows = database
+    .query<{ id: string }, [string]>(
+      'SELECT id FROM sessions WHERE parent_id = ? ORDER BY created_at ASC',
+    )
+    .all(row.id)
+  const childIds = childRows.map((r) => r.id)
+
+  const result: ApiSession = {
     id: row.id,
     slug: row.slug,
     status: mapStatus(row.status),
@@ -40,7 +48,7 @@ function rowToApi(row: SessionRow): ApiSession {
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
     parentId: row.parent_id ?? undefined,
-    childIds: [],
+    childIds,
     needsAttention: row.needs_attention,
     attentionReasons: row.attention_reasons as ApiSession['attentionReasons'],
     quickActions: row.quick_actions as QuickAction[],
@@ -48,6 +56,12 @@ function rowToApi(row: SessionRow): ApiSession {
     conversation: [],
     transcriptUrl: `/api/sessions/${row.slug}/transcript`,
   }
+
+  if (row.mode === 'ship' && row.stage) {
+    result.stage = row.stage as ApiSession['stage']
+  }
+
+  return result
 }
 
 export interface CreateSessionOpts {
@@ -95,8 +109,9 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
   }
 
   function emitSnapshot(sessionId: string): void {
-    const row = prepared.getSession(db(), sessionId)
-    if (row) bus.emit({ kind: 'session.snapshot', session: rowToApi(row) })
+    const database = db()
+    const row = prepared.getSession(database, sessionId)
+    if (row) bus.emit({ kind: 'session.snapshot', session: rowToApi(row, database) })
   }
 
   function wireCompletionHandler(sessionId: string): void {
@@ -169,8 +184,9 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
 
     void runtime.start()
 
-    const finalRow = prepared.getSession(db(), sessionId)!
-    return { session: rowToApi(finalRow), runtime }
+    const database = db()
+    const finalRow = prepared.getSession(database, sessionId)!
+    return { session: rowToApi(finalRow, database), runtime }
   }
 
   function get(sessionId: string): SessionRuntime | undefined {
@@ -186,12 +202,14 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
   }
 
   function list(): ApiSession[] {
-    return prepared.listSessions(db()).map(rowToApi)
+    const database = db()
+    return prepared.listSessions(database).map((row) => rowToApi(row, database))
   }
 
   function snapshot(sessionId: string): ApiSession | undefined {
-    const row = prepared.getSession(db(), sessionId)
-    return row ? rowToApi(row) : undefined
+    const database = db()
+    const row = prepared.getSession(database, sessionId)
+    return row ? rowToApi(row, database) : undefined
   }
 
   async function stop(sessionId: string, reason?: string): Promise<void> {

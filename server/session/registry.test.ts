@@ -427,4 +427,130 @@ describe('SessionRegistry', () => {
       expect(snapshots).toContain(session.id)
     }, 30_000)
   })
+
+  describe('childIds and stage propagation', () => {
+    test('populates childIds in ApiSession ordered by created_at', async () => {
+      const bare = trackedDir('bare-children')
+      const work = trackedDir('work-children')
+      const workspaceRoot = trackedDir('ws-children')
+      await initLocalBareRepo(bare, work)
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
+
+      // Create coordinator session
+      const { session: coordinator } = await registry.create({
+        mode: 'ship',
+        prompt: 'ship the feature',
+        repo: bare,
+        workspaceRoot,
+      })
+
+      // Sleep to ensure different created_at timestamps
+      await new Promise((r) => setTimeout(r, 10))
+
+      // Create children with explicit delays to ensure ordering
+      const { session: child1 } = await registry.create({
+        mode: 'dag-task',
+        prompt: 'child 1',
+        repo: bare,
+        workspaceRoot,
+        parentId: coordinator.id,
+      })
+
+      await new Promise((r) => setTimeout(r, 10))
+
+      const { session: child2 } = await registry.create({
+        mode: 'dag-task',
+        prompt: 'child 2',
+        repo: bare,
+        workspaceRoot,
+        parentId: coordinator.id,
+      })
+
+      await new Promise((r) => setTimeout(r, 10))
+
+      const { session: child3 } = await registry.create({
+        mode: 'dag-task',
+        prompt: 'child 3',
+        repo: bare,
+        workspaceRoot,
+        parentId: coordinator.id,
+      })
+
+      // Verify coordinator has children in order
+      const snap = registry.snapshot(coordinator.id)
+      expect(snap).toBeDefined()
+      expect(snap!.childIds).toEqual([child1.id, child2.id, child3.id])
+    }, 60_000)
+
+    test('includes stage in ApiSession when mode is ship', async () => {
+      const bare = trackedDir('bare-stage')
+      const work = trackedDir('work-stage')
+      const workspaceRoot = trackedDir('ws-stage')
+      await initLocalBareRepo(bare, work)
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
+
+      // Create ship session
+      const { session } = await registry.create({
+        mode: 'ship',
+        prompt: 'ship it',
+        repo: bare,
+        workspaceRoot,
+      })
+
+      // Update stage in database
+      db.run(
+        'UPDATE sessions SET stage = ? WHERE id = ?',
+        ['think', session.id],
+      )
+
+      const snap = registry.snapshot(session.id)
+      expect(snap).toBeDefined()
+      expect(snap!.mode).toBe('ship')
+      expect(snap!.stage).toBe('think')
+    }, 30_000)
+
+    test('excludes stage when mode is not ship', async () => {
+      const bare = trackedDir('bare-no-stage')
+      const work = trackedDir('work-no-stage')
+      const workspaceRoot = trackedDir('ws-no-stage')
+      await initLocalBareRepo(bare, work)
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
+
+      const { session } = await registry.create({
+        mode: 'task',
+        prompt: 'regular task',
+        repo: bare,
+        workspaceRoot,
+      })
+
+      const snap = registry.snapshot(session.id)
+      expect(snap).toBeDefined()
+      expect(snap!.mode).toBe('task')
+      expect(snap!.stage).toBeUndefined()
+    }, 30_000)
+
+    test('excludes stage when mode is ship but stage is null', async () => {
+      const bare = trackedDir('bare-null-stage')
+      const work = trackedDir('work-null-stage')
+      const workspaceRoot = trackedDir('ws-null-stage')
+      await initLocalBareRepo(bare, work)
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
+
+      const { session } = await registry.create({
+        mode: 'ship',
+        prompt: 'ship without stage',
+        repo: bare,
+        workspaceRoot,
+      })
+
+      const snap = registry.snapshot(session.id)
+      expect(snap).toBeDefined()
+      expect(snap!.mode).toBe('ship')
+      expect(snap!.stage).toBeUndefined()
+    }, 30_000)
+  })
 })
