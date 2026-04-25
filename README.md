@@ -13,7 +13,22 @@ Standalone PWA frontend for the minions engine. Built with Preact, Vite, and Tai
 | `npm run lint` | Run ESLint across the project |
 | `npm run test` | Run unit tests with Vitest (jsdom) |
 | `npm run test:watch` | Run tests in watch mode |
+| `npm run pr:create -- "<title>"` | Create a PR safely; pass body via quoted heredoc to avoid shell expanding backticks |
 | `npm run format` | Format all files with Prettier |
+
+Example:
+
+```sh
+npm run pr:create -- "feat(ui): add install prompt" <<'PR_BODY'
+## Summary
+- Added install prompt flow
+
+## Test plan
+- npm run typecheck
+- npm run lint
+- npm run test
+PR_BODY
+```
 
 ## Dev proxy
 

@@ -91,6 +91,8 @@ public/
 - **No code comments** except rare WHY lines (hidden constraint, subtle invariant, workaround for a named bug).
 - **Never** use `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, or `_unused` prefix workarounds. Fix the underlying code.
 - **No** "Generated with Claude Code" / co-author tags / "committed by agent" verbiage in PRs or commits.
+- **Never** pass PR markdown via inline `gh pr create --body "..."`; shell expansion can break backticks/code fences.
+- **Always** use `bash scripts/create-pr.sh "<title>" <<'PR_BODY' ... PR_BODY` (or `gh pr create --body-file -` with a quoted heredoc).
 - Prefer the `Grep` tool (ripgrep) over raw `grep`.
 - Preact 10 + `@preact/signals` only. No React hooks for global state.
 

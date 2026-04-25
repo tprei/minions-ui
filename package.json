@@ -23,6 +23,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:install": "playwright install --with-deps",
+    "pr:create": "bash scripts/create-pr.sh",
     "format": "prettier --write .",
     "prepare": "husky || true",
     "docker:build": "docker build -f docker/engine.Dockerfile -t minions-engine ."
