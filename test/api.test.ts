@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createApiClient, ApiError } from '../src/api/client'
+import { openEventStream } from '../src/api/sse'
 import { installMockEventSource } from './sse-mock'
 import type {
   ApiSession,
@@ -31,6 +32,8 @@ describe('ApiClient', () => {
   afterEach(() => {
     mock.restore()
     vi.unstubAllGlobals()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   it('sends Authorization header on getSessions', async () => {
@@ -178,6 +181,52 @@ describe('ApiClient', () => {
 
     expect(events).toHaveLength(1)
     expect(events[0].type).toBe('transcript_event')
+    handle.close()
+  })
+
+  it('openEventStream reconnects when the quiet watchdog expires', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+
+    const handle = openEventStream({
+      baseUrl: BASE_URL,
+      token: TOKEN,
+      handlers: { onEvent: () => {} },
+      quietTimeoutMs: 1000,
+    })
+
+    const instance = [...mock.instances.values()][0]
+    instance.simulateOpen()
+
+    await vi.advanceTimersByTimeAsync(1001)
+
+    expect(mock.constructedUrls).toHaveLength(2)
+    handle.close()
+  })
+
+  it('openEventStream treats keepalive events as activity', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+
+    const handle = openEventStream({
+      baseUrl: BASE_URL,
+      token: TOKEN,
+      handlers: { onEvent: () => {} },
+      quietTimeoutMs: 1000,
+    })
+
+    const instance = [...mock.instances.values()][0]
+    instance.simulateOpen()
+
+    await vi.advanceTimersByTimeAsync(800)
+    instance.dispatchEvent(new Event('keepalive'))
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(mock.constructedUrls).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(201)
+
+    expect(mock.constructedUrls).toHaveLength(2)
     handle.close()
   })
 

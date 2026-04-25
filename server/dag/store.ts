@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite"
-import { nodeIndex } from "./dag"
+import { dagGraphStatus, nodeIndex } from "./dag"
 import type { DagGraph, DagNode } from "./dag"
 import { prepared, getDb } from "../db/sqlite"
 
@@ -8,7 +8,7 @@ function graphToRows(graph: DagGraph): { dagRow: Parameters<typeof prepared.inse
   const dagRow = {
     id: graph.id,
     root_task_id: graph.rootSessionId,
-    status: "running" as const,
+    status: dagGraphStatus(graph),
     repo: repo && repo.length > 0 ? repo : null,
     created_at: graph.createdAt,
     updated_at: Date.now(),

@@ -1,22 +1,25 @@
 import type { ShipStage, AttentionReason, QuickAction } from '../../shared/api-types'
 import { prepared } from '../db/sqlite'
 import { getEventBus } from '../events/bus'
-import type { PlanActionCtx } from '../commands/plan-actions'
+import { handleDag, type PlanActionCtx } from '../commands/plan-actions'
 
 // Stage directive constants
 export const DIRECTIVE_PLAN = [
   'You have completed the thinking phase. Now create an implementation plan.',
   '',
-  'Break the work into concrete, parallelizable tasks in DAG format:',
-  '```dag',
-  'id: unique-slug',
-  'title: One-line task description',
-  'dependsOn: [other-task-id]  # empty if no dependencies',
-  '---',
-  'Detailed instructions for this task...',
+  'Break the work into concrete, parallelizable tasks as a JSON DAG array:',
+  '```json',
+  '[',
+  '  {',
+  '    "id": "unique-slug",',
+  '    "title": "One-line task description",',
+  '    "description": "Detailed instructions for this task.",',
+  '    "dependsOn": []',
+  '  }',
+  ']',
   '```',
   '',
-  'Output ≥1 DAG task blocks covering all the work identified during thinking.',
+  'Output at least one task object covering all the work identified during thinking.',
 ].join('\n')
 
 export const DIRECTIVE_VERIFY = [
@@ -67,6 +70,7 @@ export interface AdvanceResult {
   ok: boolean
   from?: ShipStage
   to?: ShipStage
+  dagId?: string
   reason?: string
 }
 
@@ -133,12 +137,27 @@ export async function advanceShip(
       return { ok: true, from: currentStage, to: nextStage }
     }
 
-    // Perform the transition
+    let dagId: string | undefined
+    if (currentStage === 'plan' && nextStage === 'dag') {
+      const dagResult = await handleDag('', sessionId, ctx)
+      if (!dagResult.ok) {
+        return { ok: false, from: currentStage, to: nextStage, reason: dagResult.reason ?? 'could not start ship DAG' }
+      }
+      dagId = dagResult.dagId
+    }
+
     const now = Date.now()
-    ctx.db.run(
-      'UPDATE sessions SET stage = ?, updated_at = ? WHERE id = ?',
-      [nextStage, now, sessionId],
-    )
+    if (nextStage === 'done') {
+      ctx.db.run(
+        'UPDATE sessions SET stage = ?, status = ?, updated_at = ? WHERE id = ?',
+        [nextStage, 'completed', now, sessionId],
+      )
+    } else {
+      ctx.db.run(
+        'UPDATE sessions SET stage = ?, updated_at = ? WHERE id = ?',
+        [nextStage, now, sessionId],
+      )
+    }
 
     console.log('[ship]', sessionId, 'stage', currentStage, '->', nextStage)
 
@@ -188,6 +207,6 @@ export async function advanceShip(
       await ctx.registry.reply(sessionId, DIRECTIVE_VERIFY)
     }
 
-    return { ok: true, from: currentStage, to: nextStage }
+    return { ok: true, from: currentStage, to: nextStage, dagId }
   })
 }

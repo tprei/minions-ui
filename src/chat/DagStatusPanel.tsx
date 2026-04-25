@@ -109,6 +109,7 @@ export function DagStatusPanel({ session, store, onSelect, onLand }: DagStatusPa
   const running = nodes.filter((n) => n.status === 'running' || n.status === 'ci-pending').length
   const failed = nodes.filter((n) => n.status === 'failed' || n.status === 'ci-failed').length
   const total = nodes.length
+  const progress = total === 0 ? 0 : Math.round((done / total) * 100)
 
   const graphTone =
     graph.status === 'failed'
@@ -126,6 +127,11 @@ export function DagStatusPanel({ session, store, onSelect, onLand }: DagStatusPa
   // panel header.
   const headerPrUrl = parent?.prUrl ?? firstNodePrUrl(nodes)
   const headerPrLabel = parent?.prUrl ? 'Parent PR' : 'First PR'
+  const progressTone = failed > 0
+    ? 'bg-red-500'
+    : graph.status === 'completed'
+      ? 'bg-emerald-500'
+      : 'bg-blue-500'
 
   return (
     <div
@@ -212,6 +218,19 @@ export function DagStatusPanel({ session, store, onSelect, onLand }: DagStatusPa
             <span aria-hidden="true">↗</span>
           </a>
         )}
+      </div>
+      <div
+        class="h-1 bg-slate-100 dark:bg-slate-900"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+        data-testid="dag-status-progress"
+      >
+        <div
+          class={`h-full transition-all duration-300 ${progressTone}`}
+          style={{ width: `${progress}%` }}
+        />
       </div>
       {!collapsed.value && (
         <ul class="px-4 pb-3 pt-1 flex flex-col gap-1.5" data-testid="dag-status-node-list">

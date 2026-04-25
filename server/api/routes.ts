@@ -26,6 +26,7 @@ import { handleExecute, handleSplit, handleStack, handleDag } from '../commands/
 import type { PlanScheduler } from '../commands/plan-actions'
 import { handleLandCommand } from '../commands/land'
 import type { LandingManager } from '../dag/landing'
+import { advanceShip } from '../ship/coordinator'
 import { listDags } from '../dag/store'
 import { topologicalSort, nodeIndex } from '../dag/dag'
 import type { DagGraph } from '../dag/dag'
@@ -55,14 +56,14 @@ const LIBRARY_VERSION = '0.1.0'
 const FEATURES = [
   'sessions-create',
   'messages',
-  'images',
+  'sessions-create-images',
   'transcript',
   'auth',
   'cors-allowlist',
   'dag',
-  'ship-pipeline',
-  'variants',
-  'push',
+  'ship-coordinator',
+  'sessions-variants',
+  'web-push',
   'screenshots',
   'diff',
   'pr-preview',
@@ -229,8 +230,8 @@ export function registerApiRoutes(
         repo: resolvedRepo,
         initialImages: images,
       })
-      const body: ApiResponse<{ sessionId: string; slug: string }> = {
-        data: { sessionId: session.id, slug: session.slug },
+      const body: ApiResponse<ApiSession> = {
+        data: session,
       }
       return c.json(body, 201)
     } catch (err) {
@@ -346,6 +347,29 @@ export function registerApiRoutes(
       }
     }
 
+    if (command.action === 'ship_advance') {
+      if (!scheduler) {
+        return c.json({
+          data: { success: false, error: 'no scheduler configured' },
+        } satisfies ApiResponse<CommandResult>)
+      }
+      try {
+        const result = await advanceShip(command.sessionId, command.to, {
+          db: resolveDb(),
+          registry,
+          scheduler,
+        })
+        return c.json({
+          data: result.ok
+            ? { success: true, ...(result.dagId ? { dagId: result.dagId } : {}) }
+            : { success: false, error: result.reason ?? 'ship advance failed' },
+        } satisfies ApiResponse<CommandResult>)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ data: { success: false, error: message } } satisfies ApiResponse<CommandResult>)
+      }
+    }
+
     try {
       if (command.action === 'reply') {
         await registry.reply(command.sessionId, command.message)
@@ -414,7 +438,12 @@ export function registerApiRoutes(
           } else if (command === 'stack') {
             result = await handleStack(sessionId, planCtx)
           } else {
-            result = await handleDag(rest, sessionId, planCtx)
+            const row = prepared.getSession(planCtx.db, sessionId)
+            if (row?.mode === 'ship' && (row.stage ?? 'think') === 'plan' && !rest) {
+              result = await advanceShip(sessionId, 'dag', planCtx)
+            } else {
+              result = await handleDag(rest, sessionId, planCtx)
+            }
           }
           if (!result.ok) return c.json({ error: result.reason ?? `/${command} failed` }, 422)
           return c.json({ data: { ok: true, sessionId, dagId: result.dagId } })
@@ -524,6 +553,9 @@ export function registerApiRoutes(
 
       const modeEntry = SLASH_MODES.get(command as Parameters<typeof SLASH_MODES.get>[0])
       if (modeEntry !== undefined) {
+        if (!rest) {
+          return c.json({ error: `/${command} requires a prompt` }, 400)
+        }
         const defaultRepo = process.env['DEFAULT_REPO']
         if (!defaultRepo) {
           return c.json({ error: 'DEFAULT_REPO env is required for /command style messages' }, 400)

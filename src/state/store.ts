@@ -119,6 +119,18 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     scheduleSnapshot()
   }
 
+  function applyDagSnapshot(dag: import('../api/types').ApiDagGraph) {
+    const idx = dags.value.findIndex((d) => d.id === dag.id)
+    if (idx !== -1) {
+      const updated = [...dags.value]
+      updated[idx] = dag
+      dags.value = updated
+    } else {
+      dags.value = [...dags.value, dag]
+    }
+    scheduleSnapshot()
+  }
+
   function onEvent(event: SseEvent) {
     switch (event.type) {
       case 'session_created':
@@ -130,8 +142,10 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
           const updated = [...sessions.value]
           updated[idx] = event.session
           sessions.value = updated
-          scheduleSnapshot()
+        } else {
+          sessions.value = [...sessions.value, event.session]
         }
+        scheduleSnapshot()
         if (diffStatsBySessionId.value.has(event.session.id)) {
           void loadDiffStats(event.session.id)
         }
@@ -142,17 +156,10 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
         break
       }
       case 'dag_created':
-        dags.value = [...dags.value, event.dag]
-        scheduleSnapshot()
+        applyDagSnapshot(event.dag)
         break
       case 'dag_updated': {
-        const idx = dags.value.findIndex((d) => d.id === event.dag.id)
-        if (idx !== -1) {
-          const updated = [...dags.value]
-          updated[idx] = event.dag
-          dags.value = updated
-          scheduleSnapshot()
-        }
+        applyDagSnapshot(event.dag)
         break
       }
       case 'dag_deleted':
@@ -166,6 +173,8 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
       }
       case 'resource':
         resourceSnapshot.value = event.snapshot
+        break
+      case 'session_screenshot_captured':
         break
     }
   }
@@ -247,8 +256,14 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     runtimeConfig,
     loadDiffStats,
     refresh,
-    sendCommand(cmd) {
-      return client.sendCommand(cmd)
+    async sendCommand(cmd) {
+      const result = await client.sendCommand(cmd)
+      if (result.success) {
+        error.value = null
+      } else {
+        error.value = result.error ?? 'Command failed'
+      }
+      return result
     },
     getTranscript,
     applySessionCreated,

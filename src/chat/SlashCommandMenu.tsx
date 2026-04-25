@@ -26,8 +26,11 @@ const TASK_COMMANDS: SlashCommand[] = [
 ]
 
 const SHIP_COMMANDS: SlashCommand[] = [
+  { cmd: '/dag', label: 'DAG', hint: 'Schedule the ship plan as a dependency graph' },
   { cmd: '/land', label: 'Land', hint: 'Merge the shipped PR' },
   { cmd: '/doctor', label: 'Doctor', hint: 'Diagnose coordination failures' },
+  { cmd: '/stop', label: 'Stop', hint: 'Interrupt the running session', destructive: true },
+  { cmd: '/close', label: 'Close', hint: 'Close this session permanently', destructive: true },
 ]
 
 function commandsForMode(mode: string): SlashCommand[] {

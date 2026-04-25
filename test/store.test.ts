@@ -212,6 +212,7 @@ describe('ConnectionStore SSE events', () => {
     const store = createConnectionStore(client, 'test-conn')
     const es = [...mock.instances.values()][0] as MockEventSource
 
+    store.applySessionCreated(SESSION)
     for (let i = 0; i < 4; i++) await Promise.resolve()
     const ts = store.getTranscript(SESSION.id)
     expect(ts).not.toBeNull()
@@ -260,6 +261,7 @@ describe('ConnectionStore SSE events', () => {
     const store = createConnectionStore(client, 'test-conn')
     const es = [...mock.instances.values()][0] as MockEventSource
 
+    store.applySessionCreated(SESSION)
     for (let i = 0; i < 4; i++) await Promise.resolve()
     const ts = store.getTranscript(SESSION.id)
     expect(ts).not.toBeNull()
