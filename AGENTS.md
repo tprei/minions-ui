@@ -12,11 +12,11 @@ Always set the `model` parameter explicitly when spawning via the `Agent` tool.
 
 If an implementation agent encounters ambiguity, unresolved design questions, or an architectural decision — **stop implementing** and return to the planning loop with an opus-tier agent. Do not guess inline.
 
-## Plan mode is read-only
+## Plan/Think mode is read-only
 
-- Planning threads are strictly non-mutating: no file edits, no `apply_patch`, no write commands, no commits.
-- In plan mode, only gather context and produce a concrete step-by-step implementation plan.
-- If a plan thread accidentally starts making changes, stop immediately, discard that attempt, and restart in read-only planning.
+- `plan` and `think` threads are strictly non-mutating: no file edits, no `apply_patch`, no write commands, no commits.
+- In `plan`/`think` mode, only gather context and produce analysis plus a concrete step-by-step implementation plan.
+- If a `plan` or `think` thread accidentally starts making changes, stop immediately, discard that attempt, and restart in read-only planning.
 - Start implementation only after the user explicitly asks to execute the approved plan.
 
 ## Branch and PR workflow
