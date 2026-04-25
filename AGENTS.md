@@ -26,6 +26,8 @@ If an implementation agent encounters ambiguity, unresolved design questions, or
 - Commit messages follow conventional commits: `feat(ui): ...`, `fix(api): ...`.
 - Never add "Generated with Claude Code" / co-author tags / "committed by agent" verbiage.
 - PR description: what changed, why, how to validate.
+- Never pass PR markdown via inline `--body "..."` to `gh pr create`; shell expansion can corrupt backticks/code fences.
+- Always create PRs with `bash scripts/create-pr.sh "<title>" <<'PR_BODY' ... PR_BODY` (quoted heredoc) or `gh pr create --body-file - <<'PR_BODY' ... PR_BODY`.
 
 ## Worktree hygiene
 
