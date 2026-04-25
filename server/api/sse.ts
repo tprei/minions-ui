@@ -8,9 +8,15 @@ import { getEventBus } from '../events/bus'
 import { getDb, prepared } from '../db/sqlite'
 import { sessionRowToApi, dagToApi, eventRowToTranscript } from './wire-mappers'
 
+const PROXY_FLUSH_BYTES = 4096
+
 export function registerSseRoute(app: Hono, dbProvider?: () => Database): void {
   const resolveDb = dbProvider ?? getDb
   app.get('/api/events', (c) => sseHandler(c, resolveDb))
+}
+
+function proxyFlushFrame(): string {
+  return `: ${' '.repeat(PROXY_FLUSH_BYTES)}\n\n`
 }
 
 function keepaliveData(): string {
@@ -18,7 +24,9 @@ function keepaliveData(): string {
 }
 
 async function sseHandler(c: Context, dbProvider: () => Database): Promise<Response> {
-  return streamSSE(c, async (stream) => {
+  const response = streamSSE(c, async (stream) => {
+    await stream.write(proxyFlushFrame())
+
     const db = dbProvider()
     const seenSessionIds = new Set<string>()
     const seenDagIds = new Set<string>()
@@ -82,6 +90,9 @@ async function sseHandler(c: Context, dbProvider: () => Database): Promise<Respo
       stream.onAbort(resolve)
     })
   })
+  response.headers.set('Cache-Control', 'no-cache, no-transform')
+  response.headers.set('X-Accel-Buffering', 'no')
+  return response
 }
 
 function projectEvent(
