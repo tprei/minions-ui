@@ -98,7 +98,7 @@ describe('GET /api/version', () => {
     const app = makeApp(testDb)
     const res = await app.fetch(new Request('http://localhost/api/version'))
     expect(res.status).toBe(200)
-    const body = await json<{ data: { apiVersion: string; libraryVersion: string; features: string[] } }>(res)
+    const body = await json<{ data: { apiVersion: string; libraryVersion: string; features: string[]; provider: string } }>(res)
     expect(body.data.apiVersion).toBeTruthy()
     expect(body.data.libraryVersion).toBeTruthy()
     const features = body.data.features
@@ -107,6 +107,7 @@ describe('GET /api/version', () => {
     expect(features).toContain('transcript')
     expect(features).toContain('auth')
     expect(features).toContain('cors-allowlist')
+    expect(body.data.provider).toBe('claude')
   })
 })
 

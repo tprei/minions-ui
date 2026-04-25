@@ -7,7 +7,7 @@ import { resetEventBus } from '../events/bus'
 import { runMigrations } from '../db/sqlite'
 import { registerApiRoutes } from './routes'
 import type { SpawnFn, SubprocessHandle } from '../session/runtime'
-import { serializeUserMessage } from '../session/stream-json'
+import { serializeUserMessage } from '../session/providers/claude/stream'
 
 function setupTestDb(): Database {
   const db = new Database(':memory:')
