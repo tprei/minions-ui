@@ -120,6 +120,8 @@ describe('auth middleware', () => {
     const app = makeApp(testDb)
     const res = await app.fetch(new Request('http://localhost/api/events'))
     expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toContain('no-transform')
+    expect(res.headers.get('x-accel-buffering')).toBe('no')
     res.body?.cancel()
   })
 
@@ -156,6 +158,21 @@ describe('auth middleware', () => {
 })
 
 describe('snapshot on connect', () => {
+  test('starts with a proxy flush frame', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(new Request('http://localhost/api/events'))
+    expect(res.status).toBe(200)
+
+    const reader = new ReadableStreamDefaultReader<Uint8Array>(res.body as ReadableStream<Uint8Array>)
+    const chunk = await reader.read()
+    reader.cancel()
+
+    expect(chunk.done).toBe(false)
+    const text = new TextDecoder().decode(chunk.value)
+    expect(text.startsWith(': ')).toBe(true)
+    expect(text.length).toBeGreaterThanOrEqual(4098)
+  })
+
   test('emits an immediate non-empty keepalive when there are no snapshots', async () => {
     const app = makeApp(testDb)
     const res = await app.fetch(new Request('http://localhost/api/events'))
@@ -211,7 +228,10 @@ describe('live event projection', () => {
       conversation: [],
     }
 
-    const collectPromise = reader.read(2)
+    const ready = await reader.read(1)
+    expect(ready[0]!.event).toBe('keepalive')
+
+    const collectPromise = reader.read(1)
     bus.emit({ kind: 'session.snapshot', session })
     const events = await collectPromise
     reader.cancel()
@@ -246,7 +266,10 @@ describe('live event projection', () => {
       conversation: [],
     }
 
-    const firstCollect = reader.read(2)
+    const ready = await reader.read(1)
+    expect(ready[0]!.event).toBe('keepalive')
+
+    const firstCollect = reader.read(1)
     bus.emit({ kind: 'session.snapshot', session })
     const first = await firstCollect
     const firstMessage = first.find((e) => e.event === 'message')
