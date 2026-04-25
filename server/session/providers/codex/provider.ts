@@ -61,12 +61,16 @@ export function makeCodexProvider(): AgentProvider {
     serializeInitialInput(prompt: string, images: Image[] | undefined, opts: SpawnArgsOpts): string {
       workspaceHome = opts.workspaceHome
 
+      const initFrame = rpcFrame('initialize', {
+        clientInfo: { name: 'minion-engine', version: '1' },
+      })
+
       if (opts.resumeSessionId) {
         const threadId = opts.resumeSessionId
         const resumeFrame = rpcFrame('thread/resume', { threadId })
         const input = buildInput(prompt, images, opts.workspaceHome)
         const turnFrame = rpcFrame('turn/start', { threadId, input })
-        return [resumeFrame, turnFrame].join('\n')
+        return [initFrame, resumeFrame, turnFrame].join('\n')
       }
 
       pendingInitialInput = { prompt, images }
@@ -81,7 +85,7 @@ export function makeCodexProvider(): AgentProvider {
       if (opts.modeConfig.reasoningEffort) {
         params['config'] = { model_reasoning_effort: opts.modeConfig.reasoningEffort }
       }
-      return rpcFrame('thread/start', params)
+      return [initFrame, rpcFrame('thread/start', params)].join('\n')
     },
 
     serializeUserReply(
