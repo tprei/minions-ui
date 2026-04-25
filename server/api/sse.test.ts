@@ -156,6 +156,20 @@ describe('auth middleware', () => {
 })
 
 describe('snapshot on connect', () => {
+  test('emits an immediate non-empty keepalive when there are no snapshots', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(new Request('http://localhost/api/events'))
+    expect(res.status).toBe(200)
+
+    const reader = new SseReader(res)
+    const events = await reader.read(1)
+    reader.cancel()
+
+    expect(events).toHaveLength(1)
+    expect(events[0]!.event).toBe('keepalive')
+    expect(JSON.parse(events[0]!.data)).toHaveProperty('ts')
+  })
+
   test('emits session_created for a session in db', async () => {
     insertSession(testDb, 'sess-snap')
     const app = makeApp(testDb)
@@ -197,13 +211,14 @@ describe('live event projection', () => {
       conversation: [],
     }
 
-    const collectPromise = reader.read(1)
+    const collectPromise = reader.read(2)
     bus.emit({ kind: 'session.snapshot', session })
     const events = await collectPromise
     reader.cancel()
 
-    expect(events.length).toBe(1)
-    const parsed = JSON.parse(events[0]!.data) as { type: string; session: { id: string } }
+    const event = events.find((e) => e.event === 'message')
+    expect(event).toBeDefined()
+    const parsed = JSON.parse(event!.data) as { type: string; session: { id: string } }
     expect(parsed.type).toBe('session_created')
     expect(parsed.session.id).toBe('sess-live')
   })
@@ -231,10 +246,11 @@ describe('live event projection', () => {
       conversation: [],
     }
 
-    const firstCollect = reader.read(1)
+    const firstCollect = reader.read(2)
     bus.emit({ kind: 'session.snapshot', session })
     const first = await firstCollect
-    expect(JSON.parse(first[0]!.data)).toMatchObject({ type: 'session_created' })
+    const firstMessage = first.find((e) => e.event === 'message')
+    expect(JSON.parse(firstMessage!.data)).toMatchObject({ type: 'session_created' })
 
     const secondCollect = reader.read(1)
     bus.emit({ kind: 'session.snapshot', session: { ...session, status: 'completed' } })

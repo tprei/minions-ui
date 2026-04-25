@@ -13,6 +13,10 @@ export function registerSseRoute(app: Hono, dbProvider?: () => Database): void {
   app.get('/api/events', (c) => sseHandler(c, resolveDb))
 }
 
+function keepaliveData(): string {
+  return JSON.stringify({ ts: Date.now() })
+}
+
 async function sseHandler(c: Context, dbProvider: () => Database): Promise<Response> {
   return streamSSE(c, async (stream) => {
     const db = dbProvider()
@@ -57,16 +61,17 @@ async function sseHandler(c: Context, dbProvider: () => Database): Promise<Respo
       }
     }
 
-    const keepaliveTimer = setInterval(() => {
-      void stream.writeSSE({ data: '', event: 'keepalive' })
-    }, 25_000)
-
     const unsubscribe = getEventBus().on((engineEvent: EngineEvent) => {
       const sseEvent = projectEvent(engineEvent, seenSessionIds, seenDagIds)
       if (sseEvent !== null) {
         void stream.writeSSE({ data: JSON.stringify(sseEvent), event: 'message' })
       }
     })
+
+    await stream.writeSSE({ data: keepaliveData(), event: 'keepalive' })
+    const keepaliveTimer = setInterval(() => {
+      void stream.writeSSE({ data: keepaliveData(), event: 'keepalive' })
+    }, 25_000)
 
     stream.onAbort(() => {
       clearInterval(keepaliveTimer)
