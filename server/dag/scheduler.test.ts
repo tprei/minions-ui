@@ -5,6 +5,7 @@ import { saveDag } from "./store"
 import { createDagScheduler } from "./scheduler"
 import { EngineEventBus } from "../events/bus"
 import { openDatabase, prepared, runMigrations } from "../db/sqlite"
+import { DIRECTIVE_VERIFY } from "../ship/coordinator"
 import type { SessionRegistry, CreateSessionOpts } from "../session/registry"
 import type { SessionRuntime } from "../session/runtime"
 import type { ApiSession } from "../../shared/api-types"
@@ -63,6 +64,37 @@ function makeSession(id: string, db?: Database): ApiSession {
     })
   }
   return session
+}
+
+function insertShipRoot(db: Database, id: string, stage: "think" | "plan" | "dag" | "verify" | "done"): void {
+  const now = Date.now()
+  prepared.insertSession(db, {
+    id,
+    slug: id,
+    status: "running",
+    command: "ship this",
+    mode: "ship",
+    repo: "https://github.com/org/repo",
+    branch: "minion/ship-root",
+    bare_dir: null,
+    pr_url: null,
+    parent_id: null,
+    variant_group_id: null,
+    claude_session_id: "thread-ship-root",
+    workspace_root: "/tmp/workspace",
+    created_at: now,
+    updated_at: now,
+    needs_attention: false,
+    attention_reasons: [],
+    quick_actions: [],
+    conversation: [],
+    quota_sleep_until: null,
+    quota_retry_count: 0,
+    metadata: {},
+    pipeline_advancing: false,
+    stage,
+    coordinator_children: [],
+  })
 }
 
 function makeRegistry(db: Database, createFn?: (opts: CreateSessionOpts) => Promise<{ session: ApiSession; runtime: SessionRuntime }>) {
@@ -260,6 +292,61 @@ describe("DagScheduler", () => {
 
     expect(events).toHaveLength(1)
     expect(events[0]!.state).toBe("completed")
+  })
+
+  it("emits live DAG snapshots with node sessions and terminal status", async () => {
+    const graph = buildDag("dag-live-snapshot", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: ApiSession[] = []
+    const events: Array<{ status: string; sessionId?: string }> = []
+    bus.onKind("dag.snapshot", (e) => {
+      events.push({
+        status: e.dag.status,
+        sessionId: e.dag.nodes["a"]?.session?.id,
+      })
+    })
+
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession("s-live", db)
+      sessions.push(session)
+      return { session, runtime: {} as never }
+    })
+    registry.list = () => sessions
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-live-snapshot")
+    await scheduler.onSessionCompleted("s-live", "completed")
+
+    expect(events[0]).toEqual({ status: "running", sessionId: "s-live" })
+    expect(events.at(-1)).toEqual({ status: "completed", sessionId: "s-live" })
+  })
+
+  it("advances ship roots to verification when their DAG becomes terminal", async () => {
+    const rootId = "ship-root"
+    insertShipRoot(db, rootId, "dag")
+
+    const graph = buildDag("dag-ship-complete", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], rootId, "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const replies: Array<{ sessionId: string; text: string }> = []
+    const registry = makeRegistry(db, async () => ({ session: makeSession("ship-child", db), runtime: {} as never }))
+    registry.reply = async (sessionId, text) => {
+      replies.push({ sessionId, text })
+      return true
+    }
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-ship-complete")
+    await scheduler.onSessionCompleted("ship-child", "completed")
+
+    const row = prepared.getSession(db, rootId)
+    expect(row?.stage).toBe("verify")
+    expect(replies).toEqual([{ sessionId: rootId, text: DIRECTIVE_VERIFY }])
   })
 
   it("cancel stops running sessions and marks them failed", async () => {

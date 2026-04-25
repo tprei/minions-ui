@@ -285,6 +285,16 @@ export function isDagComplete(graph: DagGraph): boolean {
   )
 }
 
+export function dagGraphStatus(graph: DagGraph): "pending" | "running" | "completed" | "failed" {
+  if (isDagComplete(graph)) {
+    const failed = graph.nodes.some((n) => n.status === "failed" || n.status === "skipped" || n.status === "ci-failed")
+    return failed ? "failed" : "completed"
+  }
+
+  const running = graph.nodes.some((n) => n.status === "running" || n.status === "ci-pending")
+  return running ? "running" : "pending"
+}
+
 export function getUpstreamBranches(graph: DagGraph, nodeId: string): string[] {
   const idx = nodeIndex(graph)
   const node = idx.get(nodeId)

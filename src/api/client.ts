@@ -72,9 +72,17 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
     return { Authorization: `Bearer ${token}` }
   }
 
+  async function readBody<T>(res: Response): Promise<ApiResponse<T>> {
+    try {
+      return (await res.json()) as ApiResponse<T>
+    } catch {
+      throw new ApiError(res.status, res.statusText || 'Invalid JSON response')
+    }
+  }
+
   async function get<T>(path: string): Promise<T> {
     const res = await fetch(`${baseUrl}${path}`, { headers: headers() })
-    const body = (await res.json()) as ApiResponse<T>
+    const body = await readBody<T>(res)
     if (!res.ok || body.error) {
       throw new ApiError(res.status, body.error ?? res.statusText)
     }
@@ -87,7 +95,7 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
       headers: headers(),
       body: JSON.stringify(data),
     })
-    const body = (await res.json()) as ApiResponse<T>
+    const body = await readBody<T>(res)
     if (!res.ok || body.error) {
       throw new ApiError(res.status, body.error ?? res.statusText)
     }
@@ -100,7 +108,7 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
       headers: headers(),
       body: JSON.stringify(data),
     })
-    const body = (await res.json()) as ApiResponse<T>
+    const body = await readBody<T>(res)
     if (!res.ok || body.error) {
       throw new ApiError(res.status, body.error ?? res.statusText)
     }
@@ -113,7 +121,7 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
       headers: headers(),
       body: data !== undefined ? JSON.stringify(data) : undefined,
     })
-    const body = (await res.json()) as ApiResponse<T>
+    const body = await readBody<T>(res)
     if (!res.ok || body.error) {
       throw new ApiError(res.status, body.error ?? res.statusText)
     }

@@ -268,7 +268,7 @@ describe('GET /api/version — images feature flag', () => {
 
     expect(res.status).toBe(200)
     const body = await json<{ data: { features: string[] } }>(res)
-    expect(body.data.features).toContain('images')
+    expect(body.data.features).toContain('sessions-create-images')
   })
 
   test('rejects total payload exceeding 20 MB with 400', async () => {

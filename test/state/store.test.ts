@@ -114,6 +114,64 @@ describe('createConnectionStore snapshot integration', () => {
     store.dispose()
   })
 
+  it('upserts DAG snapshots when SSE replays the same graph after reconnect', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    vi.stubGlobal('fetch', makeResponses())
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-dag-upsert')
+
+    const graph: ApiDagGraph = {
+      id: 'dag-1',
+      rootTaskId: 's1',
+      nodes: {},
+      status: 'running',
+      createdAt: '2026-04-25T00:00:00Z',
+      updatedAt: '2026-04-25T00:00:00Z',
+    }
+    const replayed: ApiDagGraph = {
+      ...graph,
+      status: 'completed',
+      updatedAt: '2026-04-25T00:01:00Z',
+    }
+
+    const es = [...mock.instances.values()][0]
+    es?.simulateOpen()
+    es?.push({ type: 'dag_created', dag: graph })
+    es?.push({ type: 'dag_created', dag: replayed })
+
+    expect(store.dags.value).toHaveLength(1)
+    expect(store.dags.value[0]).toEqual(replayed)
+    store.dispose()
+  })
+
+  it('surfaces failed command results on the store error signal', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    const baseFetch = makeResponses()
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/api/commands') && init?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ data: { success: false, error: 'invalid transition' } }),
+        })
+      }
+      return baseFetch(url)
+    }))
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-command-error')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const result = await store.sendCommand({ action: 'stop', sessionId: 's1' })
+
+    expect(result.success).toBe(false)
+    expect(store.error.value).toBe('invalid transition')
+    store.dispose()
+  })
+
   it('applySessionDeleted removes the session and is a no-op when already gone', async () => {
     mockLoadSnapshot.mockResolvedValue(null)
     vi.stubGlobal('fetch', makeResponses([SESSION]))

@@ -21,13 +21,15 @@ export function openEventStream(opts: {
   baseUrl: string
   token: string
   handlers: SseHandlers
+  quietTimeoutMs?: number
 }): EventStreamHandle {
-  const { baseUrl, token, handlers } = opts
+  const { baseUrl, token, handlers, quietTimeoutMs = 70_000 } = opts
   const status = signal<SseStatus>('connecting')
   const reconnectAt = signal<number | null>(null)
   let es: EventSource | null = null
   let attempt = 0
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let watchdogTimer: ReturnType<typeof setTimeout> | null = null
   let closed = false
 
   function setStatus(s: SseStatus) {
@@ -41,6 +43,37 @@ export function openEventStream(opts: {
     return `${base}?token=${encodeURIComponent(token)}`
   }
 
+  function clearWatchdog() {
+    if (watchdogTimer === null) return
+    clearTimeout(watchdogTimer)
+    watchdogTimer = null
+  }
+
+  function scheduleWatchdog() {
+    clearWatchdog()
+    if (closed || quietTimeoutMs <= 0) return
+    watchdogTimer = setTimeout(() => {
+      if (closed) return
+      es?.close()
+      es = null
+      scheduleReconnect()
+    }, quietTimeoutMs)
+  }
+
+  function scheduleReconnect() {
+    if (closed) return
+    if (reconnectTimer !== null) return
+    clearWatchdog()
+    setStatus('retrying')
+    const delay = Math.floor(Math.random() * Math.min(30000, 500 * 2 ** attempt))
+    attempt++
+    reconnectAt.value = Date.now() + delay
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null
+      connect()
+    }, delay)
+  }
+
   function connect() {
     if (closed) return
     setStatus('connecting')
@@ -51,6 +84,7 @@ export function openEventStream(opts: {
       attempt = 0
       reconnectAt.value = null
       setStatus('live')
+      scheduleWatchdog()
       handlers.onReconnect?.()
     }
 
@@ -58,14 +92,11 @@ export function openEventStream(opts: {
       es?.close()
       es = null
       if (closed) return
-      setStatus('retrying')
-      const delay = Math.floor(Math.random() * Math.min(30000, 500 * 2 ** attempt))
-      attempt++
-      reconnectAt.value = Date.now() + delay
-      reconnectTimer = setTimeout(connect, delay)
+      scheduleReconnect()
     }
 
     es.onmessage = (e: MessageEvent) => {
+      scheduleWatchdog()
       try {
         const event = JSON.parse(e.data as string) as SseEvent
         handlers.onEvent(event)
@@ -73,6 +104,8 @@ export function openEventStream(opts: {
         console.warn('[sse] failed to parse message', e.data)
       }
     }
+
+    es.addEventListener('keepalive', scheduleWatchdog)
   }
 
   connect()
@@ -86,6 +119,7 @@ export function openEventStream(opts: {
         clearTimeout(reconnectTimer)
         reconnectTimer = null
       }
+      clearWatchdog()
       es?.close()
       es = null
       attempt = 0
@@ -99,6 +133,7 @@ export function openEventStream(opts: {
         clearTimeout(reconnectTimer)
         reconnectTimer = null
       }
+      clearWatchdog()
       reconnectAt.value = null
       es?.close()
       es = null

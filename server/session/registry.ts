@@ -161,7 +161,7 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       quota_retry_count: 0,
       metadata: createOpts.metadata ?? {},
       pipeline_advancing: false,
-      stage: null,
+      stage: createOpts.mode === 'ship' ? 'think' : null,
       coordinator_children: [],
     }
 
@@ -316,18 +316,16 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       const row = prepared.getSession(db(), id)
       if (!row) continue
 
-      // Ship coordinators: attempt to resume from stored claude_session_id
-      if (row.mode === 'ship' && row.claude_session_id) {
+      if (row.claude_session_id) {
         try {
           const runtime = await resumeRuntime(row, row.command)
-          runtimes.set(id, runtime)
-          wireCompletionHandler(id)
+          prepared.updateSession(db(), { id, status: 'running', updated_at: Date.now() })
+          emitSnapshot(id)
           void runtime.start()
-          console.log('[ship] reconcileOnBoot: resumed coordinator', id, 'stage', row.stage)
+          console.log('[session] reconcileOnBoot: resumed', id, 'mode', row.mode)
           continue
         } catch (err) {
-          console.warn('[ship] reconcileOnBoot: failed to resume coordinator', id, err)
-          // Fall through to mark failed
+          console.warn('[session] reconcileOnBoot: failed to resume', id, err)
         }
       }
 

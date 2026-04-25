@@ -143,26 +143,6 @@ describe('shipAdvanceHandler', () => {
     expect(shipAdvanceHandler.matches(errEv)).toBe(false)
   })
 
-  // TODO: Re-enable once ship coordinator advanceShip logic is implemented
-  // The old ship-think/ship-plan modes were removed in favor of the new 'ship' coordinator mode
-  test.skip('spawns ship-plan session when ship-think completes', async () => {
-    seedSession(db, 'sess-think', 'ship-think')
-    seedAssistantMessage(db, 'sess-think', 'Design doc: build an auth service')
-
-    const registryCalls = { stop: [] as string[], create: [] as Array<{ mode: string; prompt: string; parentId?: string }> }
-    const schedulerCalls = { start: [] as string[], onSessionCompleted: [] as string[] }
-    const ctx = makeCtx(db, registryCalls, schedulerCalls)
-
-    const ev: SessionCompletedEvent = { kind: 'session.completed', sessionId: 'sess-think', state: 'completed', durationMs: 0 }
-    await shipAdvanceHandler.handle(ev, ctx)
-
-    expect(registryCalls.create).toHaveLength(1)
-    expect(registryCalls.create[0]?.mode).toBe('ship-plan')
-    expect(registryCalls.create[0]?.prompt).toContain('Design doc')
-    expect(registryCalls.create[0]?.parentId).toBe('sess-think')
-    expect(schedulerCalls.start).toHaveLength(0)
-  })
-
   test('skips non-ship-advance modes', async () => {
     seedSession(db, 'sess-task', 'task')
     const registryCalls = { stop: [] as string[], create: [] as Array<{ mode: string; prompt: string; parentId?: string }> }
@@ -202,7 +182,7 @@ describe('shipAdvanceHandler', () => {
     expect(schedulerCalls.start).toHaveLength(0)
   })
 
-  test('spawns ship-verify session when ship-plan completes', async () => {
+  test('skips legacy ship-plan sessions', async () => {
     seedSession(db, 'sess-plan', 'ship-plan')
     seedAssistantMessage(db, 'sess-plan', 'DAG of tasks: 1. implement auth, 2. add tests, 3. deploy')
 
@@ -213,10 +193,7 @@ describe('shipAdvanceHandler', () => {
     const ev: SessionCompletedEvent = { kind: 'session.completed', sessionId: 'sess-plan', state: 'completed', durationMs: 0 }
     await shipAdvanceHandler.handle(ev, ctx)
 
-    expect(registryCalls.create).toHaveLength(1)
-    expect(registryCalls.create[0]?.mode).toBe('ship-verify')
-    expect(registryCalls.create[0]?.prompt).toContain('DAG of tasks')
-    expect(registryCalls.create[0]?.parentId).toBe('sess-plan')
+    expect(registryCalls.create).toHaveLength(0)
     expect(schedulerCalls.start).toHaveLength(0)
   })
 })

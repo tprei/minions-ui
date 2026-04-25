@@ -19,7 +19,7 @@
  *   4. Kills the server process mid-DAG via SIGTERM, restarts on the same DB,
  *      and asserts that the session is resumed (claude_session_id is preserved
  *      on the row; registry reconcileOnBoot re-starts suspended runtimes).
- *   5. Asserts /api/version includes the 'ship-pipeline' feature flag.
+ *   5. Asserts /api/version includes the 'ship-coordinator' feature flag.
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
@@ -219,10 +219,10 @@ describe.skipIf(process.env['E2E'] !== '1')('e2e /ship pipeline', () => {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/version`)
       const body = await res.json() as { data: { features: string[] } }
-      expect(body.data.features).toContain('ship-pipeline')
+      expect(body.data.features).toContain('ship-coordinator')
       expect(body.data.features).toContain('dag')
-      expect(body.data.features).toContain('variants')
-      expect(body.data.features).toContain('push')
+      expect(body.data.features).toContain('sessions-variants')
+      expect(body.data.features).toContain('web-push')
       expect(body.data.features).toContain('screenshots')
       expect(body.data.features).toContain('diff')
       expect(body.data.features).toContain('pr-preview')
@@ -266,7 +266,8 @@ describe.skipIf(process.env['E2E'] !== '1')('e2e /ship pipeline', () => {
       const createdEvt = sseEvents.find((e) => e.type === 'session_created')
       expect(createdEvt).toBeDefined()
       if (createdEvt && createdEvt.type === 'session_created') {
-        expect(createdEvt.session.mode).toBe('ship-think')
+        expect(createdEvt.session.mode).toBe('ship')
+        expect(createdEvt.session.stage).toBe('think')
       }
 
       await new Promise<void>((r) => setTimeout(r, 500))
@@ -360,7 +361,7 @@ describe.skipIf(process.env['E2E'] !== '1')('e2e /ship pipeline', () => {
       await new Promise<void>((r) => setTimeout(r, 600))
 
       expect(spawning.length).toBeGreaterThanOrEqual(1)
-      expect(spawning[0]?.mode).toBe('ship-think')
+      expect(spawning[0]?.mode).toBe('ship')
 
       expect(completed.length).toBeGreaterThanOrEqual(1)
     } finally {

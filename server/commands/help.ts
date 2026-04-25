@@ -4,14 +4,14 @@ export interface HelpCommandResult {
 }
 
 const HELP_TEXT = `**Task / Plan / Think / Review**
-  /task <prompt>       Start a task session
+  /task <prompt>       Start a small implementation task
   /w <prompt>          Alias for /task
-  /plan <prompt>       Start a plan session
-  /think <prompt>      Start a think session
+  /plan <prompt>       Start a planning session for later execution
+  /think <prompt>      Start a research/brainstorm session
   /review <prompt>     Start a review session
 
 **Ship**
-  /ship <prompt>       Start a ship-think session
+  /ship <prompt>       Start a full ship coordinator session
 
 **DAG / Split / Stack**
   /dag [markdown]      Build and run a DAG from markdown or last assistant message

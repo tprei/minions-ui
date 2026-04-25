@@ -34,6 +34,41 @@ function createMockScheduler() {
   }
 }
 
+const DAG_MARKDOWN = [
+  '```json',
+  '[',
+  '  {',
+  '    "id": "implement-api",',
+  '    "title": "Implement API",',
+  '    "description": "Add the API changes.",',
+  '    "dependsOn": []',
+  '  }',
+  ']',
+  '```',
+].join('\n')
+
+function insertDagPlan(db: Database, sessionId: string): void {
+  const now = Date.now()
+  prepared.insertEvent(db, {
+    session_id: sessionId,
+    seq: prepared.nextSeq(db, sessionId),
+    turn: 1,
+    type: 'assistant_text',
+    timestamp: now,
+    payload: {
+      id: `${sessionId}-plan`,
+      sessionId,
+      seq: 1,
+      turn: 1,
+      timestamp: now,
+      type: 'assistant_text',
+      blockId: 'plan',
+      text: DAG_MARKDOWN,
+      final: true,
+    },
+  })
+}
+
 function createSession(db: Database, sessionId: string, mode: string, stage: ShipStage | null) {
   const now = Date.now()
   const slug = `test-ship-${sessionId.split('-')[1]}`
@@ -105,17 +140,34 @@ describe('advanceShip', () => {
     test('plan → dag', async () => {
       const sessionId = 'session-2'
       createSession(db, sessionId, 'ship', 'plan')
+      insertDagPlan(db, sessionId)
 
       const result = await advanceShip(sessionId, undefined, ctx)
 
       expect(result.ok).toBe(true)
       expect(result.from).toBe('plan')
       expect(result.to).toBe('dag')
+      expect(result.dagId).toBeDefined()
 
       const row = prepared.getSession(db, sessionId)
       expect(row?.stage).toBe('dag')
-      // No directive injection for plan → dag
       expect(registry.reply).not.toHaveBeenCalled()
+      expect(scheduler.start).toHaveBeenCalledWith(result.dagId)
+      expect(prepared.listDags(db)).toHaveLength(1)
+    })
+
+    test('plan → dag requires a parseable DAG plan', async () => {
+      const sessionId = 'session-2b'
+      createSession(db, sessionId, 'ship', 'plan')
+
+      const result = await advanceShip(sessionId, undefined, ctx)
+
+      expect(result.ok).toBe(false)
+      expect(result.reason).toContain('no markdown provided')
+
+      const row = prepared.getSession(db, sessionId)
+      expect(row?.stage).toBe('plan')
+      expect(scheduler.start).not.toHaveBeenCalled()
     })
 
     test('dag → verify', async () => {
@@ -145,7 +197,7 @@ describe('advanceShip', () => {
 
       const row = prepared.getSession(db, sessionId)
       expect(row?.stage).toBe('done')
-      // No directive injection for verify → done
+      expect(row?.status).toBe('completed')
       expect(registry.reply).not.toHaveBeenCalled()
     })
 
@@ -285,25 +337,20 @@ describe('advanceShip', () => {
         return originalRun(sql, ...(args as Parameters<typeof originalRun>[1][]))
       }) as typeof db.run
 
-      // Start two transitions concurrently
+      insertDagPlan(db, sessionId)
+
       const [result1, result2] = await Promise.all([
         advanceShip(sessionId, undefined, ctx),
         advanceShip(sessionId, undefined, ctx),
       ])
 
-      // Restore original
       db.run = originalRun as typeof db.run
 
-      // Both should succeed
       expect(result1.ok).toBe(true)
       expect(result2.ok).toBe(true)
 
-      // Should have exactly 2 updates (both calls executed)
       expect(updateCount.length).toBe(2)
 
-      // Final state should be 'dag' (think → plan → dag)
-      // This proves serialization worked - if they ran concurrently,
-      // we'd likely end up in an incorrect state
       const row = prepared.getSession(db, sessionId)
       expect(row?.stage).toBe('dag')
     })
@@ -389,6 +436,7 @@ describe('advanceShip', () => {
     test('no injection for plan → dag', async () => {
       const sessionId = 'session-19'
       createSession(db, sessionId, 'ship', 'plan')
+      insertDagPlan(db, sessionId)
 
       await advanceShip(sessionId, 'dag', ctx)
 
@@ -439,6 +487,7 @@ describe('advanceShip', () => {
       expect(consoleLogSpy).toHaveBeenCalledWith('[ship]', sessionId, 'stage', 'think', '->', 'plan')
 
       // plan → dag
+      insertDagPlan(db, sessionId)
       await advanceShip(sessionId, undefined, ctx)
       expect(consoleLogSpy).toHaveBeenCalledWith('[ship]', sessionId, 'stage', 'plan', '->', 'dag')
 

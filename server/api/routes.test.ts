@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { Hono } from 'hono'
 import { createSessionRegistry } from '../session/registry'
 import { resetEventBus } from '../events/bus'
-import { runMigrations } from '../db/sqlite'
+import { prepared, runMigrations } from '../db/sqlite'
 import { registerApiRoutes } from './routes'
 import { registerSseRoute } from './sse'
 import type { SpawnFn, SubprocessHandle } from '../session/runtime'
@@ -104,6 +104,10 @@ describe('GET /api/version', () => {
     const features = body.data.features
     expect(features).toContain('sessions-create')
     expect(features).toContain('messages')
+    expect(features).toContain('sessions-create-images')
+    expect(features).toContain('sessions-variants')
+    expect(features).toContain('ship-coordinator')
+    expect(features).toContain('web-push')
     expect(features).toContain('transcript')
     expect(features).toContain('auth')
     expect(features).toContain('cors-allowlist')
@@ -269,6 +273,62 @@ describe('POST /api/commands', () => {
     expect(res.status).toBe(200)
   })
 
+  test('ship_advance advances ship stage when scheduler is configured', async () => {
+    const app = new Hono()
+    const registry = createSessionRegistry({ getDb: () => testDb, spawnFn: makeNoopSpawnFn() })
+    registerApiRoutes(app, registry, () => testDb, { start: async () => {} })
+    const now = Date.now()
+    testDb.run(
+      `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation, quota_sleep_until, quota_retry_count, metadata, pipeline_advancing, stage)
+       VALUES ('ship-route-1', 'ship-route-1', 'running', 'ship it', 'ship', null, null, null, null, null, null, null, ?, ?, 0, '[]', '[]', '[]', null, 0, '{}', 0, 'plan')`,
+      [now, now],
+    )
+    prepared.insertEvent(testDb, {
+      session_id: 'ship-route-1',
+      seq: 1,
+      turn: 1,
+      type: 'assistant_text',
+      timestamp: now,
+      payload: {
+        id: 'ship-route-plan',
+        sessionId: 'ship-route-1',
+        seq: 1,
+        turn: 1,
+        timestamp: now,
+        type: 'assistant_text',
+        blockId: 'plan',
+        text: [
+          '```json',
+          '[',
+          '  {',
+          '    "id": "implement-route",',
+          '    "title": "Implement route",',
+          '    "description": "Implement the route.",',
+          '    "dependsOn": []',
+          '  }',
+          ']',
+          '```',
+        ].join('\n'),
+        final: true,
+      },
+    })
+
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'ship_advance', sessionId: 'ship-route-1', to: 'dag' }),
+      }),
+    )
+
+    expect(res.status).toBe(200)
+    const body = await json<{ data: { success: boolean; error?: string; dagId?: string } }>(res)
+    expect(body.data.success).toBe(true)
+    expect(body.data.dagId).toBeDefined()
+    const row = testDb.query<{ stage: string | null }, [string]>('SELECT stage FROM sessions WHERE id = ?').get('ship-route-1')
+    expect(row?.stage).toBe('dag')
+  })
+
   test('invalid body returns 400', async () => {
     const app = makeApp(testDb)
     const res = await app.fetch(
@@ -295,6 +355,21 @@ describe('POST /api/messages', () => {
     expect(res.status).toBe(400)
     const body = await json<{ error: string }>(res)
     expect(body.error).toContain('DEFAULT_REPO')
+  })
+
+  test('/task without prompt returns 400', async () => {
+    process.env['DEFAULT_REPO'] = '/nonexistent/path/to/repo'
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: '/task' }),
+      }),
+    )
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toContain('requires a prompt')
   })
 
   test('/task with DEFAULT_REPO pointing to unreachable path returns 500', async () => {

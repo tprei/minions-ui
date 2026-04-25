@@ -634,7 +634,8 @@ function ActiveView() {
   const handleCommand = useCallback(
     async (cmd: MinionCommand) => {
       if (!store) return
-      await store.sendCommand(cmd)
+      const result = await store.sendCommand(cmd)
+      if (!result.success) return
       if (cmd.action === 'close') {
         store.applySessionDeleted(cmd.sessionId)
       }
@@ -673,8 +674,8 @@ function ActiveView() {
       if (!store) return
       setIsActionLoading(true)
       try {
-        await store.sendCommand({ action: 'close', sessionId: sid })
-        store.applySessionDeleted(sid)
+        const result = await store.sendCommand({ action: 'close', sessionId: sid })
+        if (result.success) store.applySessionDeleted(sid)
       } finally {
         setIsActionLoading(false)
       }
@@ -975,19 +976,53 @@ function ActiveView() {
 }
 
 function PwaController() {
-  const { updateServiceWorker } = useRegisterSW({
+  const sw = useRegisterSW({
     immediate: true,
     onRegisteredSW(_, registration) {
       if (registration) {
         setInterval(() => { void registration.update() }, 60_000)
       }
     },
-    onNeedRefresh() {
-      void updateServiceWorker(true)
-    },
-    onOfflineReady() {},
   })
-  return null
+  const [offlineReady, setOfflineReady] = (sw.offlineReady ?? [false, () => {}]) as [boolean, (value: boolean) => void]
+  const [needRefresh, setNeedRefresh] = (sw.needRefresh ?? [false, () => {}]) as [boolean, (value: boolean) => void]
+
+  if (!offlineReady && !needRefresh) return null
+
+  const close = () => {
+    setOfflineReady(false)
+    setNeedRefresh(false)
+  }
+
+  return (
+    <div
+      class="fixed left-3 right-3 bottom-3 z-50 flex items-center gap-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 shadow-lg"
+      role="status"
+      data-testid="pwa-status-banner"
+    >
+      <span class="flex-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+        {needRefresh ? 'Update ready' : 'Offline ready'}
+      </span>
+      {needRefresh && (
+        <button
+          type="button"
+          onClick={() => void sw.updateServiceWorker(true)}
+          class="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+          data-testid="pwa-update-reload"
+        >
+          Reload
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={close}
+        class="rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
+        data-testid="pwa-status-dismiss"
+      >
+        Dismiss
+      </button>
+    </div>
+  )
 }
 
 export default function App() {

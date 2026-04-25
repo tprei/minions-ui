@@ -146,7 +146,7 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
   const mode = row?.mode
 
   if (mode === "ship") {
-    return { ok: false, reason: "ship coordinator mode not yet implemented (WIP)" }
+    return { ok: false, reason: "use /dag to schedule a ship plan" }
   }
 
   if (mode === "think" || mode === "plan" || mode === "review") {
@@ -240,7 +240,10 @@ export async function handleDag(
   const rejection = await gate(sessionId, ctx)
   if (rejection) return { ok: false, reason: rejection }
 
-  await killAndWait(sessionId, ctx)
+  const row = prepared.getSession(ctx.db, sessionId)
+  if (row?.mode !== "ship") {
+    await killAndWait(sessionId, ctx)
+  }
 
   let items: DagInput[]
   try {

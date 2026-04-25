@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite"
-import { readyNodes, advanceDag, failNode, resetFailedNode, nodeIndex, getUpstreamBranches, isDagComplete } from "./dag"
+import { readyNodes, advanceDag, failNode, resetFailedNode, nodeIndex, getUpstreamBranches, isDagComplete, dagGraphStatus } from "./dag"
 import type { DagGraph, DagNode, DagInput } from "./dag"
 import { saveDag, loadDag, listDags } from "./store"
 import { prepared } from "../db/sqlite"
@@ -10,6 +10,7 @@ import type { SessionRegistry } from "../session/registry"
 import type { EngineEventBus } from "../events/bus"
 import type { SessionRunState } from "../events/types"
 import type { ApiDagNode, ApiDagGraph } from "../../shared/api-types"
+import { advanceShip } from "../ship/coordinator"
 
 function fetchRootConversation(db: Database, rootSessionId: string): TopicMessage[] {
   const rows = db
@@ -140,6 +141,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
 
   function graphToApiDag(graph: DagGraph): ApiDagGraph {
     const nodes: Record<string, ApiDagNode> = {}
+    const sessionMap = new Map(registry.list().map((session) => [session.id, session]))
     for (const node of graph.nodes) {
       const dependents = graph.nodes
         .filter((n) => n.dependsOn.includes(node.id))
@@ -150,13 +152,14 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
         status: mapNodeStatus(node.status),
         dependencies: node.dependsOn,
         dependents,
+        session: node.sessionId ? sessionMap.get(node.sessionId) : undefined,
       }
     }
     return {
       id: graph.id,
       rootTaskId: graph.rootSessionId,
       nodes,
-      status: "running",
+      status: dagGraphStatus(graph),
       createdAt: new Date(graph.createdAt).toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -225,6 +228,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     if (isDagComplete(graph)) {
       activeGraphs.delete(graph.id)
       persist(graph)
+      await advanceShip(graph.rootSessionId, "verify", { db, registry, scheduler: { start } })
     }
   }
 

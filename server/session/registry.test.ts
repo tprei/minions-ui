@@ -410,7 +410,7 @@ describe('SessionRegistry', () => {
       expect(statusPayload.severity).toBe('error')
     })
 
-    test('does not resume sessions even when claude_session_id is present', async () => {
+    test('marks sessions with incomplete resume metadata failed even when claude_session_id is present', async () => {
       const now = Date.now()
       db.run(
         `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation)
@@ -434,6 +434,45 @@ describe('SessionRegistry', () => {
       expect(row?.status).toBe('failed')
       expect(registry.get('recon-2')).toBeUndefined()
     })
+
+    test('resumes task sessions with claude_session_id and workspace metadata on boot', async () => {
+      const bare = trackedDir('bare-task-resume')
+      const work = trackedDir('work-task-resume')
+      const workspaceRoot = trackedDir('ws-task-resume')
+      await initLocalBareRepo(bare, work)
+
+      const repoName = path.basename(bare).replace(/\.git$/, '')
+      const bareDir = path.join(workspaceRoot, '.repos', `${repoName}.git`)
+
+      const handle = await import('../workspace/prepare').then((m) =>
+        m.prepareWorkspace({ slug: 'task-resume-slug', repoUrl: bare, workspaceRoot, bootstrap: false }),
+      )
+
+      const now = Date.now()
+      db.run(
+        `INSERT INTO sessions (id, slug, status, command, mode, repo, branch, bare_dir, pr_url, parent_id, variant_group_id, claude_session_id, workspace_root, created_at, updated_at, needs_attention, attention_reasons, quick_actions, conversation)
+         VALUES ('task-resume', 'task-resume-slug', 'running', 'resume task', 'task', ?, ?, ?, null, null, null, 'claude-task-123', ?, ?, ?, 0, '[]', '[]', '[]')`,
+        [bare, handle.branch, bareDir, workspaceRoot, now, now],
+      )
+
+      let capturedArgs: string[] = []
+      const capturingSpawn: SpawnFn = (argv, opts) => {
+        capturedArgs = argv
+        return makeNoopSpawnFn()(argv, opts)
+      }
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: capturingSpawn })
+      await registry.reconcileOnBoot()
+
+      expect(capturedArgs).toContain('--resume')
+      const resumeIdx = capturedArgs.indexOf('--resume')
+      expect(capturedArgs[resumeIdx + 1]).toBe('claude-task-123')
+
+      await new Promise<void>((r) => setTimeout(r, 200))
+
+      const row = db.query<{ status: string }, [string]>('SELECT status FROM sessions WHERE id = ?').get('task-resume')
+      expect(row?.status).toBe('completed')
+    }, 60_000)
 
     test('resumes ship coordinator with claude_session_id on boot', async () => {
       const bare = trackedDir('bare-ship-resume')
@@ -637,6 +676,11 @@ describe('SessionRegistry', () => {
         repo: bare,
         workspaceRoot,
       })
+
+      db.run(
+        'UPDATE sessions SET stage = null WHERE id = ?',
+        [session.id],
+      )
 
       const snap = registry.snapshot(session.id)
       expect(snap).toBeDefined()
