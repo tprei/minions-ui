@@ -24,6 +24,7 @@ export function ConnectionSettings({ onClose, existing, embedded }: Props) {
   const err = useSignal<string | null>(null)
   const loading = useSignal(false)
   const features = useSignal<string[]>([])
+  const serverProvider = useSignal<'claude' | 'codex' | null>(null)
 
   const showPushPanel = Boolean(existing) && isPushFlagEnabled()
   const editClient = useMemo(
@@ -56,6 +57,25 @@ export function ConnectionSettings({ onClose, existing, embedded }: Props) {
       cancelled = true
     }
   }, [editClient])
+
+  useEffect(() => {
+    if (!existing) return
+    let cancelled = false
+    serverProvider.value = null
+    const client = createApiClient({ baseUrl: existing.baseUrl, token: existing.token })
+    void client
+      .getVersion()
+      .then((info) => {
+        if (cancelled) return
+        serverProvider.value = info.provider ?? null
+      })
+      .catch(() => {
+        // best-effort; badge omitted on network error
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [existing?.id, existing?.baseUrl, existing?.token])
 
   async function submit(e: Event) {
     e.preventDefault()
@@ -199,6 +219,14 @@ export function ConnectionSettings({ onClose, existing, embedded }: Props) {
                 {f}
               </span>
             ))}
+          </div>
+        )}
+        {serverProvider.value && (
+          <div class="flex items-center gap-1.5" data-testid="backend-badge">
+            <span class="text-xs text-slate-500 dark:text-slate-400">Backend:</span>
+            <span class="rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300">
+              {serverProvider.value === 'claude' ? 'Claude' : 'Codex'}
+            </span>
           </div>
         )}
         {showPushPanel && editClient && (

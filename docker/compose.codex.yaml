@@ -1,0 +1,6 @@
+services:
+  engine:
+    environment:
+      AGENT_PROVIDER: codex
+    volumes:
+      - ${HOME}/.codex:/workspace/home/.codex

@@ -160,4 +160,32 @@ describe('ConnectionSettings', () => {
     expect(screen.queryByTestId('push-section')).toBeNull()
     vi.unstubAllEnvs()
   })
+
+  it('shows backend badge when server returns a provider for existing connection', async () => {
+    const { createApiClient } = await import('../../src/api/client')
+    vi.mocked(createApiClient).mockReturnValueOnce({
+      getVersion: vi.fn().mockResolvedValue({
+        apiVersion: '1',
+        libraryVersion: '0.1.0',
+        features: [],
+        provider: 'codex',
+      }),
+    } as unknown as ReturnType<typeof createApiClient>)
+
+    await renderSettings({
+      existing: { id: 'e1', label: 'Old', baseUrl: 'https://old.example.com', token: 'tok', color: '#10b981' },
+    })
+
+    await waitFor(() => expect(screen.queryByTestId('backend-badge')).not.toBeNull())
+    expect(screen.getByTestId('backend-badge').textContent).toContain('Codex')
+  })
+
+  it('omits backend badge when server does not return a provider', async () => {
+    await renderSettings({
+      existing: { id: 'e1', label: 'Old', baseUrl: 'https://old.example.com', token: 'tok', color: '#10b981' },
+    })
+    // mock returns no provider — badge must not appear
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)) })
+    expect(screen.queryByTestId('backend-badge')).toBeNull()
+  })
 })

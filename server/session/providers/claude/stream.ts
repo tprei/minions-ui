@@ -1,6 +1,7 @@
-import type { ClaudeStreamLine, ParsedStreamEvent } from './stream-json-types.js'
+import type { ClaudeStreamLine } from './stream-types.js'
+import type { ProviderEvent } from '../types.js'
 
-export type { ClaudeStreamLine, ParsedStreamEvent } from './stream-json-types.js'
+export type { ClaudeStreamLine } from './stream-types.js'
 
 export function parseClaudeLine(raw: string): ClaudeStreamLine | null {
   const trimmed = raw.trim()
@@ -16,8 +17,8 @@ export function parseClaudeLine(raw: string): ClaudeStreamLine | null {
 export function translateLine(
   raw: ClaudeStreamLine,
   prevSessionId: string | undefined,
-): { events: ParsedStreamEvent[]; sessionId: string | undefined } {
-  const events: ParsedStreamEvent[] = []
+): { events: ProviderEvent[]; sessionId: string | undefined } {
+  const events: ProviderEvent[] = []
   let sessionId = prevSessionId
 
   const incomingSessionId = 'session_id' in raw ? (raw.session_id as string | undefined) : undefined
@@ -48,7 +49,7 @@ export function translateLine(
       const parentToolUseId = raw.parent_tool_use_id
       const stopReason = msg.stop_reason ?? null
 
-      const toolUseEvents: Array<ParsedStreamEvent & { kind: 'tool_use' }> = []
+      const toolUseEvents: Array<ProviderEvent & { kind: 'tool_use' }> = []
 
       for (const block of msg.content) {
         if (block.type === 'thinking') {

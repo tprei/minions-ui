@@ -198,6 +198,7 @@ export interface VersionInfo {
   apiVersion: string
   libraryVersion: string
   features: string[]
+  provider?: 'claude' | 'codex'
   repos?: RepoEntry[]
 }
 

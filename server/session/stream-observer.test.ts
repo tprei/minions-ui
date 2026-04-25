@@ -4,7 +4,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { SessionStreamObserver } from './stream-observer'
 import { EngineEventBus } from '../events/bus'
-import type { ParsedStreamEvent } from './stream-json-types'
+import type { ProviderEvent } from './providers/types'
 import type { EngineEvent } from '../events/types'
 
 const TMPDIR = Bun.env['TMPDIR'] ?? '/tmp'
@@ -29,7 +29,7 @@ describe('SessionStreamObserver', () => {
     const events = collectEvents(bus)
     const observer = new SessionStreamObserver('sess-1', bus)
 
-    const toolUseEvent: ParsedStreamEvent = {
+    const toolUseEvent: ProviderEvent = {
       kind: 'tool_use',
       id: 'tool-abc',
       name: 'bash',
@@ -52,7 +52,7 @@ describe('SessionStreamObserver', () => {
     const events = collectEvents(bus)
     const observer = new SessionStreamObserver('sess-2', bus)
 
-    const textDelta: ParsedStreamEvent = { kind: 'text_delta', text: 'hello' }
+    const textDelta: ProviderEvent = { kind: 'text_delta', text: 'hello' }
     observer.onEvent(textDelta)
 
     expect(events.filter((e) => e.kind === 'session.assistant_activity')).toHaveLength(0)

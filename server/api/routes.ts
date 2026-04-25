@@ -48,6 +48,7 @@ import { handleConfigCommand } from '../commands/config'
 import { handleLoopsCommand } from '../commands/loops'
 import { handleDoneCommand } from '../commands/done'
 import { handleDoctorCommand } from '../commands/doctor'
+import { getProvider } from '../session/providers/index'
 
 const API_VERSION = '2.0.0'
 const LIBRARY_VERSION = '0.1.0'
@@ -185,7 +186,7 @@ export function registerApiRoutes(
 
   app.get('/api/version', (c) => {
     const body: ApiResponse<VersionInfo> = {
-      data: { apiVersion: API_VERSION, libraryVersion: LIBRARY_VERSION, features: FEATURES },
+      data: { apiVersion: API_VERSION, libraryVersion: LIBRARY_VERSION, features: FEATURES, provider: getProvider().name },
     }
     return c.json(body)
   })

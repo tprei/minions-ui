@@ -5,10 +5,9 @@ import { getEventBus } from '../events/bus'
 import { getDb as defaultGetDb, prepared } from '../db/sqlite'
 import type { Database } from 'bun:sqlite'
 import { TranscriptTranslator } from './transcript'
-import { parseClaudeLine, translateLine, serializeUserMessage } from './stream-json'
-import { MODE_CONFIGS, type AllSessionMode } from './prompts'
-import { buildIsolatedEnv } from './env'
-import { isQuotaError } from './quota-detection'
+import { getModeConfig, type AllSessionMode } from './prompts'
+import { getProvider } from './providers/index'
+import type { AgentProvider, ParserState, SpawnArgsOpts } from './providers/types'
 
 export interface SubprocessHandle {
   pid: number
@@ -44,12 +43,13 @@ export interface StartOpts {
   cwd: string
   initialPrompt: string
   initialImages?: Array<{ mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; dataBase64: string }>
-  resumeClaudeSessionId?: string
+  resumeSessionId?: string
   mcpConfig?: { mcpServers: Record<string, unknown> }
   sessionTimeoutMs?: number
   inactivityTimeoutMs?: number
   spawnFn?: SpawnFn
   getDb?: () => Database
+  provider?: AgentProvider
 }
 
 type RuntimeState = 'starting' | 'working' | 'idle' | 'stopping' | 'done'
@@ -57,7 +57,9 @@ type RuntimeState = 'starting' | 'working' | 'idle' | 'stopping' | 'done'
 export class SessionRuntime {
   private proc: SubprocessHandle | null = null
   private translator: TranscriptTranslator
-  private claudeSessionId: string | undefined
+  private providerSessionId: string | undefined
+  private readonly provider: AgentProvider
+  private readonly parserState: ParserState
   private readonly bus = getEventBus()
   private state: RuntimeState = 'starting'
   private readonly startedAt = Date.now()
@@ -73,6 +75,8 @@ export class SessionRuntime {
 
   constructor(private readonly opts: StartOpts) {
     this.getDb = opts.getDb ?? defaultGetDb
+    this.provider = opts.provider ?? getProvider()
+    this.parserState = {}
     const db = this.getDb()
     const startingSeq = prepared.nextSeq(db, opts.sessionId)
     this.translator = new TranscriptTranslator({ sessionId: opts.sessionId, startingSeq })
@@ -83,37 +87,33 @@ export class SessionRuntime {
     return this.proc !== null && !this.proc.killed
   }
 
-  get currentClaudeSessionId(): string | undefined {
-    return this.claudeSessionId
+  get currentProviderSessionId(): string | undefined {
+    return this.providerSessionId
   }
 
   async start(): Promise<void> {
-    const { sessionId, mode, cwd, initialPrompt, resumeClaudeSessionId, mcpConfig } = this.opts
-    const cfg = MODE_CONFIGS[mode as AllSessionMode]
+    const { sessionId, mode, cwd, initialPrompt, resumeSessionId, mcpConfig } = this.opts
+    const cfg = getModeConfig(this.provider.name, mode as AllSessionMode)
 
     this.bus.emit({ kind: 'session.spawning', sessionId, mode, cwd })
 
-    const args: string[] = [
-      '--print',
-      '--output-format', 'stream-json',
-      '--input-format', 'stream-json',
-      '--verbose',
-      '--include-partial-messages',
-      '--dangerously-skip-permissions',
-      ...(cfg.disallowedTools.length ? ['--disallowed-tools', ...cfg.disallowedTools] : []),
-      ...(mcpConfig && Object.keys(mcpConfig.mcpServers).length
-        ? ['--mcp-config', JSON.stringify(mcpConfig)]
-        : []),
-      '--append-system-prompt', cfg.systemPrompt,
-      '--model', cfg.model,
-      ...(resumeClaudeSessionId ? ['--resume', resumeClaudeSessionId] : []),
-    ]
-
     const parentHome = process.env['HOME'] ?? os.homedir()
     const workspaceHome = path.join(cwd, '.home')
-    const env = buildIsolatedEnv({ workspaceHome, parentHome })
 
-    this.proc = this.spawnFn(['claude', ...args], {
+    const spawnOpts: SpawnArgsOpts = {
+      sessionId,
+      mode,
+      cwd,
+      workspaceHome,
+      parentHome,
+      modeConfig: cfg,
+      resumeSessionId,
+      mcpConfig,
+    }
+
+    const { argv, env } = this.provider.buildSpawnArgs(spawnOpts)
+
+    this.proc = this.spawnFn(argv, {
       cwd,
       env,
       stdin: 'pipe',
@@ -125,7 +125,7 @@ export class SessionRuntime {
 
     this.startTimers()
 
-    const turnStartedEvt = this.translator.startTurn(resumeClaudeSessionId ? 'resume' : 'user_message')
+    const turnStartedEvt = this.translator.startTurn(resumeSessionId ? 'resume' : 'user_message')
     if (turnStartedEvt) {
       this.persistAndEmit(turnStartedEvt)
     }
@@ -133,7 +133,7 @@ export class SessionRuntime {
     const userMsgEvt = this.translator.userMessage(initialPrompt, this.opts.initialImages?.map((img) => img.dataBase64))
     this.persistAndEmit(userMsgEvt)
 
-    const initialLine = serializeUserMessage(initialPrompt, this.opts.initialImages)
+    const initialLine = this.provider.serializeInitialInput(initialPrompt, this.opts.initialImages, spawnOpts)
     await this.proc.stdin.write(initialLine + '\n')
     this.proc.stdin.flush()
 
@@ -164,7 +164,7 @@ export class SessionRuntime {
     const userMsgEvt = this.translator.userMessage(text, images?.map((img) => img.dataBase64))
     this.persistAndEmit(userMsgEvt)
 
-    const line = serializeUserMessage(text, images)
+    const line = this.provider.serializeUserReply(text, images, { providerSessionId: this.providerSessionId })
     await this.proc.stdin.write(line + '\n')
     this.proc.stdin.flush()
 
@@ -229,19 +229,20 @@ export class SessionRuntime {
   }
 
   private processLine(line: string): void {
-    const raw = parseClaudeLine(line)
-    if (!raw) return
+    const { events, sessionId: nextSid } = this.provider.parseLine(line, this.parserState)
 
-    const { events, sessionId: nextSid } = translateLine(raw, this.claudeSessionId)
-    if (nextSid && nextSid !== this.claudeSessionId) {
-      this.claudeSessionId = nextSid
+    if (nextSid && nextSid !== this.providerSessionId) {
+      this.providerSessionId = nextSid
       const db = this.getDb()
       prepared.updateSession(db, {
         id: this.opts.sessionId,
+        // legacy column name; carries provider session id regardless of backend
         claude_session_id: nextSid,
         updated_at: Date.now(),
       })
     }
+
+    const followUpQueue: string[] = []
 
     const db = this.getDb()
     db.transaction(() => {
@@ -250,6 +251,9 @@ export class SessionRuntime {
         for (const te of transcriptEvents) {
           this.persistAndEmit(te)
         }
+
+        const followUp = this.provider.onProviderEvent?.(event, { providerSessionId: this.providerSessionId })
+        if (followUp) followUpQueue.push(...followUp)
 
         if (event.kind === 'turn_complete') {
           if (event.totalTokens !== null) this.totalTokens = event.totalTokens
@@ -260,7 +264,7 @@ export class SessionRuntime {
             this.bus.emit({ kind: 'session.idle', sessionId: this.opts.sessionId })
           }
 
-          const cfg = MODE_CONFIGS[this.opts.mode as AllSessionMode]
+          const cfg = getModeConfig(this.provider.name, this.opts.mode as AllSessionMode)
           if (cfg.autoExitOnComplete && this.state !== 'done') {
             void this.stop('auto_exit')
           }
@@ -273,6 +277,15 @@ export class SessionRuntime {
         }
       }
     })()
+
+    if (followUpQueue.length > 0 && this.proc?.stdin) {
+      void (async () => {
+        for (const frame of followUpQueue) {
+          await this.proc!.stdin.write(frame)
+          this.proc!.stdin.flush()
+        }
+      })()
+    }
   }
 
   private pipeStderr(): void {
@@ -310,7 +323,7 @@ export class SessionRuntime {
       runState = 'stream_stalled'
     } else if (exitCode === 0) {
       runState = 'completed'
-    } else if (isQuotaError(stderrText)) {
+    } else if (this.provider.isQuotaError(stderrText)) {
       runState = 'quota_exhausted'
     } else {
       runState = 'errored'

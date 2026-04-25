@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { ParsedStreamEvent } from './stream-json-types'
+import type { ProviderEvent } from './providers/types'
 import type { EngineEventBus } from '../events/bus'
 
 export class SessionStreamObserver {
@@ -11,7 +11,7 @@ export class SessionStreamObserver {
     private readonly bus: EngineEventBus,
   ) {}
 
-  onEvent(event: ParsedStreamEvent): void {
+  onEvent(event: ProviderEvent): void {
     if (event.kind === 'tool_use') {
       this.bus.emit({
         kind: 'session.assistant_activity',

@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN npm install -g \
       @anthropic-ai/claude-code \
+      @openai/codex \
       @playwright/mcp \
       @upstash/context7-mcp \
       github-mcp-server
