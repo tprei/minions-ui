@@ -118,8 +118,18 @@ describe('NewTaskBar', () => {
     expect(client.createSession).not.toHaveBeenCalled()
   })
 
-  it('renders all four modes as radio buttons when feature enabled', () => {
+  it('renders base modes but not ship when ship-coordinator feature is missing', () => {
     const { store } = makeStore({ features: ['sessions-create'] })
+    render(<NewTaskBar store={store} />)
+    expect(screen.getByTestId('mode-task')).toBeTruthy()
+    expect(screen.getByTestId('mode-plan')).toBeTruthy()
+    expect(screen.getByTestId('mode-think')).toBeTruthy()
+    expect(screen.queryByTestId('mode-ship')).toBeNull()
+    expect(screen.getByTestId('mode-task').getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('renders all four modes including ship when ship-coordinator feature is enabled', () => {
+    const { store } = makeStore({ features: ['sessions-create', 'ship-coordinator'] })
     render(<NewTaskBar store={store} />)
     expect(screen.getByTestId('mode-task')).toBeTruthy()
     expect(screen.getByTestId('mode-plan')).toBeTruthy()

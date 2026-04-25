@@ -14,6 +14,7 @@ export type FeatureName =
   | 'transcript'
   | 'resource-metrics'
   | 'runtime-config'
+  | 'ship-coordinator'
 
 export function hasFeature(
   source: ConnectionStore | VersionInfo | null | undefined,

@@ -145,41 +145,8 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
   const row = prepared.getSession(ctx.db, sessionId)
   const mode = row?.mode
 
-
-  if (mode === "ship-plan") {
-    setPipelineAdvancing(ctx, sessionId, true)
-    try {
-      await killAndWait(sessionId, ctx)
-      const lastMsg = getLastAssistantMessage(ctx.db, sessionId)
-      if (!lastMsg) {
-        setPipelineAdvancing(ctx, sessionId, false)
-        return { ok: false, reason: "no DAG output from ship-plan to parse" }
-      }
-
-      let items: DagInput[]
-      try {
-        items = parseDagItems(lastMsg)
-      } catch {
-        const conversation = getConversationMessages(ctx.db, sessionId)
-        const typedConversation = conversation.map((m) => ({
-          role: m.role as "user" | "assistant",
-          text: m.text,
-        }))
-        const result = await extractDagItems(typedConversation)
-        if (result.error || result.items.length === 0) {
-          setPipelineAdvancing(ctx, sessionId, false)
-          return { ok: false, reason: result.errorMessage ?? "failed to extract DAG items" }
-        }
-        items = result.items
-      }
-
-      const dagResult = await buildAndStartDag(items, sessionId, ctx)
-      if (!dagResult.ok) setPipelineAdvancing(ctx, sessionId, false)
-      return dagResult
-    } catch (err) {
-      setPipelineAdvancing(ctx, sessionId, false)
-      throw err
-    }
+  if (mode === "ship") {
+    return { ok: false, reason: "ship coordinator mode not yet implemented (WIP)" }
   }
 
   if (mode === "think" || mode === "plan" || mode === "review") {

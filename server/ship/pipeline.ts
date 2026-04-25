@@ -100,7 +100,7 @@ export class ShipPipeline {
     ].join("\n")
 
     topicSession.autoAdvance!.phase = "plan"
-    topicSession.mode = "ship-plan"
+    topicSession.mode = "ship"
     topicSession.pendingFeedback = []
     this.ctx.persistTopicSessions().catch(() => {})
 
@@ -213,7 +213,7 @@ export class ShipPipeline {
         node.prUrl!,
       )
 
-      childSession.mode = "ship-verify"
+      childSession.mode = "ship"
 
       const sessionId = crypto.randomUUID()
       childSession.activeSessionId = sessionId
@@ -225,7 +225,7 @@ export class ShipPipeline {
         repo: childSession.repo,
         cwd: childSession.cwd,
         startedAt: Date.now(),
-        mode: "ship-verify",
+        mode: "ship",
       }
 
       const onTextCapture = (_sid: string, text: string) => {

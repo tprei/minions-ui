@@ -4,19 +4,19 @@ import type { AutoAdvance, ShipPhase, VerificationCheck, VerificationRound, Veri
 import type { PendingTask } from "./types"
 
 describe("ship session modes", () => {
-  it("accepts ship-think as a valid SessionMode", () => {
-    const mode: SessionMode = "ship-think"
-    expect(mode).toBe("ship-think")
+  it("accepts ship as a valid SessionMode", () => {
+    const mode: SessionMode = "ship"
+    expect(mode).toBe("ship")
   })
 
-  it("accepts ship-plan as a valid SessionMode", () => {
-    const mode: SessionMode = "ship-plan"
-    expect(mode).toBe("ship-plan")
+  it("accepts ship as a valid SessionMode", () => {
+    const mode: SessionMode = "ship"
+    expect(mode).toBe("ship")
   })
 
-  it("accepts ship-verify as a valid SessionMode", () => {
-    const mode: SessionMode = "ship-verify"
-    expect(mode).toBe("ship-verify")
+  it("accepts ship as a valid SessionMode", () => {
+    const mode: SessionMode = "ship"
+    expect(mode).toBe("ship")
   })
 })
 
@@ -50,7 +50,7 @@ describe("TopicSession.autoAdvance", () => {
       slug: "bold-lion",
       conversation: [],
       pendingFeedback: [],
-      mode: "ship-think",
+      mode: "ship",
       lastActivityAt: Date.now(),
     }
     expect(session.autoAdvance).toBeUndefined()
@@ -64,7 +64,7 @@ describe("TopicSession.autoAdvance", () => {
       slug: "bold-lion",
       conversation: [],
       pendingFeedback: [],
-      mode: "ship-think",
+      mode: "ship",
       lastActivityAt: Date.now(),
       autoAdvance: {
         phase: "dag",
@@ -87,7 +87,7 @@ describe("PendingTask.autoAdvance", () => {
     }
     const pending: PendingTask = {
       task: "add SSO login",
-      mode: "ship-think",
+      mode: "ship",
       repoUrl: "https://github.com/org/repo",
       autoAdvance,
     }
