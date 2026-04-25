@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { TranscriptTranslator } from './transcript'
-import type { ParsedStreamEvent } from './stream-json-types'
+import type { ProviderEvent } from './providers/types'
 import type { AssistantTextEvent, TurnCompletedEvent, ToolCallEvent, ToolResultEvent, StatusEvent } from '../../shared/api-types'
 
 function makeTranslator(startingSeq = 0, startingTurn = 0) {
@@ -120,7 +120,7 @@ describe('TranscriptTranslator', () => {
         id: 'tool-1',
         name: 'Bash',
         input: { command: 'echo hello' },
-      } satisfies ParsedStreamEvent)
+      } satisfies ProviderEvent)
 
       const toolCall = callEvents.find((e) => e.type === 'tool_call') as ToolCallEvent | undefined
       expect(toolCall).toBeDefined()
@@ -132,7 +132,7 @@ describe('TranscriptTranslator', () => {
         kind: 'tool_result',
         toolUseId: 'tool-1',
         content: 'hello\n',
-      } satisfies ParsedStreamEvent)
+      } satisfies ProviderEvent)
 
       const toolResult = resultEvents.find((e) => e.type === 'tool_result') as ToolResultEvent | undefined
       expect(toolResult).toBeDefined()
@@ -149,7 +149,7 @@ describe('TranscriptTranslator', () => {
         kind: 'tool_result',
         toolUseId: 'nonexistent-id',
         content: 'some output',
-      } satisfies ParsedStreamEvent)
+      } satisfies ProviderEvent)
 
       const toolResult = resultEvents.find((e) => e.type === 'tool_result') as ToolResultEvent | undefined
       expect(toolResult).toBeDefined()
@@ -160,7 +160,7 @@ describe('TranscriptTranslator', () => {
   describe('error event', () => {
     it('emits status with severity error and kind session_error when no turn is open', () => {
       const t = makeTranslator()
-      const events = t.handle({ kind: 'error', error: 'Something went wrong' } satisfies ParsedStreamEvent)
+      const events = t.handle({ kind: 'error', error: 'Something went wrong' } satisfies ProviderEvent)
 
       expect(events).toHaveLength(1)
       const status = events[0] as StatusEvent
@@ -219,13 +219,13 @@ describe('TranscriptTranslator', () => {
 
       const large = 'A'.repeat(100 * 1024)
 
-      t.handle({ kind: 'tool_use', id: 'bash-1', name: 'Bash', input: { command: 'cat big' } } satisfies ParsedStreamEvent)
+      t.handle({ kind: 'tool_use', id: 'bash-1', name: 'Bash', input: { command: 'cat big' } } satisfies ProviderEvent)
 
       const resultEvents = t.handle({
         kind: 'tool_result',
         toolUseId: 'bash-1',
         content: large,
-      } satisfies ParsedStreamEvent)
+      } satisfies ProviderEvent)
 
       const toolResult = resultEvents.find((e) => e.type === 'tool_result') as ToolResultEvent | undefined
       expect(toolResult).toBeDefined()
@@ -240,13 +240,13 @@ describe('TranscriptTranslator', () => {
 
       const large = 'B'.repeat(100 * 1024)
 
-      t.handle({ kind: 'tool_use', id: 'read-1', name: 'Read', input: { file_path: '/tmp/big' } } satisfies ParsedStreamEvent)
+      t.handle({ kind: 'tool_use', id: 'read-1', name: 'Read', input: { file_path: '/tmp/big' } } satisfies ProviderEvent)
 
       const resultEvents = t.handle({
         kind: 'tool_result',
         toolUseId: 'read-1',
         content: large,
-      } satisfies ParsedStreamEvent)
+      } satisfies ProviderEvent)
 
       const toolResult = resultEvents.find((e) => e.type === 'tool_result') as ToolResultEvent | undefined
       expect(toolResult?.result.truncated).toBe(true)
@@ -258,7 +258,7 @@ describe('TranscriptTranslator', () => {
   describe('session_id event', () => {
     it('produces no transcript events', () => {
       const t = makeTranslator()
-      const events = t.handle({ kind: 'session_id', sessionId: 'claude-abc-123' } satisfies ParsedStreamEvent)
+      const events = t.handle({ kind: 'session_id', sessionId: 'claude-abc-123' } satisfies ProviderEvent)
       expect(events).toHaveLength(0)
     })
   })
@@ -272,7 +272,7 @@ describe('TranscriptTranslator', () => {
         kind: 'thinking_block',
         text: 'Let me think...',
         signature: 'sig-abc',
-      } satisfies ParsedStreamEvent)
+      } satisfies ProviderEvent)
 
       expect(events).toHaveLength(1)
       const thinking = events[0]

@@ -1,6 +1,6 @@
 import { describe, test, expect, spyOn } from 'bun:test'
-import { parseClaudeLine, translateLine, serializeUserMessage, makeLineReader } from './stream-json.js'
-import type { ClaudeStreamLine } from './stream-json-types.js'
+import { parseClaudeLine, translateLine, serializeUserMessage, makeLineReader } from './stream.js'
+import type { ClaudeStreamLine } from './stream-types.js'
 
 // ---------------------------------------------------------------------------
 // parseClaudeLine

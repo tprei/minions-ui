@@ -6,6 +6,7 @@ import { SessionRuntime, type SubprocessHandle, type SpawnFn, type StartOpts } f
 import { runMigrations } from '../db/sqlite'
 import type { EngineEvent } from '../events/types'
 import type { TranscriptEvent } from '../../shared/api-types'
+import type { AgentProvider, SpawnArgsOpts } from './providers/types'
 
 // ---------------------------------------------------------------------------
 // In-memory DB helpers
@@ -325,10 +326,10 @@ describe('SessionRuntime', () => {
   })
 
   describe('resume path', () => {
-    test('argv includes --resume <id> when resumeClaudeSessionId is set', async () => {
+    test('argv includes --resume <id> when resumeSessionId is set', async () => {
       currentProc = makeFakeProc([])
       const rt = new SessionRuntime(
-        makeOpts(currentProc, { resumeClaudeSessionId: 'resume-session-xyz' }),
+        makeOpts(currentProc, { resumeSessionId: 'resume-session-xyz' }),
       )
       await rt.start()
 
@@ -337,21 +338,21 @@ describe('SessionRuntime', () => {
       expect(capturedArgs[resumeIdx + 1]).toBe('resume-session-xyz')
     })
 
-    test('argv does NOT include --resume when resumeClaudeSessionId is absent', async () => {
+    test('argv does NOT include --resume when resumeSessionId is absent', async () => {
       currentProc = makeFakeProc([])
       const rt = new SessionRuntime(makeOpts(currentProc))
       await rt.start()
       expect(capturedArgs).not.toContain('--resume')
     })
 
-    test('turn trigger is "resume" when resumeClaudeSessionId is set', async () => {
+    test('turn trigger is "resume" when resumeSessionId is set', async () => {
       const bus = getEventBus()
       const streamEvents: TranscriptEvent[] = []
       bus.onKind('session.stream', (e) => { streamEvents.push(e.event) })
 
       currentProc = makeFakeProc([])
       const rt = new SessionRuntime(
-        makeOpts(currentProc, { resumeClaudeSessionId: 'old-session-id' }),
+        makeOpts(currentProc, { resumeSessionId: 'old-session-id' }),
       )
       await rt.start()
 
@@ -485,7 +486,6 @@ describe('SessionRuntime', () => {
 
   describe('ship coordinator inactivity timeout', () => {
     test('uses 24h inactivity timeout for ship mode by default', async () => {
-      // Ship coordinator should get much longer timeout
       currentProc = makeFakeProc([
         JSON.stringify({ type: 'session_id', value: 'claude-123' }),
         JSON.stringify({
@@ -506,10 +506,6 @@ describe('SessionRuntime', () => {
 
       await rt.start()
 
-      // The timeout is set in startTimers, which is called in start()
-      // We can't easily test the actual timeout value without exposing internals,
-      // but we can verify that ship mode doesn't use the explicit override
-      // and would use the 24h default set in startTimers
       expect(currentProc.killed).toBe(false)
     })
 
@@ -528,15 +524,64 @@ describe('SessionRuntime', () => {
         mode: 'ship',
         cwd: '/tmp/ship-cwd',
         initialPrompt: 'ship the feature',
-        inactivityTimeoutMs: 1000, // 1 second
+        inactivityTimeoutMs: 1000,
         spawnFn: makeSpawnFn(currentProc),
         getDb: () => db,
       })
 
       await rt.start()
 
-      // Even with explicit override, the runtime should start
       expect(currentProc.killed).toBe(false)
+    })
+  })
+
+  describe('custom provider injection', () => {
+    test('runtime delegates spawn args, serialization, and parsing to injected provider', async () => {
+      const calls: string[] = []
+
+      const fakeProvider: AgentProvider = {
+        name: 'claude',
+        buildSpawnArgs(opts: SpawnArgsOpts) {
+          calls.push('buildSpawnArgs')
+          return {
+            argv: ['claude', '--print', '--output-format', 'stream-json', '--input-format', 'stream-json',
+              '--verbose', '--include-partial-messages', '--dangerously-skip-permissions',
+              '--append-system-prompt', opts.modeConfig.systemPrompt, '--model', opts.modeConfig.model],
+            env: {},
+          }
+        },
+        serializeInitialInput(prompt: string) {
+          calls.push('serializeInitialInput')
+          return JSON.stringify({ type: 'user', session_id: '', message: { role: 'user', content: prompt }, parent_tool_use_id: null })
+        },
+        serializeUserReply(prompt: string) {
+          calls.push('serializeUserReply')
+          return JSON.stringify({ type: 'user', session_id: '', message: { role: 'user', content: prompt }, parent_tool_use_id: null })
+        },
+        parseLine(line: string) {
+          calls.push('parseLine')
+          try {
+            const raw = JSON.parse(line) as { type?: string; is_error?: boolean }
+            if (raw.type === 'result' && !raw.is_error) {
+              return { events: [{ kind: 'turn_complete', totalTokens: null, totalCostUsd: null, numTurns: null }] }
+            }
+          } catch { /* ignore */ }
+          return { events: [] }
+        },
+        resumeArgs: () => [],
+        isQuotaError: () => false,
+      }
+
+      currentProc = makeFakeProc([JSON.stringify({ type: 'result' })])
+      const rt = new SessionRuntime({
+        ...makeOpts(currentProc),
+        provider: fakeProvider,
+      })
+      await rt.start()
+
+      expect(calls).toContain('buildSpawnArgs')
+      expect(calls).toContain('serializeInitialInput')
+      expect(calls).toContain('parseLine')
     })
   })
 })

@@ -268,7 +268,7 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       cwd,
       initialPrompt,
       initialImages,
-      resumeClaudeSessionId: row.claude_session_id,
+      resumeSessionId: row.claude_session_id,
     })
 
     handles.set(row.id, handle)

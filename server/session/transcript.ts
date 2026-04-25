@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import type { TranscriptEvent, TranscriptEventBase, TurnTrigger, StatusSeverity } from '../../shared/api-types'
-import type { ParsedStreamEvent } from './stream-json-types'
+import type { ProviderEvent } from './providers/types'
 import { buildToolCallSummary, buildToolResultPayload, classifyTool } from './tool-classifier'
 
 export interface TranscriptTranslatorOpts {
@@ -54,7 +54,7 @@ export class TranscriptTranslator {
     return { ...this.base(), type: 'turn_started', trigger }
   }
 
-  handle(event: ParsedStreamEvent): TranscriptEvent[] {
+  handle(event: ProviderEvent): TranscriptEvent[] {
     switch (event.kind) {
       case 'text_delta':
         return this.handleTextDelta(event.text, event.parentToolUseId ?? null)
