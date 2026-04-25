@@ -34,9 +34,9 @@ describe('getModeConfig', () => {
       expect(cfg.reasoningEffort).toBe('high')
     })
 
-    test('plan mode has sandbox read-only', () => {
+    test('plan mode leaves sandbox unset (provider resolves to env/default)', () => {
       const cfg = getModeConfig('codex', 'plan')
-      expect(cfg.sandbox).toBe('read-only')
+      expect(cfg.sandbox).toBeUndefined()
     })
 
     test('task mode has no reasoningEffort', () => {
