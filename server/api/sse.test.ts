@@ -202,6 +202,21 @@ describe('snapshot on connect', () => {
     expect(parsed.type).toBe('session_created')
     expect(parsed.session.id).toBe('sess-snap')
   })
+
+  test('proxied requests close after the snapshot batch with a retry hint', async () => {
+    insertSession(testDb, 'sess-proxied')
+    const app = makeApp(testDb)
+    const res = await app.fetch(new Request('http://localhost/api/events', {
+      headers: { 'cf-ray': 'test-ray' },
+    }))
+    expect(res.status).toBe(200)
+
+    const text = await res.text()
+    expect(text).toContain('event: message')
+    expect(text).toContain('"session_created"')
+    expect(text).toContain('event: keepalive')
+    expect(text).toContain('retry: 1000')
+  })
 })
 
 describe('live event projection', () => {
