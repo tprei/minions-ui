@@ -306,14 +306,146 @@ describe('translateCodexLine — JSON-RPC error response', () => {
 // ---------------------------------------------------------------------------
 
 describe('translateCodexLine — unknown method', () => {
-  test('emits no events and warns', () => {
-    const warn = spyOn(console, 'warn').mockImplementation(() => {})
+  test('emits no events for non-actionable notifications', () => {
     const raw = parseCodexLine(
       JSON.stringify({ method: 'some/futureMethod', params: { foo: 'bar' } }),
     )!
     const { events } = translateCodexLine(raw)
     expect(events).toHaveLength(0)
-    expect(warn).toHaveBeenCalledWith('[codex-stream] Unknown notification method:', 'some/futureMethod')
-    warn.mockRestore()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// translateCodexLine — v2 item/started + item/completed
+// ---------------------------------------------------------------------------
+
+describe('translateCodexLine — v2 item/* notifications', () => {
+  test('agentMessage on item/completed emits text_delta with full text', () => {
+    const raw = parseCodexLine(
+      JSON.stringify({
+        method: 'item/completed',
+        params: {
+          threadId: 't1',
+          turnId: 'r1',
+          item: { type: 'agentMessage', id: 'i1', text: 'Hello world' },
+        },
+      }),
+    )!
+    const { events } = translateCodexLine(raw)
+    expect(events).toEqual([{ kind: 'text_delta', text: 'Hello world' }])
+  })
+
+  test('agentMessage on item/started emits no events', () => {
+    const raw = parseCodexLine(
+      JSON.stringify({
+        method: 'item/started',
+        params: {
+          threadId: 't1',
+          turnId: 'r1',
+          item: { type: 'agentMessage', id: 'i1', text: '' },
+        },
+      }),
+    )!
+    expect(translateCodexLine(raw).events).toHaveLength(0)
+  })
+
+  test('reasoning on item/completed emits thinking_block from summary', () => {
+    const raw = parseCodexLine(
+      JSON.stringify({
+        method: 'item/completed',
+        params: {
+          threadId: 't1',
+          turnId: 'r1',
+          item: {
+            type: 'reasoning',
+            id: 'i2',
+            summary: [{ text: 'Analyzed the request' }],
+          },
+        },
+      }),
+    )!
+    const { events } = translateCodexLine(raw)
+    expect(events).toEqual([{ kind: 'thinking_block', text: 'Analyzed the request' }])
+  })
+
+  test('commandExecution on item/started emits tool_use shell', () => {
+    const raw = parseCodexLine(
+      JSON.stringify({
+        method: 'item/started',
+        params: {
+          threadId: 't1',
+          turnId: 'r1',
+          item: { type: 'commandExecution', id: 'cmd1', command: 'ls -la', status: 'inProgress' },
+        },
+      }),
+    )!
+    const { events } = translateCodexLine(raw)
+    expect(events).toEqual([{ kind: 'tool_use', id: 'cmd1', name: 'shell', input: { command: 'ls -la' } }])
+  })
+
+  test('commandExecution on item/completed (status=completed) emits tool_result with stdout + exitCode', () => {
+    const raw = parseCodexLine(
+      JSON.stringify({
+        method: 'item/completed',
+        params: {
+          threadId: 't1',
+          turnId: 'r1',
+          item: {
+            type: 'commandExecution',
+            id: 'cmd1',
+            command: 'ls',
+            status: 'completed',
+            aggregatedOutput: 'README.md\npackage.json\n',
+            exitCode: 0,
+          },
+        },
+      }),
+    )!
+    const { events } = translateCodexLine(raw)
+    expect(events).toEqual([{
+      kind: 'tool_result',
+      toolUseId: 'cmd1',
+      content: { stdout: 'README.md\npackage.json\n', exitCode: 0 },
+    }])
+  })
+
+  test('commandExecution failed emits tool_result error with aggregatedOutput', () => {
+    const raw = parseCodexLine(
+      JSON.stringify({
+        method: 'item/completed',
+        params: {
+          threadId: 't1',
+          turnId: 'r1',
+          item: {
+            type: 'commandExecution',
+            id: 'cmd2',
+            command: 'bad',
+            status: 'failed',
+            aggregatedOutput: 'bad: not found',
+            exitCode: 127,
+          },
+        },
+      }),
+    )!
+    const { events } = translateCodexLine(raw)
+    expect(events).toEqual([{
+      kind: 'tool_result',
+      toolUseId: 'cmd2',
+      content: { error: 'bad: not found', exitCode: 127 },
+    }])
+  })
+
+  test('unknown item.type emits no events (forward-compatible)', () => {
+    const raw = parseCodexLine(
+      JSON.stringify({
+        method: 'item/completed',
+        params: {
+          threadId: 't1',
+          turnId: 'r1',
+          item: { type: 'imageGeneration', id: 'i9', status: 'completed' },
+        },
+      }),
+    )!
+    expect(translateCodexLine(raw).events).toHaveLength(0)
   })
 })

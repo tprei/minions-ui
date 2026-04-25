@@ -38,6 +38,54 @@ export interface CodexToolCall {
   params: CodexToolCallParams
 }
 
+export type ThreadItem =
+  | { type: 'agentMessage'; id: string; text: string }
+  | { type: 'reasoning'; id: string; content?: unknown[]; summary?: unknown[] }
+  | {
+      type: 'commandExecution'
+      id: string
+      command: string
+      cwd?: unknown
+      status: 'inProgress' | 'completed' | 'failed' | 'declined'
+      aggregatedOutput?: string | null
+      exitCode?: number | null
+    }
+  | {
+      type: 'fileChange'
+      id: string
+      changes: unknown[]
+      status: 'inProgress' | 'completed' | 'failed' | 'declined'
+    }
+  | { type: 'plan'; id: string; text: string }
+  | {
+      type: 'mcpToolCall'
+      id: string
+      server: string
+      tool: string
+      arguments: unknown
+      status: 'inProgress' | 'completed' | 'failed' | 'declined'
+      output?: unknown
+    }
+  | {
+      type: 'dynamicToolCall'
+      id: string
+      tool: string
+      arguments: unknown
+      status: 'inProgress' | 'completed' | 'failed' | 'declined'
+      output?: unknown
+    }
+  | { type: string; id: string; [key: string]: unknown }
+
+export interface CodexItemStarted {
+  method: 'item/started'
+  params: { item: ThreadItem; threadId: string; turnId: string }
+}
+
+export interface CodexItemCompleted {
+  method: 'item/completed'
+  params: { item: ThreadItem; threadId: string; turnId: string }
+}
+
 export interface CodexTurnCompleted {
   method: 'turn/completed'
   params: { turn: { id: string; status: 'completed' } }
@@ -56,6 +104,8 @@ export type CodexNotification =
   | CodexReasoningDelta
   | CodexReasoning
   | CodexToolCall
+  | CodexItemStarted
+  | CodexItemCompleted
   | CodexTurnCompleted
   | CodexTurnFailed
 
