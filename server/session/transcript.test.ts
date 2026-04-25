@@ -179,7 +179,7 @@ describe('TranscriptTranslator', () => {
       const events = t.handle({
         kind: 'error',
         error: 'API Error: Stream idle timeout - partial response received',
-      } satisfies ParsedStreamEvent)
+      } satisfies ProviderEvent)
 
       const flushed = events.find((e) => e.type === 'assistant_text') as AssistantTextEvent | undefined
       expect(flushed?.final).toBe(true)

@@ -108,27 +108,12 @@ export const CODEX_MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
     reasoningEffort: CODEX_REASONING_EFFORT,
     sandbox: 'read-only',
   },
-  'ship-think': {
-    systemPrompt: DEFAULT_SHIP_THINK_PROMPT,
-    model: envModel('CODEX_SHIP_THINK_MODEL', 'gpt-5.1-codex'),
+  ship: {
+    systemPrompt: DEFAULT_SHIP_PROMPT,
+    model: envModel('CODEX_SHIP_MODEL', 'gpt-5.1-codex'),
     disallowedTools: [],
-    autoExitOnComplete: true,
+    autoExitOnComplete: false,
     reasoningEffort: CODEX_REASONING_EFFORT,
-    sandbox: 'read-only',
-  },
-  'ship-plan': {
-    systemPrompt: DEFAULT_SHIP_PLAN_PROMPT,
-    model: envModel('CODEX_SHIP_PLAN_MODEL', 'gpt-5.1-codex'),
-    disallowedTools: [],
-    autoExitOnComplete: true,
-    reasoningEffort: CODEX_REASONING_EFFORT,
-    sandbox: 'read-only',
-  },
-  'ship-verify': {
-    systemPrompt: DEFAULT_SHIP_VERIFY_PROMPT,
-    model: envModel('CODEX_SHIP_VERIFY_MODEL', 'gpt-5.1-codex'),
-    disallowedTools: [],
-    autoExitOnComplete: true,
   },
   'ci-fix': {
     systemPrompt: DEFAULT_CI_FIX_PROMPT,

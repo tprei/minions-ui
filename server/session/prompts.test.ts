@@ -88,7 +88,7 @@ describe('getModeConfig', () => {
   })
 
   describe('autoExitOnComplete parity', () => {
-    const modes = ['task', 'dag-task', 'plan', 'think', 'review', 'ship-think', 'ship-plan', 'ship-verify', 'ci-fix'] as const
+    const modes = ['task', 'dag-task', 'plan', 'think', 'review', 'ship', 'ci-fix'] as const
 
     for (const mode of modes) {
       test(`${mode}: claude and codex have same autoExitOnComplete`, () => {

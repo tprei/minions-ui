@@ -168,7 +168,7 @@ describe("plan-actions gating", () => {
     const startedDagIds: string[] = []
     const mockRuntime: Partial<SessionRuntime> = {
       running: false,
-      currentClaudeSessionId: undefined,
+      currentProviderSessionId: undefined,
       start: async () => {},
       injectInput: async () => false,
       stop: async () => {},
