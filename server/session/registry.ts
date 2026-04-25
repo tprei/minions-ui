@@ -313,6 +313,21 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       const row = prepared.getSession(db(), id)
       if (!row) continue
 
+      // Ship coordinators: attempt to resume from stored claude_session_id
+      if (row.mode === 'ship' && row.claude_session_id) {
+        try {
+          const runtime = await resumeRuntime(row, row.command)
+          runtimes.set(id, runtime)
+          wireCompletionHandler(id)
+          void runtime.start()
+          console.log('[ship] reconcileOnBoot: resumed coordinator', id, 'stage', row.stage)
+          continue
+        } catch (err) {
+          console.warn('[ship] reconcileOnBoot: failed to resume coordinator', id, err)
+          // Fall through to mark failed
+        }
+      }
+
       const now = Date.now()
       const seq = prepared.nextSeq(db(), id)
       const turn = currentTurn(id)
