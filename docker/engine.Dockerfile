@@ -25,14 +25,18 @@ FROM oven/bun:1.2-debian AS final
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git gh nodejs npm ca-certificates curl \
-    && rm -rf /var/lib/apt/lists/*
+    ripgrep fd-find bat jq \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /usr/bin/fdfind /usr/local/bin/fd \
+    && ln -s /usr/bin/batcat /usr/local/bin/bat
 
 RUN npm install -g \
       @anthropic-ai/claude-code \
       @openai/codex \
       @playwright/mcp \
       @upstash/context7-mcp \
-      github-mcp-server
+      github-mcp-server \
+      repomix
 
 COPY --from=devtools /opt/devtools /opt/devtools
 COPY --from=uv-base /opt/uv-python /opt/uv-python
