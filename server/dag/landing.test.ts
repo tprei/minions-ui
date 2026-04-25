@@ -1,4 +1,7 @@
-import { describe, it, expect } from "bun:test"
+import { describe, it, expect, beforeEach, afterEach } from "bun:test"
+import fs from "node:fs"
+import path from "node:path"
+import os from "node:os"
 import { buildDag } from "./dag"
 import { EngineEventBus } from "../events/bus"
 import { createLandingManager } from "./landing"
@@ -31,11 +34,23 @@ function makeGraph() {
   return graph
 }
 
+let workspaceRoot: string
+
+beforeEach(() => {
+  workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "landing-test-"))
+  fs.mkdirSync(path.join(workspaceRoot, "slug-a"), { recursive: true })
+  fs.mkdirSync(path.join(workspaceRoot, "slug-b"), { recursive: true })
+})
+
+afterEach(() => {
+  fs.rmSync(workspaceRoot, { recursive: true, force: true })
+})
+
 describe("LandingManager.landNode", () => {
   it("returns error when node not found in graph", async () => {
     const { exec } = makeSuccessExec()
     const bus = makeBus()
-    const manager = createLandingManager({ bus, execFile: exec })
+    const manager = createLandingManager({ bus, workspaceRoot, execFile: exec })
     const graph = makeGraph()
 
     const result = await manager.landNode("nonexistent", graph)
@@ -46,7 +61,7 @@ describe("LandingManager.landNode", () => {
   it("returns error when node has no PR URL", async () => {
     const { exec } = makeSuccessExec()
     const bus = makeBus()
-    const manager = createLandingManager({ bus, execFile: exec })
+    const manager = createLandingManager({ bus, workspaceRoot, execFile: exec })
     const graph = buildDag("dag-1", [
       { id: "a", title: "Task A", description: "First task", dependsOn: [] },
     ], "root-session", "repo")
@@ -57,22 +72,26 @@ describe("LandingManager.landNode", () => {
     expect(result.error).toContain("no PR URL")
   })
 
-  it("retargets all stacked PRs to main before merging", async () => {
+  it("retargets all stacked PRs to main via gh api PATCH before merging", async () => {
     const { exec, calls } = makeSuccessExec()
     const bus = makeBus()
-    const manager = createLandingManager({ bus, execFile: exec })
+    const manager = createLandingManager({ bus, workspaceRoot, execFile: exec })
     const graph = makeGraph()
 
     await manager.landNode("a", graph)
 
-    const retargetCalls = calls.filter((a) => a[0] === "pr" && a[1] === "edit" && a.includes("--base") && a.includes("main"))
+    const retargetCalls = calls.filter(
+      (a) => a[0] === "api" && a.includes("PATCH") && a.some((x) => x === "base=main"),
+    )
     expect(retargetCalls.length).toBeGreaterThanOrEqual(1)
+    const patchPath = retargetCalls[0]!.find((x) => x.startsWith("/repos/"))
+    expect(patchPath).toBe("/repos/org/repo/pulls/1")
   })
 
   it("calls gh pr merge with squash and delete-branch", async () => {
     const { exec, calls } = makeSuccessExec()
     const bus = makeBus()
-    const manager = createLandingManager({ bus, execFile: exec })
+    const manager = createLandingManager({ bus, workspaceRoot, execFile: exec })
     const graph = makeGraph()
 
     const result = await manager.landNode("a", graph)
@@ -87,7 +106,7 @@ describe("LandingManager.landNode", () => {
   it("returns ok:true and sets node status to landed on success", async () => {
     const { exec } = makeSuccessExec()
     const bus = makeBus()
-    const manager = createLandingManager({ bus, execFile: exec })
+    const manager = createLandingManager({ bus, workspaceRoot, execFile: exec })
     const graph = makeGraph()
 
     const result = await manager.landNode("a", graph)
@@ -99,10 +118,10 @@ describe("LandingManager.landNode", () => {
   it("returns ok:false with error when gh pr merge fails", async () => {
     const bus = makeBus()
     const exec: ExecFn = async ({ args }) => {
-      if (args[1] === "merge") throw new Error("PR is not mergeable")
+      if (args[0] === "pr" && args[1] === "merge") throw new Error("PR is not mergeable")
       return { stdout: "", stderr: "" }
     }
-    const manager = createLandingManager({ bus, execFile: exec })
+    const manager = createLandingManager({ bus, workspaceRoot, execFile: exec })
     const graph = makeGraph()
 
     const result = await manager.landNode("a", graph)
@@ -113,7 +132,7 @@ describe("LandingManager.landNode", () => {
   it("emits dag.node.landed event on successful merge", async () => {
     const { exec } = makeSuccessExec()
     const bus = makeBus()
-    const manager = createLandingManager({ bus, execFile: exec })
+    const manager = createLandingManager({ bus, workspaceRoot, execFile: exec })
     const graph = makeGraph()
 
     const emittedEvents: { kind: string; dagId: string; nodeId: string }[] = []
@@ -128,18 +147,42 @@ describe("LandingManager.landNode", () => {
     expect(emittedEvents[0]!.nodeId).toBe("a")
   })
 
-  it("rebases downstream nodes after successful merge", async () => {
-    const { exec, calls } = makeSuccessExec()
+  it("rebases downstream nodes in their worktree directory after successful merge", async () => {
+    const calls: { args: string[]; cwd: string | undefined }[] = []
+    const exec: ExecFn = async ({ args, opts }) => {
+      calls.push({ args: [...args], cwd: opts?.cwd as string | undefined })
+      return { stdout: "", stderr: "" }
+    }
     const bus = makeBus()
-    const manager = createLandingManager({ bus, execFile: exec })
+    const manager = createLandingManager({ bus, workspaceRoot, execFile: exec })
     const graph = makeGraph()
 
     await manager.landNode("a", graph)
 
-    const fetchCalls = calls.filter((a) => a[0] === "fetch")
-    const rebaseCalls = calls.filter((a) => a[0] === "rebase")
+    const fetchCalls = calls.filter((c) => c.args[0] === "fetch")
+    const rebaseCalls = calls.filter((c) => c.args[0] === "rebase")
 
     expect(fetchCalls.length).toBeGreaterThan(0)
     expect(rebaseCalls.length).toBeGreaterThan(0)
+    expect(fetchCalls[0]!.cwd).toBe(path.join(workspaceRoot, "slug-b"))
+    expect(rebaseCalls[0]!.cwd).toBe(path.join(workspaceRoot, "slug-b"))
+  })
+
+  it("skips rebase when downstream worktree directory is missing", async () => {
+    const calls: { args: string[] }[] = []
+    const exec: ExecFn = async ({ args }) => {
+      calls.push({ args: [...args] })
+      return { stdout: "", stderr: "" }
+    }
+    fs.rmSync(path.join(workspaceRoot, "slug-b"), { recursive: true, force: true })
+
+    const bus = makeBus()
+    const manager = createLandingManager({ bus, workspaceRoot, execFile: exec })
+    const graph = makeGraph()
+
+    const result = await manager.landNode("a", graph)
+    expect(result.ok).toBe(true)
+    const fetchCalls = calls.filter((c) => c.args[0] === "fetch")
+    expect(fetchCalls.length).toBe(0)
   })
 })
