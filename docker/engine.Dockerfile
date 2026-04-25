@@ -24,11 +24,19 @@ FROM oven/bun:1.2-debian AS final
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git gh nodejs npm ca-certificates curl \
+    git gh ca-certificates curl \
     ripgrep fd-find bat jq \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/bin/fdfind /usr/local/bin/fd \
     && ln -s /usr/bin/batcat /usr/local/bin/bat
+
+# Debian's default `nodejs` is v18, but @openai/codex, repomix, and other
+# tooling require Node ≥ 20. Pull Node 22 binaries from the build stage we
+# already use elsewhere.
+COPY --from=devtools /usr/local/bin/node /usr/local/bin/node
+COPY --from=devtools /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 RUN npm install -g \
       @anthropic-ai/claude-code \
