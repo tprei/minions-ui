@@ -43,6 +43,7 @@
     "marked": "^18.0.2",
     "mermaid": "^11.14.0",
     "preact": "^10.26.4",
+    "qr-scanner": "^1.4.2",
     "web-push": "^3.6.7",
     "zod": "^3.24.0"
   },
@@ -60,6 +61,8 @@
     "@types/eventsource": "^1.1.15",
     "@types/node": "^22.14.0",
     "@types/web-push": "^3.6.4",
+    "@types/whatwg-mimetype": "^5.0.0",
+    "@types/ws": "^8.18.1",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.0.0",
     "eslint": "^10.1.0",
