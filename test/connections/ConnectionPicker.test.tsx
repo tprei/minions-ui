@@ -11,7 +11,8 @@ vi.mock('../../src/connections/store', async () => {
   const setActive = vi.fn((id: string | null) => {
     activeId.value = id
   })
-  return { connections, activeId, setActive }
+  const getAllStores = vi.fn(() => new Map())
+  return { connections, activeId, setActive, getAllStores }
 })
 
 vi.mock('../../src/hooks/useHaptics', () => ({
