@@ -41,6 +41,8 @@ test('opening a new DB creates all expected tables', () => {
   expect(tables).toContain('vapid_keys')
   expect(tables).toContain('github_tokens')
   expect(tables).toContain('schema_migrations')
+  expect(tables).toContain('memories')
+  expect(tables).toContain('memories_fts')
 })
 
 test('runMigrations is idempotent', () => {
@@ -364,4 +366,260 @@ test('migration 0007 migrates legacy ship modes to ship with stage', () => {
       void e
     }
   }
+})
+
+test('memories table has all expected columns and constraints', () => {
+  const now = Date.now()
+
+  prepared.insertSession(db, {
+    id: 'sess-memory',
+    slug: 'memory-session',
+    status: 'completed',
+    command: 'test',
+    mode: 'task',
+    repo: 'test/repo',
+    branch: 'main',
+    bare_dir: null,
+    pr_url: null,
+    parent_id: null,
+    variant_group_id: null,
+    claude_session_id: null,
+    workspace_root: null,
+    created_at: now,
+    updated_at: now,
+    needs_attention: false,
+    attention_reasons: [],
+    quick_actions: [],
+    conversation: [],
+    quota_sleep_until: null,
+    quota_retry_count: 0,
+    metadata: {},
+    pipeline_advancing: false,
+    stage: null,
+    coordinator_children: [],
+  })
+
+  prepared.insertDag(db, {
+    id: 'dag-memory',
+    root_task_id: 'task-1',
+    status: 'completed',
+    repo: 'test/repo',
+    created_at: now,
+    updated_at: now,
+  })
+
+  db.run(
+    `INSERT INTO memories (repo, kind, title, body, status, source_session_id, source_dag_id, created_at, updated_at, pinned)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['test/repo', 'user', 'Test Memory', 'Test body content', 'approved', 'sess-memory', 'dag-memory', now, now, 1],
+  )
+
+  const row = db.query<{
+    id: number
+    repo: string | null
+    kind: string
+    title: string
+    body: string
+    status: string
+    source_session_id: string | null
+    source_dag_id: string | null
+    created_at: number
+    updated_at: number
+    superseded_by: number | null
+    reviewed_at: number | null
+    pinned: number
+  }, [string]>('SELECT * FROM memories WHERE title = ?').get('Test Memory')
+
+  expect(row).not.toBeNull()
+  expect(row!.repo).toBe('test/repo')
+  expect(row!.kind).toBe('user')
+  expect(row!.title).toBe('Test Memory')
+  expect(row!.body).toBe('Test body content')
+  expect(row!.status).toBe('approved')
+  expect(row!.source_session_id).toBe('sess-memory')
+  expect(row!.source_dag_id).toBe('dag-memory')
+  expect(row!.pinned).toBe(1)
+})
+
+test('memories kind constraint rejects invalid values', () => {
+  const now = Date.now()
+
+  expect(() => {
+    db.run(
+      `INSERT INTO memories (repo, kind, title, body, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['test/repo', 'invalid_kind', 'Test', 'Body', 'pending', now, now],
+    )
+  }).toThrow()
+})
+
+test('memories status constraint rejects invalid values', () => {
+  const now = Date.now()
+
+  expect(() => {
+    db.run(
+      `INSERT INTO memories (repo, kind, title, body, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['test/repo', 'user', 'Test', 'Body', 'invalid_status', now, now],
+    )
+  }).toThrow()
+})
+
+test('memories FTS5 trigger syncs on insert', () => {
+  const now = Date.now()
+
+  db.run(
+    `INSERT INTO memories (repo, kind, title, body, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ['test/repo', 'feedback', 'Search Test', 'Searchable body content', 'approved', now, now],
+  )
+
+  const ftsRow = db.query<{ rowid: number, title: string, body: string }, [string]>(
+    'SELECT rowid, title, body FROM memories_fts WHERE memories_fts MATCH ?'
+  ).get('Searchable')
+
+  expect(ftsRow).not.toBeNull()
+  expect(ftsRow!.title).toBe('Search Test')
+  expect(ftsRow!.body).toBe('Searchable body content')
+})
+
+test('memories FTS5 trigger syncs on update', () => {
+  const now = Date.now()
+
+  db.run(
+    `INSERT INTO memories (repo, kind, title, body, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ['test/repo', 'project', 'Original Title', 'Original body', 'pending', now, now],
+  )
+
+  const memoryId = db.query<{ id: number }, [string]>('SELECT id FROM memories WHERE title = ?').get('Original Title')!.id
+
+  db.run(
+    'UPDATE memories SET title = ?, body = ?, updated_at = ? WHERE id = ?',
+    ['Updated Title', 'Updated body with searchable text', now + 1000, memoryId],
+  )
+
+  const ftsRow = db.query<{ rowid: number, title: string, body: string }, [string]>(
+    'SELECT rowid, title, body FROM memories_fts WHERE memories_fts MATCH ?'
+  ).get('searchable')
+
+  expect(ftsRow).not.toBeNull()
+  expect(ftsRow!.rowid).toBe(memoryId)
+  expect(ftsRow!.title).toBe('Updated Title')
+  expect(ftsRow!.body).toBe('Updated body with searchable text')
+
+  const oldMatch = db.query<{ rowid: number }, [string]>(
+    'SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?'
+  ).get('Original')
+
+  expect(oldMatch).toBeNull()
+})
+
+test('memories FTS5 trigger syncs on delete', () => {
+  const now = Date.now()
+
+  db.run(
+    `INSERT INTO memories (repo, kind, title, body, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ['test/repo', 'reference', 'Delete Test', 'To be deleted', 'approved', now, now],
+  )
+
+  const memoryId = db.query<{ id: number }, [string]>('SELECT id FROM memories WHERE title = ?').get('Delete Test')!.id
+
+  const beforeDelete = db.query<{ rowid: number }, [string]>(
+    'SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?'
+  ).get('deleted')
+  expect(beforeDelete).not.toBeNull()
+
+  db.run('DELETE FROM memories WHERE id = ?', [memoryId])
+
+  const afterDelete = db.query<{ rowid: number }, [string]>(
+    'SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?'
+  ).get('deleted')
+  expect(afterDelete).toBeNull()
+})
+
+test('memories foreign key cascade on session deletion', () => {
+  const now = Date.now()
+
+  prepared.insertSession(db, {
+    id: 'sess-fk',
+    slug: 'fk-session',
+    status: 'completed',
+    command: 'test',
+    mode: 'task',
+    repo: null,
+    branch: null,
+    bare_dir: null,
+    pr_url: null,
+    parent_id: null,
+    variant_group_id: null,
+    claude_session_id: null,
+    workspace_root: null,
+    created_at: now,
+    updated_at: now,
+    needs_attention: false,
+    attention_reasons: [],
+    quick_actions: [],
+    conversation: [],
+    quota_sleep_until: null,
+    quota_retry_count: 0,
+    metadata: {},
+    pipeline_advancing: false,
+    stage: null,
+    coordinator_children: [],
+  })
+
+  db.run(
+    `INSERT INTO memories (repo, kind, title, body, status, source_session_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['test/repo', 'user', 'FK Test', 'Body', 'approved', 'sess-fk', now, now],
+  )
+
+  const beforeDelete = db.query<{ source_session_id: string | null }, [string]>(
+    'SELECT source_session_id FROM memories WHERE title = ?'
+  ).get('FK Test')
+  expect(beforeDelete!.source_session_id).toBe('sess-fk')
+
+  prepared.deleteSession(db, 'sess-fk')
+
+  const afterDelete = db.query<{ source_session_id: string | null }, [string]>(
+    'SELECT source_session_id FROM memories WHERE title = ?'
+  ).get('FK Test')
+  expect(afterDelete).not.toBeNull()
+  expect(afterDelete!.source_session_id).toBeNull()
+})
+
+test('memories self-referencing superseded_by foreign key', () => {
+  const now = Date.now()
+
+  db.run(
+    `INSERT INTO memories (repo, kind, title, body, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ['test/repo', 'feedback', 'Original', 'Original content', 'superseded', now, now],
+  )
+
+  const originalId = db.query<{ id: number }, [string]>('SELECT id FROM memories WHERE title = ?').get('Original')!.id
+
+  db.run(
+    `INSERT INTO memories (repo, kind, title, body, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ['test/repo', 'feedback', 'Replacement', 'New content', 'approved', now + 1000, now + 1000],
+  )
+
+  const replacementId = db.query<{ id: number }, [string]>('SELECT id FROM memories WHERE title = ?').get('Replacement')!.id
+
+  db.run('UPDATE memories SET superseded_by = ? WHERE id = ?', [replacementId, originalId])
+
+  const updated = db.query<{ superseded_by: number | null }, [number]>(
+    'SELECT superseded_by FROM memories WHERE id = ?'
+  ).get(originalId)
+  expect(updated!.superseded_by).toBe(replacementId)
+
+  db.run('DELETE FROM memories WHERE id = ?', [replacementId])
+
+  const afterDelete = db.query<{ superseded_by: number | null }, [number]>(
+    'SELECT superseded_by FROM memories WHERE id = ?'
+  ).get(originalId)
+  expect(afterDelete!.superseded_by).toBeNull()
 })
