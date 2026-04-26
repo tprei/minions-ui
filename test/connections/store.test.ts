@@ -106,4 +106,45 @@ describe('connections store (M5 additions)', () => {
     expect(activeId.value).toBeNull()
     disposeAll()
   })
+
+  it('setActive caches activity stats when switching connections', async () => {
+    const { addConnection, setActive, connections, getActiveStore, disposeAll } = await import('../../src/connections/store')
+
+    const c1 = addConnection({ label: 'First', baseUrl: 'https://first.example.com', token: '' })
+    const c2 = addConnection({ label: 'Second', baseUrl: 'https://second.example.com', token: '' })
+
+    setActive(c1.id)
+    await Promise.resolve()
+    const store = getActiveStore()
+    if (store) {
+      const session = {
+        id: 's1',
+        slug: 's1',
+        status: 'running' as const,
+        needsAttention: true,
+        attentionReasons: ['waiting_for_feedback' as const],
+        command: 'test',
+        createdAt: '2026-04-26',
+        updatedAt: '2026-04-26',
+        childIds: [],
+        quickActions: [],
+        mode: 'task',
+        conversation: [],
+      }
+      store.applySessionCreated(session)
+
+      const instances = Array.from(mock.instances.values())
+      if (instances.length > 0) {
+        instances[0].push({ type: 'session_updated', session })
+      }
+    }
+
+    setActive(c2.id)
+
+    const cached = connections.value.find((c) => c.id === c1.id)
+    expect(cached?.unreadCount).toBe(1)
+    expect(cached?.activityCounts).toEqual({ running: 1, pending: 0, waiting: 1 })
+
+    disposeAll()
+  })
 })

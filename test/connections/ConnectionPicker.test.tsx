@@ -4,14 +4,23 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('../../src/connections/store', async () => {
   const { signal } = await import('@preact/signals')
   const connections = signal([
-    { id: 'c1', label: 'Alpha', baseUrl: 'https://a.example.com', token: 'ta', color: '#3b82f6' },
+    {
+      id: 'c1',
+      label: 'Alpha',
+      baseUrl: 'https://a.example.com',
+      token: 'ta',
+      color: '#3b82f6',
+      unreadCount: 2,
+      activityCounts: { running: 1, pending: 0, waiting: 1 },
+    },
     { id: 'c2', label: 'Beta', baseUrl: 'https://b.example.com', token: 'tb', color: '#10b981' },
   ])
   const activeId = signal<string | null>('c1')
   const setActive = vi.fn((id: string | null) => {
     activeId.value = id
   })
-  return { connections, activeId, setActive }
+  const getActiveStore = vi.fn(() => null)
+  return { connections, activeId, setActive, getActiveStore }
 })
 
 const matchMediaMock = vi.fn()
@@ -102,6 +111,20 @@ describe('ConnectionPicker', () => {
     fireEvent.keyDown(document, { key: 'Enter' })
 
     expect(setActive).toHaveBeenCalled()
+  })
+
+  it('shows unread badge for connection with unread count', async () => {
+    await setup()
+    fireEvent.click(screen.getByTestId('connection-picker-trigger'))
+    const badges = screen.getAllByTestId('connection-unread-badge')
+    expect(badges.length).toBeGreaterThan(0)
+  })
+
+  it('shows activity indicator when connection has activity', async () => {
+    await setup()
+    fireEvent.click(screen.getByTestId('connection-picker-trigger'))
+    const dots = screen.getAllByTestId('connection-activity-dot')
+    expect(dots.length).toBeGreaterThan(0)
   })
 
   describe('mobile bottom sheet', () => {

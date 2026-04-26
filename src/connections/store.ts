@@ -3,7 +3,7 @@ import { createApiClient } from '../api/client'
 import { createConnectionStore } from '../state/store'
 import { clearSnapshot } from '../state/persist'
 import type { ConnectionStore } from '../state/types'
-import type { Connection, ConnectionsState } from './types'
+import type { Connection, ConnectionsState, ActivityCounts } from './types'
 import { nextColor } from '../theme/colors'
 
 const STORAGE_KEY = 'minions-ui:connections:v1'
@@ -40,6 +40,32 @@ export const connections = signal<Connection[]>(initial.connections)
 export const activeId = signal<string | null>(initial.activeId)
 
 const storeCache = new Map<string, ConnectionStore>()
+
+function computeActivityStats(store: ConnectionStore): { unreadCount: number; activityCounts: ActivityCounts } {
+  const sessions = store.sessions.value
+  const attentionIds = store.attentionSessionIds.value
+
+  const unreadCount = attentionIds.size
+
+  const activityCounts: ActivityCounts = {
+    running: 0,
+    pending: 0,
+    waiting: 0,
+  }
+
+  for (const session of sessions) {
+    if (session.status === 'running') {
+      activityCounts.running++
+    } else if (session.status === 'pending') {
+      activityCounts.pending++
+    }
+    if (session.needsAttention && session.attentionReasons.includes('waiting_for_feedback')) {
+      activityCounts.waiting++
+    }
+  }
+
+  return { unreadCount, activityCounts }
+}
 
 function getOrCreateStore(id: string): ConnectionStore {
   const existing = storeCache.get(id)
@@ -86,6 +112,8 @@ export function setActive(id: string | null): void {
   if (prev && prev !== id) {
     const prevStore = storeCache.get(prev)
     if (prevStore) {
+      const stats = computeActivityStats(prevStore)
+      updateConnection(prev, stats)
       prevStore.dispose()
       storeCache.delete(prev)
     }

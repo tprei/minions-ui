@@ -1,10 +1,12 @@
 import { useSignal } from '@preact/signals'
 import { useEffect, useRef, useCallback } from 'preact/hooks'
-import { connections, activeId, setActive } from './store'
+import { connections, activeId, setActive, getActiveStore } from './store'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useTheme } from '../hooks/useTheme'
 import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss'
 import { DragHandle } from '../components/DragHandle'
+import { ConnectionIndicators } from './ConnectionIndicators'
+import type { ActivityCounts } from './types'
 
 interface ConnectionPickerProps {
   onManage: () => void
@@ -22,6 +24,40 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
     onDismiss: () => { open.value = false },
     enabled: isMobile.value,
   })
+
+  const getLiveStats = (connId: string): { unreadCount?: number; activityCounts?: ActivityCounts } => {
+    const store = getActiveStore()
+    if (store && store.connectionId === connId) {
+      const sessions = store.sessions.value
+      const attentionIds = store.attentionSessionIds.value
+      const unreadCount = attentionIds.size
+
+      const activityCounts: ActivityCounts = {
+        running: 0,
+        pending: 0,
+        waiting: 0,
+      }
+
+      for (const session of sessions) {
+        if (session.status === 'running') {
+          activityCounts.running++
+        } else if (session.status === 'pending') {
+          activityCounts.pending++
+        }
+        if (session.needsAttention && session.attentionReasons.includes('waiting_for_feedback')) {
+          activityCounts.waiting++
+        }
+      }
+
+      return { unreadCount, activityCounts }
+    }
+
+    const conn = connections.value.find((c) => c.id === connId)
+    return {
+      unreadCount: conn?.unreadCount,
+      activityCounts: conn?.activityCounts,
+    }
+  }
 
   const handleToggle = useCallback(() => {
     open.value = !open.value
@@ -95,6 +131,16 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
             data-testid="picker-active-dot"
           />
           <span class="flex-1 min-w-0 truncate text-left">{activeConn.label}</span>
+          {(() => {
+            const stats = getLiveStats(activeConn.id)
+            return (
+              <ConnectionIndicators
+                unreadCount={stats.unreadCount}
+                activityCounts={stats.activityCounts}
+                compact
+              />
+            )
+          })()}
         </>
       ) : (
         <span class="flex-1 min-w-0 truncate text-left text-slate-500">No connection</span>
@@ -110,24 +156,32 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
       aria-label="Connections"
       class="max-h-64 overflow-y-auto"
     >
-      {connections.value.map((conn) => (
-        <li key={conn.id}>
-          <button
-            role="option"
-            aria-selected={conn.id === activeId.value}
-            tabIndex={0}
-            data-testid={`picker-option-${conn.id}`}
-            onClick={() => handleSelect(conn.id)}
-            class={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-700 ${conn.id === activeId.value ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
-          >
-            <span
-              class="h-2.5 w-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: conn.color }}
-            />
-            <span class="truncate">{conn.label}</span>
-          </button>
-        </li>
-      ))}
+      {connections.value.map((conn) => {
+        const stats = getLiveStats(conn.id)
+        return (
+          <li key={conn.id}>
+            <button
+              role="option"
+              aria-selected={conn.id === activeId.value}
+              tabIndex={0}
+              data-testid={`picker-option-${conn.id}`}
+              onClick={() => handleSelect(conn.id)}
+              class={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-700 ${conn.id === activeId.value ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
+            >
+              <span
+                class="h-2.5 w-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: conn.color }}
+              />
+              <span class="truncate flex-1">{conn.label}</span>
+              <ConnectionIndicators
+                unreadCount={stats.unreadCount}
+                activityCounts={stats.activityCounts}
+                compact
+              />
+            </button>
+          </li>
+        )
+      })}
     </ul>
   )
 
