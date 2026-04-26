@@ -74,7 +74,8 @@ const reconciledRows = db
 const reconciled = reconciledRows?.count ?? 0
 console.log(`[minion] engine on :${PORT}, ${reconciled} sessions resumed`)
 
-const scheduler = createDagScheduler({ registry, db, bus, workspace: WORKSPACE_ROOT })
+const ciBabysitter = createRealCIBabysitter(registry, db)
+const scheduler = createDagScheduler({ registry, db, bus, workspace: WORKSPACE_ROOT, ciBabysitter })
 await scheduler.reconcileOnBoot()
 
 bus.onKind('session.resumed', (ev) => { void scheduler.onSessionResumed(ev.sessionId) })
@@ -113,7 +114,7 @@ const ctx: HandlerCtx = {
   bus,
   scheduler,
   loopScheduler,
-  ciBabysitter: createRealCIBabysitter(registry, db),
+  ciBabysitter,
   qualityGates: createRealQualityGates(),
   digest: createDigestBuilder(),
   profileStore: createNoopProfileStore(),
