@@ -17,6 +17,7 @@ import { SlashCommandMenu } from './chat/SlashCommandMenu'
 import { SessionTabs, type SessionTabId } from './chat/SessionTabs'
 import { DiffTab } from './chat/DiffTab'
 import { ScreenshotsTab } from './chat/ScreenshotsTab'
+import { CheckpointsTab } from './chat/CheckpointsTab'
 import { PrPreviewCard } from './components/PrPreviewCard'
 import { AttentionBar, filterSessionsByReason } from './components/AttentionBar'
 import { UniverseCanvas } from './components/UniverseCanvas'
@@ -323,6 +324,7 @@ function ChatPane({
           { id: 'chat', label: 'Chat', available: true },
           { id: 'diff', label: 'Diff', available: hasFeature(store, 'diff') },
           { id: 'screenshots', label: 'Screenshots', available: hasFeature(store, 'screenshots') },
+          { id: 'checkpoints', label: 'Checkpoints', available: hasFeature(store, 'session-checkpoints') },
         ]}
         active={activeTab}
         onChange={setActiveTab}
@@ -334,6 +336,7 @@ function ChatPane({
                 sessionId={session.id}
                 prUrl={session.prUrl}
                 client={store.client}
+                readinessAvailable={hasFeature(store, 'merge-readiness')}
               />
             )}
             {hasFeature(store, 'transcript') ? (
@@ -360,6 +363,14 @@ function ChatPane({
             sessionId={session.id}
             sessionUpdatedAt={session.updatedAt}
             client={store.client}
+          />
+        )}
+        {activeTab === 'checkpoints' && (
+          <CheckpointsTab
+            session={session}
+            sessionUpdatedAt={session.updatedAt}
+            client={store.client}
+            onRestored={store.applySessionCreated}
           />
         )}
       </SessionTabs>

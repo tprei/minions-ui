@@ -5,10 +5,11 @@ import { getEventBus } from '../events/bus'
 import { getDb as defaultGetDb, prepared } from '../db/sqlite'
 import type { Database } from 'bun:sqlite'
 import { TranscriptTranslator } from './transcript'
-import { getModeConfig, type AllSessionMode } from './prompts'
+import { getResolvedModeConfig, type AllSessionMode } from './prompts'
 import { getProvider } from './providers/index'
 import type { AgentProvider, ParserState, SpawnArgsOpts } from './providers/types'
 import { buildMemoryPreamble } from './memory-preamble'
+import { canCheckpointSession, createSessionCheckpoint } from '../checkpoints/session-checkpoints'
 
 export interface SubprocessHandle {
   pid: number
@@ -96,7 +97,7 @@ export class SessionRuntime {
 
   async start(): Promise<void> {
     const { sessionId, mode, cwd, initialPrompt, resumeSessionId, mcpConfig } = this.opts
-    const cfg = getModeConfig(this.provider.name, mode as AllSessionMode)
+    const cfg = getResolvedModeConfig(this.provider.name, mode as AllSessionMode, cwd)
 
     this.bus.emit({ kind: 'session.spawning', sessionId, mode, cwd })
 
@@ -231,17 +232,17 @@ export class SessionRuntime {
         const line = buffer.slice(0, newlineIdx).replace(/\r$/, '')
         buffer = buffer.slice(newlineIdx + 1)
         if (line.length > 0) {
-          this.processLine(line)
+          await this.processLine(line)
         }
       }
     }
 
     if (buffer.trim().length > 0) {
-      this.processLine(buffer.trim())
+      await this.processLine(buffer.trim())
     }
   }
 
-  private processLine(line: string): void {
+  private async processLine(line: string): Promise<void> {
     const { events, sessionId: nextSid } = this.provider.parseLine(line, this.parserState)
 
     if (nextSid && nextSid !== this.providerSessionId) {
@@ -258,11 +259,15 @@ export class SessionRuntime {
     const followUpQueue: string[] = []
 
     const db = this.getDb()
+    const checkpointTurns: number[] = []
     db.transaction(() => {
       for (const event of events) {
         const transcriptEvents = this.translator.handle(event)
         for (const te of transcriptEvents) {
           this.persistAndEmit(te)
+          if (te.type === 'turn_completed' && te.errored !== true) {
+            checkpointTurns.push(te.turn)
+          }
         }
 
         const followUp = this.provider.onProviderEvent?.(event, { providerSessionId: this.providerSessionId })
@@ -277,7 +282,7 @@ export class SessionRuntime {
             this.bus.emit({ kind: 'session.idle', sessionId: this.opts.sessionId })
           }
 
-          const cfg = getModeConfig(this.provider.name, this.opts.mode as AllSessionMode)
+          const cfg = getResolvedModeConfig(this.provider.name, this.opts.mode as AllSessionMode, this.opts.cwd)
           if (cfg.autoExitOnComplete && this.state !== 'done') {
             if (!this.producedOutputThisTurn) {
               this.stoppedForEmptyTurn = true
@@ -300,6 +305,10 @@ export class SessionRuntime {
         }
       }
     })()
+
+    for (const turn of checkpointTurns) {
+      await this.recordCheckpoint(turn, 'turn')
+    }
 
     if (followUpQueue.length > 0 && this.proc?.stdin) {
       void (async () => {
@@ -363,6 +372,10 @@ export class SessionRuntime {
       updated_at: Date.now(),
     })
 
+    if (runState === 'completed') {
+      await this.recordCheckpoint(this.translator.currentTurn, 'completion')
+    }
+
     this.bus.emit({
       kind: 'session.completed',
       sessionId: this.opts.sessionId,
@@ -391,6 +404,27 @@ export class SessionRuntime {
       payload,
     })
     this.bus.emit({ kind: 'session.stream', sessionId: this.opts.sessionId, event })
+  }
+
+  private async recordCheckpoint(turn: number, kind: 'turn' | 'completion'): Promise<void> {
+    const db = this.getDb()
+    const row = prepared.getSession(db, this.opts.sessionId)
+    if (!row || !canCheckpointSession(row)) return
+
+    try {
+      await createSessionCheckpoint({
+        db,
+        session: row,
+        turn,
+        kind,
+        label: kind === 'turn' ? `Turn ${turn}` : 'Session completed',
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.persistAndEmit(
+        this.translator.status('checkpoint_failed', message, { severity: 'warn' }),
+      )
+    }
   }
 
   private startTimers(): void {

@@ -2,20 +2,27 @@ import type {
   ApiDagGraph,
   ApiResponse,
   ApiSession,
+  AuditEvent,
   CommandResult,
+  CreateExternalTaskRequest,
+  ExternalTaskResult,
   CreateMemoryRequest,
   CreateSessionRequest,
   CreateSessionVariantsRequest,
   CreateSessionVariantsResult,
   MemoryEntry,
+  MergeReadiness,
   MinionCommand,
   PrPreview,
   PushSubscribeAck,
   PushSubscriptionJSON,
+  ReadinessSummary,
   ResourceSnapshot,
   ReviewMemoryRequest,
+  RestoreCheckpointResult,
   RuntimeConfigResponse,
   RuntimeOverrides,
+  SessionCheckpoint,
   ScreenshotList,
   TranscriptSnapshot,
   UpdateMemoryRequest,
@@ -46,7 +53,13 @@ export interface ApiClient {
   sendMessage(text: string, sessionId?: string, images?: Array<{ mediaType: string; dataBase64: string }>): Promise<{ ok: true; sessionId: string | null }>
   createSession(req: CreateSessionRequest): Promise<ApiSession>
   createSessionVariants(req: CreateSessionVariantsRequest): Promise<CreateSessionVariantsResult>
+  createExternalTask(req: CreateExternalTaskRequest): Promise<ExternalTaskResult>
   getPr(sessionId: string): Promise<PrPreview>
+  getReadiness(sessionId: string): Promise<MergeReadiness>
+  getReadinessSummary(): Promise<ReadinessSummary>
+  getAuditEvents(limit?: number): Promise<AuditEvent[]>
+  listCheckpoints(sessionId: string): Promise<SessionCheckpoint[]>
+  restoreCheckpoint(sessionId: string, checkpointId: string): Promise<RestoreCheckpointResult>
   getDiff(sessionId: string): Promise<WorkspaceDiff>
   getTranscript(slug: string, afterSeq?: number): Promise<TranscriptSnapshot>
   listScreenshots(sessionId: string): Promise<ScreenshotList>
@@ -169,8 +182,36 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
       return post<CreateSessionVariantsResult>('/api/sessions/variants', req)
     },
 
+    createExternalTask(req: CreateExternalTaskRequest) {
+      return post<ExternalTaskResult>('/api/entrypoints', req)
+    },
+
     getPr(sessionId: string) {
       return get<PrPreview>(`/api/sessions/${encodeURIComponent(sessionId)}/pr`)
+    },
+
+    getReadiness(sessionId: string) {
+      return get<MergeReadiness>(`/api/sessions/${encodeURIComponent(sessionId)}/readiness`)
+    },
+
+    getReadinessSummary() {
+      return get<ReadinessSummary>('/api/readiness/summary')
+    },
+
+    getAuditEvents(limit?: number) {
+      const query = limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : ''
+      return get<AuditEvent[]>(`/api/audit/events${query}`)
+    },
+
+    listCheckpoints(sessionId: string) {
+      return get<SessionCheckpoint[]>(`/api/sessions/${encodeURIComponent(sessionId)}/checkpoints`)
+    },
+
+    restoreCheckpoint(sessionId: string, checkpointId: string) {
+      return post<RestoreCheckpointResult>(
+        `/api/sessions/${encodeURIComponent(sessionId)}/checkpoints/${encodeURIComponent(checkpointId)}/restore`,
+        {},
+      )
     },
 
     async getDiff(sessionId: string): Promise<WorkspaceDiff> {

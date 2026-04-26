@@ -14,6 +14,11 @@ export type FeatureName =
   | 'transcript'
   | 'resource-metrics'
   | 'runtime-config'
+  | 'merge-readiness'
+  | 'readiness-analytics'
+  | 'session-checkpoints'
+  | 'external-entrypoints'
+  | 'audit-log'
   | 'ship-coordinator'
   | 'memory'
 

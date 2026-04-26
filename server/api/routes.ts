@@ -6,13 +6,20 @@ import type { Database } from 'bun:sqlite'
 import type {
   ApiResponse,
   ApiSession,
+  AuditEvent,
   CommandResult,
+  CreateExternalTaskRequest,
   CreateSessionVariantsResult,
+  ExternalTaskResult,
   MemoryEntry,
   MinionCommand,
   OverrideField,
+  MergeReadiness,
   ResourceSnapshot,
+  ReadinessSummary,
+  RestoreCheckpointResult,
   RuntimeConfigResponse,
+  SessionCheckpoint,
   ScreenshotList,
   TranscriptSnapshot,
   VersionInfo,
@@ -51,6 +58,18 @@ import { handleLoopsCommand } from '../commands/loops'
 import { handleDoneCommand } from '../commands/done'
 import { handleDoctorCommand } from '../commands/doctor'
 import { getProvider } from '../session/providers/index'
+import { buildMergeReadiness } from '../readiness/merge-readiness'
+import { buildReadinessSummary } from '../readiness/summary'
+import {
+  checkpointRowToApi,
+  restoreSessionCheckpoint,
+} from '../checkpoints/session-checkpoints'
+import {
+  buildExternalTaskMetadata,
+  externalTaskRowToApi,
+  insertExternalTask,
+} from '../intake/external-tasks'
+import { auditEventRowToApi, recordAuditEvent } from '../audit/audit-log'
 import {
   countPendingMemories,
   deleteMemory,
@@ -81,6 +100,11 @@ const FEATURES = [
   'pr-preview',
   'resource-metrics',
   'runtime-config',
+  'merge-readiness',
+  'readiness-analytics',
+  'session-checkpoints',
+  'external-entrypoints',
+  'audit-log',
   'memory',
 ]
 
@@ -132,6 +156,18 @@ const MessageSchema = z.object({
   text: z.string().min(1),
   sessionId: z.string().optional(),
   images: z.array(ImageSchema).optional(),
+})
+
+const ExternalTaskSchema = z.object({
+  source: z.enum(['github_issue', 'github_pr_comment', 'linear_issue', 'slack_thread']),
+  externalId: z.string().min(1),
+  prompt: z.string().min(1),
+  repo: z.string().min(1).optional(),
+  mode: z.enum(['task', 'plan', 'think', 'review', 'ship']).default('task'),
+  title: z.string().min(1).optional(),
+  url: z.string().url().optional(),
+  author: z.string().min(1).optional(),
+  metadata: z.record(z.unknown()).optional(),
 })
 
 const CreateMemorySchema = z.object({
@@ -250,6 +286,21 @@ export function registerApiRoutes(
 
   app.use('/api/*', bearerAuth())
 
+  app.get('/api/readiness/summary', (c) => {
+    const summary = buildReadinessSummary(resolveDb())
+    return c.json({ data: summary } satisfies ApiResponse<ReadinessSummary>)
+  })
+
+  app.get('/api/audit/events', (c) => {
+    const rawLimit = c.req.query('limit')
+    const limit = rawLimit === undefined ? 100 : Number(rawLimit)
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      return c.json({ error: 'limit must be an integer between 1 and 500' }, 400)
+    }
+    const events = prepared.listAuditEvents(resolveDb(), limit).map(auditEventRowToApi)
+    return c.json({ data: events } satisfies ApiResponse<AuditEvent[]>)
+  })
+
   app.get('/api/sessions', (c) => {
     const sessions = registry.list()
     const body: ApiResponse<ApiSession[]> = { data: sessions }
@@ -288,6 +339,53 @@ export function registerApiRoutes(
         data: session,
       }
       return c.json(body, 201)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  app.post('/api/entrypoints', async (c) => {
+    const raw = await c.req.json().catch(() => null)
+    const parsed = ExternalTaskSchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: formatZod(parsed.error.issues) }, 400)
+    }
+
+    const req = parsed.data satisfies CreateExternalTaskRequest
+    const db = resolveDb()
+    const existing = prepared.getExternalTaskByKey(db, req.source, req.externalId)
+    if (existing) {
+      const row = prepared.getSession(db, existing.session_id)
+      if (!row) return c.json({ error: 'External task session not found' }, 409)
+      return c.json({
+        data: {
+          task: externalTaskRowToApi(existing),
+          session: sessionRowToApi(row),
+          existing: true,
+        } satisfies ExternalTaskResult,
+      })
+    }
+
+    const repo = req.repo ?? process.env['DEFAULT_REPO']
+    if (!repo) return c.json({ error: 'repo is required (or set DEFAULT_REPO on the engine)' }, 400)
+
+    try {
+      const { session } = await registry.create({
+        mode: req.mode,
+        prompt: req.prompt,
+        repo,
+        metadata: buildExternalTaskMetadata(req),
+      })
+      const task = insertExternalTask(db, req, session.id, repo)
+      recordAuditEvent(db, {
+        action: 'external_task.started',
+        sessionId: session.id,
+        targetType: req.source,
+        targetId: req.externalId,
+        metadata: { taskId: task.id, repo },
+      })
+      return c.json({ data: { task, session, existing: false } satisfies ExternalTaskResult }, 201)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
@@ -939,6 +1037,66 @@ export function registerApiRoutes(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
+    }
+  })
+
+  app.get('/api/sessions/:slug/readiness', async (c) => {
+    const { slug } = c.req.param()
+    const db = resolveDb()
+    const row = findSessionRow(slug, db)
+    if (!row) return c.json({ data: null, error: 'Session not found' }, 404)
+    try {
+      const readiness = await buildMergeReadiness({
+        id: row.id,
+        slug: row.slug,
+        status: row.status,
+        pr_url: row.pr_url,
+        workspace_root: row.workspace_root,
+        metadata: row.metadata,
+      })
+      return c.json({ data: readiness } satisfies ApiResponse<MergeReadiness>)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  app.get('/api/sessions/:slug/checkpoints', (c) => {
+    const { slug } = c.req.param()
+    const db = resolveDb()
+    const row = findSessionRow(slug, db)
+    if (!row) return c.json({ data: null, error: 'Session not found' }, 404)
+    const checkpoints = prepared.listSessionCheckpoints(db, row.id).map(checkpointRowToApi)
+    return c.json({ data: checkpoints } satisfies ApiResponse<SessionCheckpoint[]>)
+  })
+
+  app.post('/api/sessions/:slug/checkpoints/:checkpointId/restore', async (c) => {
+    const { slug, checkpointId } = c.req.param()
+    const db = resolveDb()
+    const row = findSessionRow(slug, db)
+    if (!row) return c.json({ data: null, error: 'Session not found' }, 404)
+    if (!row.workspace_root) return c.json({ error: 'Session has no workspace' }, 422)
+    if (row.status === 'running' || row.status === 'pending' || row.status === 'waiting_input' || registry.get(row.id)?.running) {
+      return c.json({ error: 'Stop the session before restoring a checkpoint' }, 409)
+    }
+
+    try {
+      const checkpoint = await restoreSessionCheckpoint({ db, session: row, checkpointId })
+      recordAuditEvent(db, {
+        action: 'checkpoint.restored',
+        sessionId: row.id,
+        targetType: 'session_checkpoint',
+        targetId: checkpoint.id,
+        metadata: { turn: checkpoint.turn, kind: checkpoint.kind, sha: checkpoint.sha },
+      })
+      const updated = prepared.getSession(db, row.id)
+      const session = sessionRowToApi(updated ?? row)
+      getEventBus().emit({ kind: 'session.snapshot', session })
+      return c.json({ data: { checkpoint, session } satisfies RestoreCheckpointResult })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      const status = message === 'Checkpoint not found' ? 404 : 500
+      return c.json({ error: message }, status)
     }
   })
 

@@ -35,6 +35,39 @@ CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at);
 
+CREATE TABLE IF NOT EXISTS external_tasks (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL CHECK (source IN ('github_issue','github_pr_comment','linear_issue','slack_thread')),
+  external_id TEXT NOT NULL,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('started','failed')),
+  repo TEXT,
+  mode TEXT NOT NULL,
+  title TEXT,
+  url TEXT,
+  author TEXT,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE (source, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_tasks_session ON external_tasks(session_id);
+CREATE INDEX IF NOT EXISTS idx_external_tasks_source ON external_tasks(source, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS audit_events (
+  id TEXT PRIMARY KEY,
+  action TEXT NOT NULL,
+  session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+  target_type TEXT,
+  target_id TEXT,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_events_created ON audit_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_events_session ON audit_events(session_id);
+
 CREATE TABLE IF NOT EXISTS session_events (
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   seq INTEGER NOT NULL,
@@ -46,6 +79,23 @@ CREATE TABLE IF NOT EXISTS session_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_events_turn ON session_events(session_id, turn);
+
+CREATE TABLE IF NOT EXISTS session_checkpoints (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  turn INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('turn','completion','manual')),
+  label TEXT NOT NULL,
+  sha TEXT NOT NULL,
+  base_sha TEXT NOT NULL,
+  branch TEXT,
+  dag_id TEXT,
+  dag_node_id TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_checkpoints_session ON session_checkpoints(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_session_checkpoints_dag_node ON session_checkpoints(dag_id, dag_node_id);
 
 CREATE TABLE IF NOT EXISTS dags (
   id TEXT PRIMARY KEY,

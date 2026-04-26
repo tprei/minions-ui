@@ -6,6 +6,9 @@ import { readdirSync, readFileSync } from 'fs'
 type SessionStatus = 'pending' | 'running' | 'waiting_input' | 'completed' | 'failed'
 type DagStatus = 'pending' | 'running' | 'completed' | 'failed'
 type DagNodeStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'ci-pending' | 'ci-failed' | 'landed'
+type SessionCheckpointKind = 'turn' | 'completion' | 'manual'
+type ExternalTaskSource = 'github_issue' | 'github_pr_comment' | 'linear_issue' | 'slack_thread'
+type ExternalTaskStatus = 'started' | 'failed'
 
 export interface SessionRow {
   id: string
@@ -81,6 +84,72 @@ interface SessionEventDbRow {
   payload: string
 }
 
+export interface ExternalTaskRow {
+  id: string
+  source: ExternalTaskSource
+  external_id: string
+  session_id: string
+  status: ExternalTaskStatus
+  repo: string | null
+  mode: string
+  title: string | null
+  url: string | null
+  author: string | null
+  metadata: Record<string, unknown>
+  created_at: number
+  updated_at: number
+}
+
+interface ExternalTaskDbRow {
+  id: string
+  source: ExternalTaskSource
+  external_id: string
+  session_id: string
+  status: ExternalTaskStatus
+  repo: string | null
+  mode: string
+  title: string | null
+  url: string | null
+  author: string | null
+  metadata: string
+  created_at: number
+  updated_at: number
+}
+
+export interface AuditEventRow {
+  id: string
+  action: string
+  session_id: string | null
+  target_type: string | null
+  target_id: string | null
+  metadata: Record<string, unknown>
+  created_at: number
+}
+
+interface AuditEventDbRow {
+  id: string
+  action: string
+  session_id: string | null
+  target_type: string | null
+  target_id: string | null
+  metadata: string
+  created_at: number
+}
+
+export interface SessionCheckpointRow {
+  id: string
+  session_id: string
+  turn: number
+  kind: SessionCheckpointKind
+  label: string
+  sha: string
+  base_sha: string
+  branch: string | null
+  dag_id: string | null
+  dag_node_id: string | null
+  created_at: number
+}
+
 interface DagRow {
   id: string
   root_task_id: string
@@ -125,6 +194,14 @@ type StmtCache = {
   listSessions?: ReturnType<Database['prepare']>
   deleteSession?: ReturnType<Database['prepare']>
   insertEvent?: ReturnType<Database['prepare']>
+  insertExternalTask?: ReturnType<Database['prepare']>
+  getExternalTaskByKey?: ReturnType<Database['prepare']>
+  listExternalTasks?: ReturnType<Database['prepare']>
+  insertAuditEvent?: ReturnType<Database['prepare']>
+  listAuditEvents?: ReturnType<Database['prepare']>
+  insertSessionCheckpoint?: ReturnType<Database['prepare']>
+  listSessionCheckpoints?: ReturnType<Database['prepare']>
+  getSessionCheckpoint?: ReturnType<Database['prepare']>
   insertDag?: ReturnType<Database['prepare']>
   updateDag?: ReturnType<Database['prepare']>
   getDag?: ReturnType<Database['prepare']>
@@ -162,6 +239,20 @@ function mapEventRow(row: SessionEventDbRow): SessionEventRow {
   return {
     ...row,
     payload: JSON.parse(row.payload) as Record<string, unknown>,
+  }
+}
+
+function mapExternalTaskRow(row: ExternalTaskDbRow): ExternalTaskRow {
+  return {
+    ...row,
+    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+  }
+}
+
+function mapAuditEventRow(row: AuditEventDbRow): AuditEventRow {
+  return {
+    ...row,
+    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
   }
 }
 
@@ -403,6 +494,126 @@ export const prepared = {
       )
       .get(sessionId)
     return (row?.max_seq ?? 0) + 1
+  },
+
+  insertExternalTask(db: Database, row: ExternalTaskRow): void {
+    const c = stmts(db)
+    if (!c.insertExternalTask) {
+      c.insertExternalTask = db.prepare(
+        `INSERT INTO external_tasks (id, source, external_id, session_id, status, repo, mode, title, url, author, metadata, created_at, updated_at)
+         VALUES ($id, $source, $external_id, $session_id, $status, $repo, $mode, $title, $url, $author, $metadata, $created_at, $updated_at)`,
+      )
+    }
+    c.insertExternalTask.run({
+      $id: row.id,
+      $source: row.source,
+      $external_id: row.external_id,
+      $session_id: row.session_id,
+      $status: row.status,
+      $repo: row.repo,
+      $mode: row.mode,
+      $title: row.title,
+      $url: row.url,
+      $author: row.author,
+      $metadata: JSON.stringify(row.metadata),
+      $created_at: row.created_at,
+      $updated_at: row.updated_at,
+    })
+  },
+
+  getExternalTaskByKey(db: Database, source: ExternalTaskSource, externalId: string): ExternalTaskRow | null {
+    const c = stmts(db)
+    if (!c.getExternalTaskByKey) {
+      c.getExternalTaskByKey = db.prepare<ExternalTaskDbRow, [ExternalTaskSource, string]>(
+        'SELECT * FROM external_tasks WHERE source = ? AND external_id = ?',
+      )
+    }
+    const row = c.getExternalTaskByKey.get(source, externalId) as ExternalTaskDbRow | null
+    return row ? mapExternalTaskRow(row) : null
+  },
+
+  listExternalTasks(db: Database): ExternalTaskRow[] {
+    const c = stmts(db)
+    if (!c.listExternalTasks) {
+      c.listExternalTasks = db.prepare<ExternalTaskDbRow, []>(
+        'SELECT * FROM external_tasks ORDER BY updated_at DESC',
+      )
+    }
+    const rows = c.listExternalTasks.all() as ExternalTaskDbRow[]
+    return rows.map(mapExternalTaskRow)
+  },
+
+  insertAuditEvent(db: Database, row: AuditEventRow): void {
+    const c = stmts(db)
+    if (!c.insertAuditEvent) {
+      c.insertAuditEvent = db.prepare(
+        `INSERT INTO audit_events (id, action, session_id, target_type, target_id, metadata, created_at)
+         VALUES ($id, $action, $session_id, $target_type, $target_id, $metadata, $created_at)`,
+      )
+    }
+    c.insertAuditEvent.run({
+      $id: row.id,
+      $action: row.action,
+      $session_id: row.session_id,
+      $target_type: row.target_type,
+      $target_id: row.target_id,
+      $metadata: JSON.stringify(row.metadata),
+      $created_at: row.created_at,
+    })
+  },
+
+  listAuditEvents(db: Database, limit = 100): AuditEventRow[] {
+    const c = stmts(db)
+    if (!c.listAuditEvents) {
+      c.listAuditEvents = db.prepare<AuditEventDbRow, [number]>(
+        'SELECT * FROM audit_events ORDER BY created_at DESC LIMIT ?',
+      )
+    }
+    const rows = c.listAuditEvents.all(limit) as AuditEventDbRow[]
+    return rows.map(mapAuditEventRow)
+  },
+
+  insertSessionCheckpoint(db: Database, row: SessionCheckpointRow): void {
+    const c = stmts(db)
+    if (!c.insertSessionCheckpoint) {
+      c.insertSessionCheckpoint = db.prepare(
+        `INSERT INTO session_checkpoints (id, session_id, turn, kind, label, sha, base_sha, branch, dag_id, dag_node_id, created_at)
+         VALUES ($id, $session_id, $turn, $kind, $label, $sha, $base_sha, $branch, $dag_id, $dag_node_id, $created_at)`,
+      )
+    }
+    c.insertSessionCheckpoint.run({
+      $id: row.id,
+      $session_id: row.session_id,
+      $turn: row.turn,
+      $kind: row.kind,
+      $label: row.label,
+      $sha: row.sha,
+      $base_sha: row.base_sha,
+      $branch: row.branch,
+      $dag_id: row.dag_id,
+      $dag_node_id: row.dag_node_id,
+      $created_at: row.created_at,
+    })
+  },
+
+  listSessionCheckpoints(db: Database, sessionId: string): SessionCheckpointRow[] {
+    const c = stmts(db)
+    if (!c.listSessionCheckpoints) {
+      c.listSessionCheckpoints = db.prepare<SessionCheckpointRow, [string]>(
+        'SELECT * FROM session_checkpoints WHERE session_id = ? ORDER BY created_at DESC',
+      )
+    }
+    return c.listSessionCheckpoints.all(sessionId) as SessionCheckpointRow[]
+  },
+
+  getSessionCheckpoint(db: Database, id: string): SessionCheckpointRow | null {
+    const c = stmts(db)
+    if (!c.getSessionCheckpoint) {
+      c.getSessionCheckpoint = db.prepare<SessionCheckpointRow, [string]>(
+        'SELECT * FROM session_checkpoints WHERE id = ?',
+      )
+    }
+    return c.getSessionCheckpoint.get(id) as SessionCheckpointRow | null
   },
 
   insertDag(db: Database, row: DagRow): void {

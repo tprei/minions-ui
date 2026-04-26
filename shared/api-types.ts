@@ -71,6 +71,140 @@ export interface ApiDagGraph {
 export interface ApiResponse<T> { data: T; error?: string }
 export interface CommandResult { success: boolean; error?: string; dagId?: string }
 
+export interface QualityGateResult {
+  name: string
+  command: string[]
+  required: boolean
+  passed: boolean
+  skipped: boolean
+  output: string
+  durationMs: number
+}
+
+export interface QualityReport {
+  allPassed: boolean
+  results: QualityGateResult[]
+  configPath?: string
+  configError?: string
+}
+
+export type MergeReadinessStatus = 'ready' | 'blocked' | 'pending' | 'unknown'
+
+export interface MergeReadinessCheck {
+  id: string
+  label: string
+  status: MergeReadinessStatus
+  required: boolean
+  summary: string
+  details?: string
+}
+
+export interface MergeReadiness {
+  sessionId: string
+  generatedAt: string
+  status: MergeReadinessStatus
+  prUrl?: string
+  configPath?: string
+  checks: MergeReadinessCheck[]
+}
+
+export interface ReadinessSummaryBucket {
+  key: string
+  count: number
+}
+
+export interface ReadinessSummary {
+  generatedAt: string
+  sessions: {
+    total: number
+    byStatus: ReadinessSummaryBucket[]
+    byMode: ReadinessSummaryBucket[]
+    byRepo: ReadinessSummaryBucket[]
+  }
+  pullRequests: {
+    withPr: number
+    withoutPr: number
+  }
+  quality: {
+    withReport: number
+    passed: number
+    failed: number
+    missing: number
+  }
+  checkpoints: {
+    total: number
+    sessionsWithCheckpoints: number
+  }
+}
+
+export type SessionCheckpointKind = 'turn' | 'completion' | 'manual'
+
+export interface SessionCheckpoint {
+  id: string
+  sessionId: string
+  turn: number
+  kind: SessionCheckpointKind
+  label: string
+  sha: string
+  baseSha: string
+  branch?: string
+  dagId?: string
+  dagNodeId?: string
+  createdAt: string
+}
+
+export interface RestoreCheckpointResult {
+  checkpoint: SessionCheckpoint
+  session: ApiSession
+}
+
+export type ExternalTaskSource = 'github_issue' | 'github_pr_comment' | 'linear_issue' | 'slack_thread'
+export type ExternalTaskStatus = 'started' | 'failed'
+
+export interface CreateExternalTaskRequest {
+  source: ExternalTaskSource
+  externalId: string
+  prompt: string
+  repo?: string
+  mode?: Extract<CreateSessionMode, 'task' | 'plan' | 'think' | 'review' | 'ship'>
+  title?: string
+  url?: string
+  author?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface ExternalTask {
+  id: string
+  source: ExternalTaskSource
+  externalId: string
+  sessionId: string
+  status: ExternalTaskStatus
+  repo?: string
+  mode: string
+  title?: string
+  url?: string
+  author?: string
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ExternalTaskResult {
+  task: ExternalTask
+  session: ApiSession
+  existing: boolean
+}
+
+export interface AuditEvent {
+  id: string
+  action: string
+  sessionId?: string
+  targetType?: string
+  targetId?: string
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
 export type SseEvent =
   | { type: 'session_created'; session: ApiSession }
   | { type: 'session_updated'; session: ApiSession }

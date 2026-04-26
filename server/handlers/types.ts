@@ -1,8 +1,10 @@
 import type { Database } from 'bun:sqlite'
+import type { QualityReport as ApiQualityReport } from '../../shared/api-types'
 import type { EngineEventBus } from '../events/bus'
 import type { EngineEventOfKind } from '../events/types'
 import type { SessionRegistry } from '../session/registry'
 
+export type QualityReport = ApiQualityReport
 export type SessionCompletedEvent = EngineEventOfKind<'session.completed'>
 export type { SessionRunState } from '../events/types'
 
@@ -20,11 +22,6 @@ export interface DagScheduler {
 
 export interface LoopScheduler {
   recordOutcome(loopId: string, state: string): Promise<void>
-}
-
-export interface QualityReport {
-  allPassed: boolean
-  results: Array<{ name: string; passed: boolean; output: string }>
 }
 
 export interface QualityGates {
@@ -89,6 +86,7 @@ export interface SessionMetadata {
   dagNodeId?: string
   parentThreadId?: string
   pendingFeedback?: string[]
+  qualityReport?: QualityReport
   ciBabysitStartedAt?: number
   ciBabysitTrigger?: 'stream' | 'completion'
   parentBranch?: string

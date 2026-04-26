@@ -1,13 +1,18 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { Hono } from 'hono'
 import { createSessionRegistry } from '../session/registry'
 import { resetEventBus } from '../events/bus'
 import { prepared, runMigrations } from '../db/sqlite'
 import { registerApiRoutes } from './routes'
 import { registerSseRoute } from './sse'
+import { runGit } from '../workspace/git'
+import { createSessionCheckpoint } from '../checkpoints/session-checkpoints'
 import type { SpawnFn, SubprocessHandle } from '../session/runtime'
+import type { AuditEvent, ExternalTaskResult, MergeReadiness, QualityReport, ReadinessSummary, RestoreCheckpointResult, SessionCheckpoint } from '../../shared/api-types'
 
 function setupTestDb(): Database {
   const db = new Database(':memory:')
@@ -65,6 +70,15 @@ async function json<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>
 }
 
+async function waitForCondition(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error('Timed out waiting for condition')
+}
+
 let testDb: Database
 let originalToken: string | undefined
 let originalDefaultRepo: string | undefined
@@ -107,6 +121,11 @@ describe('GET /api/version', () => {
     expect(features).toContain('sessions-create-images')
     expect(features).toContain('sessions-variants')
     expect(features).toContain('ship-coordinator')
+    expect(features).toContain('merge-readiness')
+    expect(features).toContain('readiness-analytics')
+    expect(features).toContain('session-checkpoints')
+    expect(features).toContain('external-entrypoints')
+    expect(features).toContain('audit-log')
     expect(features).toContain('web-push')
     expect(features).toContain('transcript')
     expect(features).toContain('auth')
@@ -122,6 +141,113 @@ describe('GET /api/sessions', () => {
     expect(res.status).toBe(200)
     const body = await json<{ data: unknown[] }>(res)
     expect(body.data).toEqual([])
+  })
+})
+
+describe('GET /api/readiness/summary', () => {
+  test('aggregates sessions, PRs, quality reports, and checkpoints', async () => {
+    const now = Date.now()
+    prepared.insertSession(testDb, {
+      id: 'summary-a',
+      slug: 'summary-a',
+      status: 'completed',
+      command: 'cmd',
+      mode: 'task',
+      repo: 'repo-a',
+      branch: null,
+      bare_dir: null,
+      pr_url: 'https://github.com/acme/widgets/pull/1',
+      parent_id: null,
+      variant_group_id: null,
+      claude_session_id: null,
+      workspace_root: null,
+      created_at: now,
+      updated_at: now,
+      needs_attention: false,
+      attention_reasons: [],
+      quick_actions: [],
+      conversation: [],
+      quota_sleep_until: null,
+      quota_retry_count: 0,
+      metadata: { qualityReport: { allPassed: true, results: [] } },
+      pipeline_advancing: false,
+      stage: null,
+      coordinator_children: [],
+    })
+    prepared.insertSession(testDb, {
+      id: 'summary-b',
+      slug: 'summary-b',
+      status: 'failed',
+      command: 'cmd',
+      mode: 'plan',
+      repo: null,
+      branch: null,
+      bare_dir: null,
+      pr_url: null,
+      parent_id: null,
+      variant_group_id: null,
+      claude_session_id: null,
+      workspace_root: null,
+      created_at: now,
+      updated_at: now,
+      needs_attention: false,
+      attention_reasons: [],
+      quick_actions: [],
+      conversation: [],
+      quota_sleep_until: null,
+      quota_retry_count: 0,
+      metadata: {},
+      pipeline_advancing: false,
+      stage: null,
+      coordinator_children: [],
+    })
+    prepared.insertSessionCheckpoint(testDb, {
+      id: 'cp-summary',
+      session_id: 'summary-a',
+      turn: 1,
+      kind: 'completion',
+      label: 'Session completed',
+      sha: 'abc',
+      base_sha: 'abc',
+      branch: null,
+      dag_id: null,
+      dag_node_id: null,
+      created_at: now,
+    })
+
+    const app = makeApp(testDb)
+    const res = await app.fetch(new Request('http://localhost/api/readiness/summary'))
+    expect(res.status).toBe(200)
+    const body = await json<{ data: ReadinessSummary }>(res)
+    expect(body.data.sessions.total).toBe(2)
+    expect(body.data.pullRequests.withPr).toBe(1)
+    expect(body.data.quality.passed).toBe(1)
+    expect(body.data.quality.missing).toBe(1)
+    expect(body.data.checkpoints.total).toBe(1)
+  })
+})
+
+describe('GET /api/audit/events', () => {
+  test('returns recent audit events with limit validation', async () => {
+    const now = Date.now()
+    prepared.insertAuditEvent(testDb, {
+      id: 'audit-1',
+      action: 'checkpoint.restored',
+      session_id: null,
+      target_type: 'session_checkpoint',
+      target_id: 'cp-1',
+      metadata: { turn: 2 },
+      created_at: now,
+    })
+    const app = makeApp(testDb)
+    const res = await app.fetch(new Request('http://localhost/api/audit/events?limit=1'))
+    expect(res.status).toBe(200)
+    const body = await json<{ data: AuditEvent[] }>(res)
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0]?.action).toBe('checkpoint.restored')
+
+    const invalid = await app.fetch(new Request('http://localhost/api/audit/events?limit=0'))
+    expect(invalid.status).toBe(400)
   })
 })
 
@@ -211,11 +337,217 @@ describe('POST /api/sessions', () => {
   })
 })
 
+describe('POST /api/entrypoints', () => {
+  test('creates a source-linked session and returns the existing session on retry', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'entrypoint-api-'))
+    const repo = path.join(root, 'repo')
+    const workspaceRoot = path.join(root, 'workspaces')
+    const previousWorkspaceRoot = process.env['WORKSPACE_ROOT']
+    mkdirSync(repo, { recursive: true })
+
+    try {
+      process.env['WORKSPACE_ROOT'] = workspaceRoot
+      await runGit(repo, ['init', '-b', 'main'])
+      await runGit(repo, ['config', 'user.email', 'minions@example.test'])
+      await runGit(repo, ['config', 'user.name', 'Minions Test'])
+      writeFileSync(path.join(repo, 'README.txt'), 'base\n')
+      await runGit(repo, ['add', 'README.txt'])
+      await runGit(repo, ['commit', '-m', 'initial'])
+
+      const app = makeApp(testDb)
+      const body = {
+        source: 'github_issue',
+        externalId: 'acme/widgets#123',
+        repo,
+        prompt: 'Fix issue 123',
+        title: 'Bug in widget flow',
+        url: 'https://github.com/acme/widgets/issues/123',
+        author: 'octocat',
+      }
+
+      const first = await app.fetch(new Request('http://localhost/api/entrypoints', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }))
+      expect(first.status).toBe(201)
+      const firstBody = await json<{ data: ExternalTaskResult }>(first)
+      expect(firstBody.data.existing).toBe(false)
+      expect(firstBody.data.task.source).toBe('github_issue')
+
+      const row = prepared.getSession(testDb, firstBody.data.session.id)
+      expect(row?.metadata.entrypoint).toMatchObject({
+        source: 'github_issue',
+        externalId: 'acme/widgets#123',
+        title: 'Bug in widget flow',
+      })
+      await waitForCondition(() =>
+        prepared.listSessionCheckpoints(testDb, firstBody.data.session.id).some((checkpoint) => checkpoint.kind === 'completion'),
+      )
+      const audit = prepared.listAuditEvents(testDb)
+      expect(audit.some((event) => event.action === 'external_task.started' && event.session_id === firstBody.data.session.id)).toBe(true)
+
+      const second = await app.fetch(new Request('http://localhost/api/entrypoints', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }))
+      expect(second.status).toBe(200)
+      const secondBody = await json<{ data: ExternalTaskResult }>(second)
+      expect(secondBody.data.existing).toBe(true)
+      expect(secondBody.data.session.id).toBe(firstBody.data.session.id)
+    } finally {
+      if (previousWorkspaceRoot !== undefined) {
+        process.env['WORKSPACE_ROOT'] = previousWorkspaceRoot
+      } else {
+        delete process.env['WORKSPACE_ROOT']
+      }
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('requires a repo when DEFAULT_REPO is unset', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(new Request('http://localhost/api/entrypoints', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: 'slack_thread',
+        externalId: 'C1:123.45',
+        prompt: 'Investigate the alert',
+      }),
+    }))
+    expect(res.status).toBe(400)
+  })
+})
+
 describe('GET /api/sessions/:slug', () => {
   test('unknown slug returns 404', async () => {
     const app = makeApp(testDb)
     const res = await app.fetch(new Request('http://localhost/api/sessions/no-such-slug'))
     expect(res.status).toBe(404)
+  })
+})
+
+describe('GET /api/sessions/:slug/readiness', () => {
+  test('returns merge readiness for a completed session without a PR', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'readiness-api-'))
+    const slug = 'readiness-slug'
+    mkdirSync(path.join(root, slug))
+    const now = Date.now()
+    const report: QualityReport = { allPassed: true, results: [] }
+    prepared.insertSession(testDb, {
+      id: 'readiness-session',
+      slug,
+      status: 'completed',
+      command: 'cmd',
+      mode: 'task',
+      repo: null,
+      branch: null,
+      bare_dir: null,
+      pr_url: null,
+      parent_id: null,
+      variant_group_id: null,
+      claude_session_id: null,
+      workspace_root: root,
+      created_at: now,
+      updated_at: now,
+      needs_attention: false,
+      attention_reasons: [],
+      quick_actions: [],
+      conversation: [],
+      quota_sleep_until: null,
+      quota_retry_count: 0,
+      metadata: { qualityReport: report },
+      pipeline_advancing: false,
+      stage: null,
+      coordinator_children: [],
+    })
+
+    const app = makeApp(testDb)
+    const res = await app.fetch(new Request(`http://localhost/api/sessions/${slug}/readiness`))
+    expect(res.status).toBe(200)
+    const body = await json<{ data: MergeReadiness }>(res)
+    expect(body.data.status).toBe('blocked')
+    expect(body.data.checks.find((check) => check.id === 'pull-request')?.status).toBe('blocked')
+    rmSync(root, { recursive: true, force: true })
+  })
+})
+
+describe('session checkpoint routes', () => {
+  test('lists checkpoints and restores a stopped session workspace', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'checkpoint-api-'))
+    const slug = 'checkpoint-slug'
+    const cwd = path.join(root, slug)
+    mkdirSync(cwd, { recursive: true })
+
+    try {
+      await runGit(cwd, ['init', '-b', 'main'])
+      await runGit(cwd, ['config', 'user.email', 'minions@example.test'])
+      await runGit(cwd, ['config', 'user.name', 'Minions Test'])
+      writeFileSync(path.join(cwd, 'tracked.txt'), 'base\n')
+      await runGit(cwd, ['add', 'tracked.txt'])
+      await runGit(cwd, ['commit', '-m', 'initial'])
+
+      const now = Date.now()
+      const row = {
+        id: 'checkpoint-session',
+        slug,
+        status: 'completed' as const,
+        command: 'cmd',
+        mode: 'task',
+        repo: cwd,
+        branch: 'minion/checkpoint-slug',
+        bare_dir: null,
+        pr_url: null,
+        parent_id: null,
+        variant_group_id: null,
+        claude_session_id: null,
+        workspace_root: root,
+        created_at: now,
+        updated_at: now,
+        needs_attention: false,
+        attention_reasons: [],
+        quick_actions: [],
+        conversation: [],
+        quota_sleep_until: null,
+        quota_retry_count: 0,
+        metadata: {},
+        pipeline_advancing: false,
+        stage: null,
+        coordinator_children: [],
+      }
+      prepared.insertSession(testDb, row)
+      writeFileSync(path.join(cwd, 'tracked.txt'), 'checkpoint\n')
+      const checkpoint = await createSessionCheckpoint({
+        db: testDb,
+        session: row,
+        turn: 1,
+        kind: 'turn',
+        label: 'Turn 1',
+      })
+      writeFileSync(path.join(cwd, 'tracked.txt'), 'later\n')
+
+      const app = makeApp(testDb)
+      const listRes = await app.fetch(new Request(`http://localhost/api/sessions/${slug}/checkpoints`))
+      expect(listRes.status).toBe(200)
+      const listBody = await json<{ data: SessionCheckpoint[] }>(listRes)
+      expect(listBody.data.map((item) => item.id)).toEqual([checkpoint.id])
+
+      const restoreRes = await app.fetch(new Request(
+        `http://localhost/api/sessions/${slug}/checkpoints/${checkpoint.id}/restore`,
+        { method: 'POST' },
+      ))
+      expect(restoreRes.status).toBe(200)
+      const restoreBody = await json<{ data: RestoreCheckpointResult }>(restoreRes)
+      expect(restoreBody.data.checkpoint.id).toBe(checkpoint.id)
+      expect(readFileSync(path.join(cwd, 'tracked.txt'), 'utf8')).toBe('checkpoint\n')
+      const events = prepared.listAuditEvents(testDb)
+      expect(events[0]?.action).toBe('checkpoint.restored')
+      expect(events[0]?.target_id).toBe(checkpoint.id)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 

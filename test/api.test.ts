@@ -97,6 +97,26 @@ describe('ApiClient', () => {
     expect(body.text).toBe('/task hi')
   })
 
+  it('createExternalTask POSTs source task payloads', async () => {
+    const fetchMock = mockFetch({ data: { task: null, session: null, existing: false } })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.createExternalTask({
+      source: 'linear_issue',
+      externalId: 'LIN-123',
+      prompt: 'Fix LIN-123',
+      repo: 'https://github.com/acme/widgets',
+    })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE_URL}/api/entrypoints`)
+    expect(init.method).toBe('POST')
+    const body = JSON.parse(init.body as string) as { source: string; externalId: string }
+    expect(body.source).toBe('linear_issue')
+    expect(body.externalId).toBe('LIN-123')
+  })
+
   it('openEventStream uses ?token= query param', () => {
     vi.stubGlobal('fetch', mockFetch({ data: [] as ApiDagGraph[] }))
 
@@ -154,6 +174,51 @@ describe('ApiClient', () => {
 
     const [url] = fetchMock.mock.calls[0] as [string]
     expect(url).toContain('/transcript?after=5')
+  })
+
+  it('listCheckpoints fetches session checkpoints', async () => {
+    const fetchMock = mockFetch({ data: [] })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.listCheckpoints('sess/1')
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(`${BASE_URL}/api/sessions/sess%2F1/checkpoints`)
+  })
+
+  it('getReadinessSummary fetches aggregate readiness metrics', async () => {
+    const fetchMock = mockFetch({ data: { sessions: { total: 0 } } })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.getReadinessSummary()
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(`${BASE_URL}/api/readiness/summary`)
+  })
+
+  it('getAuditEvents fetches audit events with an optional limit', async () => {
+    const fetchMock = mockFetch({ data: [] })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.getAuditEvents(25)
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(`${BASE_URL}/api/audit/events?limit=25`)
+  })
+
+  it('restoreCheckpoint posts to the checkpoint restore endpoint', async () => {
+    const fetchMock = mockFetch({ data: { checkpoint: null, session: null } })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.restoreCheckpoint('sess-1', 'cp/1')
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE_URL}/api/sessions/sess-1/checkpoints/cp%2F1/restore`)
+    expect(init.method).toBe('POST')
   })
 
   it('openEventStream delivers transcript_event via onEvent', () => {

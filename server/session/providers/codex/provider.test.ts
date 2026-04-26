@@ -130,7 +130,7 @@ describe('serializeInitialInput — fresh session', () => {
     expect(params.sandbox).toBe('read-only')
   })
 
-  test('CODEX_SANDBOX_MODE env overrides everything', () => {
+  test('mode sandbox hint takes precedence over CODEX_SANDBOX_MODE', () => {
     process.env['CODEX_SANDBOX_MODE'] = 'workspace-write'
     try {
       const provider = makeCodexProvider()
@@ -139,7 +139,7 @@ describe('serializeInitialInput — fresh session', () => {
       })
       const raw = provider.serializeInitialInput('prompt', undefined, opts)
       const params = splitFrames(raw)[1]!.params as { sandbox: string }
-      expect(params.sandbox).toBe('workspace-write')
+      expect(params.sandbox).toBe('read-only')
     } finally {
       delete process.env['CODEX_SANDBOX_MODE']
     }
