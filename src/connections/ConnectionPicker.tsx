@@ -1,6 +1,10 @@
 import { useSignal } from '@preact/signals'
 import { useEffect, useRef, useCallback } from 'preact/hooks'
 import { connections, activeId, setActive } from './store'
+import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useTheme } from '../hooks/useTheme'
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss'
+import { DragHandle } from '../components/DragHandle'
 
 interface ConnectionPickerProps {
   onManage: () => void
@@ -11,6 +15,13 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const activeConn = connections.value.find((c) => c.id === activeId.value) ?? null
+  const theme = useTheme()
+  const isDark = theme.value === 'dark'
+  const isMobile = useMediaQuery('(max-width: 767px)')
+  const { containerRef: sheetRef, handlePointerDown, handlePointerMove, handlePointerUp } = useSwipeToDismiss({
+    onDismiss: () => { open.value = false },
+    enabled: isMobile.value,
+  })
 
   const handleToggle = useCallback(() => {
     open.value = !open.value
@@ -25,6 +36,10 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
     open.value = false
     onManage()
   }, [open, onManage])
+
+  const handleClose = useCallback(() => {
+    open.value = false
+  }, [open])
 
   useEffect(() => {
     if (!open.value) return
@@ -41,7 +56,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
     if (!open.value) return
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        open.value = false
+        handleClose()
         return
       }
       const list = listRef.current
@@ -62,70 +77,118 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [open.value, open])
+  }, [open.value, open, handleClose])
+
+  const triggerButton = (
+    <button
+      data-testid="connection-picker-trigger"
+      onClick={handleToggle}
+      aria-haspopup="listbox"
+      aria-expanded={open.value}
+      class="w-full flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 sm:px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors min-w-0"
+    >
+      {activeConn ? (
+        <>
+          <span
+            class="h-2.5 w-2.5 rounded-full shrink-0"
+            style={{ backgroundColor: activeConn.color }}
+            data-testid="picker-active-dot"
+          />
+          <span class="flex-1 min-w-0 truncate text-left">{activeConn.label}</span>
+        </>
+      ) : (
+        <span class="flex-1 min-w-0 truncate text-left text-slate-500">No connection</span>
+      )}
+      <span class="text-slate-400 text-xs shrink-0">{open.value ? '▲' : '▼'}</span>
+    </button>
+  )
+
+  const connectionsList = (
+    <ul
+      ref={listRef}
+      role="listbox"
+      aria-label="Connections"
+      class="max-h-64 overflow-y-auto"
+    >
+      {connections.value.map((conn) => (
+        <li key={conn.id}>
+          <button
+            role="option"
+            aria-selected={conn.id === activeId.value}
+            tabIndex={0}
+            data-testid={`picker-option-${conn.id}`}
+            onClick={() => handleSelect(conn.id)}
+            class={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-700 ${conn.id === activeId.value ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
+          >
+            <span
+              class="h-2.5 w-2.5 rounded-full shrink-0"
+              style={{ backgroundColor: conn.color }}
+            />
+            <span class="truncate">{conn.label}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+
+  const manageButton = (
+    <button
+      data-testid="picker-manage-btn"
+      onClick={handleManage}
+      class="w-full px-3 py-2 text-sm text-left text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+    >
+      Manage connections
+    </button>
+  )
+
+  if (isMobile.value) {
+    return (
+      <>
+        <div class="relative min-w-0 flex-1 max-w-[14rem]" ref={containerRef}>
+          {triggerButton}
+        </div>
+        {open.value && (
+          <div class="fixed inset-0 z-50">
+            <div
+              class="absolute inset-0 bg-black/50"
+              data-testid="picker-backdrop"
+              onClick={handleClose}
+            />
+            <div
+              ref={sheetRef}
+              class={`absolute bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl flex flex-col border-t max-h-[60dvh] ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}
+              data-testid="connection-picker-dropdown"
+            >
+              <DragHandle
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+              />
+              <div class="flex-1 overflow-y-auto py-1">
+                {connectionsList}
+              </div>
+              <div class={`border-t mt-1 pt-1 ${isDark ? 'border-slate-700' : 'border-slate-100'}`}>
+                {manageButton}
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
 
   return (
     <div class="relative min-w-0 flex-1 max-w-[14rem]" ref={containerRef}>
-      <button
-        data-testid="connection-picker-trigger"
-        onClick={handleToggle}
-        aria-haspopup="listbox"
-        aria-expanded={open.value}
-        class="w-full flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 sm:px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors min-w-0"
-      >
-        {activeConn ? (
-          <>
-            <span
-              class="h-2.5 w-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: activeConn.color }}
-              data-testid="picker-active-dot"
-            />
-            <span class="flex-1 min-w-0 truncate text-left">{activeConn.label}</span>
-          </>
-        ) : (
-          <span class="flex-1 min-w-0 truncate text-left text-slate-500">No connection</span>
-        )}
-        <span class="text-slate-400 text-xs shrink-0">{open.value ? '▲' : '▼'}</span>
-      </button>
+      {triggerButton}
 
       {open.value && (
         <div
           class="absolute left-0 top-full mt-1 z-50 min-w-[220px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1"
           data-testid="connection-picker-dropdown"
         >
-          <ul
-            ref={listRef}
-            role="listbox"
-            aria-label="Connections"
-            class="max-h-64 overflow-y-auto"
-          >
-            {connections.value.map((conn) => (
-              <li key={conn.id}>
-                <button
-                  role="option"
-                  aria-selected={conn.id === activeId.value}
-                  tabIndex={0}
-                  data-testid={`picker-option-${conn.id}`}
-                  onClick={() => handleSelect(conn.id)}
-                  class={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-700 ${conn.id === activeId.value ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
-                >
-                  <span
-                    class="h-2.5 w-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: conn.color }}
-                  />
-                  <span class="truncate">{conn.label}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          {connectionsList}
           <div class="border-t border-slate-100 dark:border-slate-700 mt-1 pt-1">
-            <button
-              data-testid="picker-manage-btn"
-              onClick={handleManage}
-              class="w-full px-3 py-2 text-sm text-left text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
-            >
-              Manage connections
-            </button>
+            {manageButton}
           </div>
         </div>
       )}
