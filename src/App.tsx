@@ -339,11 +339,13 @@ function ChatPane({
                 readinessAvailable={hasFeature(store, 'merge-readiness')}
               />
             )}
-            {hasFeature(store, 'transcript') ? (
-              <TranscriptPane store={store} sessionId={session.id} />
-            ) : (
-              <TranscriptUpgradeNotice store={store} />
-            )}
+            <div class="flex-1 min-h-0 flex flex-col">
+              {hasFeature(store, 'transcript') ? (
+                <TranscriptPane store={store} sessionId={session.id} />
+              ) : (
+                <TranscriptUpgradeNotice store={store} />
+              )}
+            </div>
             <div class="shrink-0 border-t border-slate-200 dark:border-slate-700">
               <QuickActionsBar session={session} onAction={handleQuickAction} onShipAdvance={handleShipAdvance} />
               <SlashCommandMenu session={session} context={text} onPrefill={handlePrefillCommand} />
