@@ -11,6 +11,9 @@ import type { EngineEventBus } from "../events/bus"
 import type { SessionRunState } from "../events/types"
 import type { ApiDagNode, ApiDagGraph } from "../../shared/api-types"
 import { advanceShip } from "../ship/coordinator"
+import type { CIBabysitter } from "../handlers/types"
+import { createRestackManager } from "./restack"
+import type { RestackManager } from "./restack"
 
 function fetchRootConversation(db: Database, rootSessionId: string): TopicMessage[] {
   const rows = db
@@ -101,6 +104,7 @@ export interface DagSchedulerOpts {
   db: Database
   bus: EngineEventBus
   workspace: string
+  ciBabysitter: CIBabysitter
   updateStackComment?: (graph: DagGraph) => Promise<void>
 }
 
@@ -116,13 +120,20 @@ export interface DagScheduler {
 }
 
 export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
-  const { registry, db, bus } = opts
+  const { registry, db, bus, ciBabysitter } = opts
   const commentUpdater = opts.updateStackComment ?? updateStackComment
 
   const activeGraphs = new Map<string, DagGraph>()
   const nodeToSession = new Map<string, string>()
   const nodeToGraph = new Map<string, string>()
   const cancelledDags = new Set<string>()
+
+  const restackManager: RestackManager = createRestackManager({
+    bus,
+    workspaceRoot: opts.workspace,
+  })
+
+  const deferredRestacks = new Map<string, Array<{ dagId: string; nodeId: string; parentSha: string; newSha: string; cascadeDepth: number }>>()
 
   function runningCount(graph: DagGraph): number {
     return graph.nodes.filter((n) => n.status === "running").length
@@ -264,6 +275,32 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
       const { prUrl, branch } = readNodePrInfo(db, sessionId)
       if (branch) node.branch = branch
       if (prUrl) node.prUrl = prUrl
+
+      if (prUrl) {
+        const metaRow = db
+          .query<{ metadata: string }, [string]>("SELECT metadata FROM sessions WHERE id = ?")
+          .get(sessionId)
+
+        let metadata: Record<string, unknown>
+        try {
+          const parsed = metaRow?.metadata ? JSON.parse(metaRow.metadata) : {}
+          metadata = (parsed && typeof parsed === "object") ? parsed as Record<string, unknown> : {}
+        } catch {
+          metadata = {}
+        }
+
+        if (!metadata.ciBabysitStartedAt) {
+          metadata.ciBabysitStartedAt = Date.now()
+          metadata.ciBabysitTrigger = "completion"
+          prepared.updateSession(db, {
+            id: sessionId,
+            metadata,
+            updated_at: Date.now(),
+          })
+          void ciBabysitter.babysitDagChildCI(sessionId, prUrl)
+        }
+      }
+
       node.status = "done"
       advanceDag(graph)
 
@@ -291,6 +328,19 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     persist(graph)
     await commentUpdater(graph)
     await tickGraph(graph)
+
+    const deferred = deferredRestacks.get(sessionId)
+    if (deferred) {
+      deferredRestacks.delete(sessionId)
+      for (const event of deferred) {
+        const dagGraph = activeGraphs.get(event.dagId)
+        if (dagGraph) {
+          await restackManager.onParentPushed(event, dagGraph).catch((err) => {
+            console.error(`[scheduler] deferred restack failed for node ${event.nodeId}:`, err)
+          })
+        }
+      }
+    }
   }
 
   async function cancel(dagId: string): Promise<void> {
@@ -456,6 +506,46 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     await commentUpdater(graph)
     await tickGraph(graph)
   }
+
+  bus.onKind("dag.node.pushed", async (event) => {
+    const graph = activeGraphs.get(event.dagId)
+    if (!graph) return
+
+    const idx = nodeIndex(graph)
+    const node = idx.get(event.nodeId)
+    if (!node) return
+
+    if (node.status === "running") {
+      const sessionId = node.sessionId
+      if (sessionId) {
+        if (!deferredRestacks.has(sessionId)) {
+          deferredRestacks.set(sessionId, [])
+        }
+        deferredRestacks.get(sessionId)!.push({
+          dagId: event.dagId,
+          nodeId: event.nodeId,
+          parentSha: event.parentSha,
+          newSha: event.newSha,
+          cascadeDepth: 0,
+        })
+        console.log(`[scheduler] defer restack for running node ${event.nodeId}`)
+        return
+      }
+    }
+
+    await restackManager.onParentPushed(
+      {
+        dagId: event.dagId,
+        nodeId: event.nodeId,
+        parentSha: event.parentSha,
+        newSha: event.newSha,
+        cascadeDepth: 0,
+      },
+      graph,
+    ).catch((err) => {
+      console.error(`[scheduler] restack failed for node ${event.nodeId}:`, err)
+    })
+  })
 
   return { start, onSessionCompleted, onSessionResumed, cancel, status, retryNode, forceNodeLanded, reconcileOnBoot }
 }
