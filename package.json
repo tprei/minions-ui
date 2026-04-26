@@ -29,6 +29,7 @@
     "docker:build": "docker build -f docker/engine.Dockerfile -t minions-engine ."
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
     "@preact/signals": "^2.0.2",
     "@reactflow/background": "^11.3.14",
     "@reactflow/controls": "^11.2.14",

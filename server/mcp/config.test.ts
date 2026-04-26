@@ -8,9 +8,11 @@ const MCP_ENV_KEYS = [
   'ENABLE_GITHUB_MCP',
   'ENABLE_CONTEXT7_MCP',
   'ENABLE_SUPABASE_MCP',
+  'ENABLE_MEMORY_MCP',
   'GITHUB_TOKEN',
   'GITHUB_PERSONAL_ACCESS_TOKEN',
   'SUPABASE_ACCESS_TOKEN',
+  'PORT',
 ]
 
 let snapshot: EnvSnapshot
@@ -35,10 +37,11 @@ afterEach(() => {
 })
 
 describe('buildMcpConfig', () => {
-  test('default toggles with no env vars — playwright + context7 present, github + supabase absent', () => {
+  test('default toggles with no env vars — playwright + context7 + memory present, github + supabase absent', () => {
     const cfg = buildMcpConfig()
     expect(cfg.mcpServers['playwright']).toBeDefined()
     expect(cfg.mcpServers['context7']).toBeDefined()
+    expect(cfg.mcpServers['memory']).toBeDefined()
     expect(cfg.mcpServers['github']).toBeUndefined()
     expect(cfg.mcpServers['supabase']).toBeUndefined()
   })
@@ -99,6 +102,39 @@ describe('buildMcpConfig', () => {
         expect(typeof entry.env).toBe('object')
       }
     }
+  })
+
+  test('memory server enabled by default with correct env vars', () => {
+    const cfg = buildMcpConfig({
+      memoryRepo: 'git@github.com:test/repo.git',
+      memorySessionId: 'test-session-123',
+    })
+    const memory = cfg.mcpServers['memory']
+    expect(memory).toBeDefined()
+    expect(memory!.command).toBe('bun')
+    expect(memory!.args).toEqual(['run', 'server/mcp/memory-server.ts'])
+    expect(memory!.env?.['MEMORY_REPO']).toBe('git@github.com:test/repo.git')
+    expect(memory!.env?.['MEMORY_SESSION_ID']).toBe('test-session-123')
+    expect(memory!.env?.['API_PORT']).toBe('8080')
+  })
+
+  test('ENABLE_MEMORY_MCP=false → memory absent', () => {
+    process.env['ENABLE_MEMORY_MCP'] = 'false'
+    const cfg = buildMcpConfig()
+    expect(cfg.mcpServers['memory']).toBeUndefined()
+  })
+
+  test('memory server respects PORT env var', () => {
+    process.env['PORT'] = '9090'
+    const cfg = buildMcpConfig()
+    const memory = cfg.mcpServers['memory']
+    expect(memory!.env?.['API_PORT']).toBe('9090')
+  })
+
+  test('memory server accepts custom apiPort via toggles', () => {
+    const cfg = buildMcpConfig({ apiPort: '7777' })
+    const memory = cfg.mcpServers['memory']
+    expect(memory!.env?.['API_PORT']).toBe('7777')
   })
 })
 
