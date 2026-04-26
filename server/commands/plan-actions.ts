@@ -126,7 +126,7 @@ async function buildAndStartDag(
 }
 
 
-const EXECUTE_DIRECTIVE = [
+const EXECUTE_DIRECTIVE_PLAN = [
   "Implement your plan now, in this session — do NOT wait for another turn.",
   "",
   "1. Write the code.",
@@ -135,6 +135,22 @@ const EXECUTE_DIRECTIVE = [
   "4. `git push -u origin HEAD`. Auth is preconfigured via GIT_ASKPASS.",
   "5. `gh pr create` targeting `main` (no --draft, no --no-verify). Include a short summary and a test plan.",
   "6. End your turn with a single trailing line: `PR: <url>` — so the orchestrator can link the PR.",
+  "",
+  "If blocked, end with `BLOCKED: <one-line reason>` instead of stopping silently.",
+].join("\n")
+
+const EXECUTE_DIRECTIVE_THINK = [
+  "Your previous output is research/analysis, not a concrete implementation plan.",
+  "Pick the SINGLE highest-leverage item from your analysis above and implement only that one item now. If multiple items are equally compelling, choose the smallest scope first.",
+  "Do NOT wait for another turn or ask which to pick — make the call yourself and act.",
+  "",
+  "1. State in one sentence which item you picked and why.",
+  "2. Write the code.",
+  "3. Run the unit/integration tests (NOT e2e or browser tests — too expensive).",
+  "4. `git add -A && git commit -m \"<descriptive message>\"`.",
+  "5. `git push -u origin HEAD`. Auth is preconfigured via GIT_ASKPASS.",
+  "6. `gh pr create` targeting `main` (no --draft, no --no-verify). Include a short summary and a test plan.",
+  "7. End your turn with a single trailing line: `PR: <url>` — so the orchestrator can link the PR.",
   "",
   "If blocked, end with `BLOCKED: <one-line reason>` instead of stopping silently.",
 ].join("\n")
@@ -160,7 +176,8 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
         return { ok: false, reason: "no plan/analysis to execute" }
       }
 
-      const prompt = [plan, "", EXECUTE_DIRECTIVE].join("\n")
+      const directive = mode === "think" ? EXECUTE_DIRECTIVE_THINK : EXECUTE_DIRECTIVE_PLAN
+      const prompt = [plan, "", directive].join("\n")
 
       const { session } = await ctx.registry.create({
         mode: "dag-task",
@@ -179,7 +196,7 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
 
   if (mode === "task" || mode === "dag-task" || mode === "ship-verify") {
     try {
-      const ok = await ctx.registry.reply(sessionId, EXECUTE_DIRECTIVE)
+      const ok = await ctx.registry.reply(sessionId, EXECUTE_DIRECTIVE_PLAN)
       if (!ok) return { ok: false, reason: "could not inject execute directive into session" }
       return { ok: true }
     } catch (err) {

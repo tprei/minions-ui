@@ -203,6 +203,50 @@ describe("plan-actions gating", () => {
     expect(createCalls[0]?.parentId).toBe(sessionId)
     expect(createCalls[0]?.prompt).toContain("Here is my analysis of the problem")
     expect(createCalls[0]?.prompt).toContain("gh pr create")
+    // think mode gets the "pick the highest-leverage item" directive
+    expect(createCalls[0]?.prompt).toContain("highest-leverage item")
+    expect(createCalls[0]?.prompt).toContain("research/analysis, not a concrete implementation plan")
+  })
+
+  it("uses the plain implementation directive for plan/review modes (not the think variant)", async () => {
+    const sessionId = insertSession(db, { mode: "plan" })
+    prepared.insertEvent(db, {
+      session_id: sessionId,
+      seq: 1,
+      turn: 1,
+      type: "assistant_text",
+      timestamp: Date.now(),
+      payload: { text: "Step 1: do X. Step 2: do Y.", final: true, blockId: "block-1" },
+    })
+    const createCalls: Array<{ mode: string; prompt: string }> = []
+    const mockRuntime: Partial<SessionRuntime> = {
+      running: false,
+      currentProviderSessionId: undefined,
+      start: async () => {},
+      injectInput: async () => false,
+      stop: async () => {},
+    }
+    const registry: SessionRegistry = {
+      ...makeRegistry([]),
+      create: async (opts) => {
+        createCalls.push({ mode: opts.mode, prompt: opts.prompt })
+        return {
+          session: { id: "child" } as ApiSession,
+          runtime: mockRuntime as SessionRuntime,
+        }
+      },
+    }
+    const ctx: PlanActionCtx = {
+      db,
+      registry,
+      scheduler: makeScheduler([]),
+    }
+
+    await handleExecute(sessionId, ctx)
+
+    expect(createCalls[0]?.prompt).toContain("Implement your plan now")
+    expect(createCalls[0]?.prompt).not.toContain("highest-leverage item")
+    expect(createCalls[0]?.prompt).not.toContain("research/analysis, not a concrete implementation plan")
   })
 
   it("returns ok:false when there is no plan to execute for think/plan/review modes", async () => {

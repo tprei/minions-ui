@@ -64,16 +64,20 @@ function makeFakeProc(ndjsonLines: string[], stderrText = '', exitCode = 0): Fak
   }
 
   void (async () => {
-    await new Promise<void>((r) => setTimeout(r, 5))
-    const enc = new TextEncoder()
-    for (const line of ndjsonLines) {
-      stdoutCtrl.enqueue(enc.encode(line + '\n'))
-      await new Promise<void>((r) => setTimeout(r, 1))
+    try {
+      await new Promise<void>((r) => setTimeout(r, 5))
+      const enc = new TextEncoder()
+      for (const line of ndjsonLines) {
+        stdoutCtrl.enqueue(enc.encode(line + '\n'))
+        await new Promise<void>((r) => setTimeout(r, 1))
+      }
+      stderrCtrl.enqueue(enc.encode(stderrText))
+      stderrCtrl.close()
+      stdoutCtrl.close()
+      resolveExit(exitCode)
+    } catch {
+      // proc was killed externally before pump finished; ignore double-close races
     }
-    stderrCtrl.enqueue(enc.encode(stderrText))
-    stderrCtrl.close()
-    stdoutCtrl.close()
-    resolveExit(exitCode)
   })()
 
   return sub
@@ -125,7 +129,8 @@ beforeEach(() => {
   resetEventBus()
 })
 
-afterEach(() => {
+afterEach(async () => {
+  await new Promise<void>((r) => setTimeout(r, 20))
   db.close()
 })
 
@@ -294,6 +299,51 @@ describe('SessionRuntime', () => {
 
       expect(completed).toHaveLength(1)
       expect(completed[0]?.state).toBe('errored')
+    })
+  })
+
+  describe('empty-turn detection on autoExit modes', () => {
+    test('one-shot turn that completes with no tool_call or assistant_text → errored + empty_turn status', async () => {
+      const bus = getEventBus()
+      const completed: Array<Extract<EngineEvent, { kind: 'session.completed' }>> = []
+      bus.onKind('session.completed', (e) => { completed.push(e) })
+      const streamEvents: TranscriptEvent[] = []
+      bus.onKind('session.stream', (e) => { streamEvents.push(e.event) })
+
+      const oneShotProvider: AgentProvider = {
+        name: 'claude',
+        buildSpawnArgs() {
+          return { argv: ['x'], env: {} }
+        },
+        serializeInitialInput(prompt: string) {
+          return JSON.stringify({ type: 'user', content: prompt })
+        },
+        serializeUserReply(prompt: string) {
+          return JSON.stringify({ type: 'user', content: prompt })
+        },
+        parseLine(line: string) {
+          if (line.includes('result')) {
+            return { events: [{ kind: 'turn_complete', totalTokens: null, totalCostUsd: null, numTurns: null }] }
+          }
+          return { events: [] }
+        },
+        resumeArgs: () => [],
+        isQuotaError: () => false,
+      }
+
+      currentProc = makeFakeProc(['{"type":"result"}'], '', 0)
+      const rt = new SessionRuntime({
+        ...makeOpts(currentProc, { mode: 'dag-task' }),
+        provider: oneShotProvider,
+      })
+      await rt.start()
+
+      expect(completed).toHaveLength(1)
+      expect(completed[0]?.state).toBe('errored')
+      const emptyTurnStatus = streamEvents.find(
+        (e) => e.type === 'status' && (e as { kind?: string }).kind === 'empty_turn',
+      )
+      expect(emptyTurnStatus).toBeDefined()
     })
   })
 
