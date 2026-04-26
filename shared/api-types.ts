@@ -56,6 +56,7 @@ export interface ApiDagNode {
   dependencies: string[]
   dependents: string[]
   session?: ApiSession
+  error?: string
 }
 
 export interface ApiDagGraph {
@@ -202,6 +203,7 @@ export type MinionCommand =
   | { action: 'plan_action'; sessionId: string; planAction: PlanActionType; markdown?: string }
   | { action: 'ship_advance'; sessionId: string; to?: ShipStage }
   | { action: 'land'; dagId: string; nodeId: string }
+  | { action: 'retry_rebase'; dagId: string; nodeId: string }
 
 export interface RepoEntry {
   alias: string

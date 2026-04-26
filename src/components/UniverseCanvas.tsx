@@ -70,6 +70,7 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
 
   const hasSession = Boolean(session)
   const isActive = session?.status === 'running' || session?.status === 'pending'
+  const isRebasing = data.status === 'rebasing'
   const isCoordinator = data.nodeType === 'ship'
 
   const nodeTypeLabel = data.nodeType === 'dag' ? 'DAG' : data.nodeType === 'parent-child' ? 'Tree' : null
@@ -125,6 +126,14 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
         </div>
 
         <div class="flex items-center gap-2 mt-1">
+          {isRebasing && (
+            <span class="inline-flex items-center gap-1.5 text-xs" data-testid="rebasing-indicator">
+              <span
+                class="inline-block w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin"
+                style={{ color: colors.border }}
+              />
+            </span>
+          )}
           <StatusBadge status={status} />
           {session?.needsAttention && session.attentionReasons.length > 0 && (
             <AttentionIconStack reasons={session.attentionReasons} darkMode={isDark} />
@@ -183,6 +192,7 @@ export interface UniverseCanvasProps {
   onNodeSelect?: (session: ApiSession) => void
   onOpenChat?: (sessionId: string) => void
   onViewLogs?: (sessionId: string) => void
+  onRetryRebase?: (dagId: string, nodeId: string) => Promise<void>
   accentColor?: string
 }
 
@@ -206,6 +216,7 @@ function UniverseCanvasInner({
   onNodeSelect,
   onOpenChat,
   onViewLogs,
+  onRetryRebase,
 }: UniverseCanvasProps) {
   const theme = useTheme()
   const isDark = theme.value === 'dark'
@@ -431,6 +442,7 @@ function UniverseCanvasInner({
           sessions={sessions}
           dags={dags}
           onSelectSession={(s) => setDetailSession(s)}
+          onRetryRebase={onRetryRebase}
         />
       )}
     </div>

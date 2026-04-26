@@ -424,4 +424,28 @@ describe('UniverseCanvas', () => {
       throw new Error('dag node not found')
     }
   })
+
+  it('renders rebasing spinner indicator when node status is rebasing', () => {
+    const dag = createDag({
+      nodes: {
+        'node-1': {
+          id: 'node-1',
+          slug: 'rebasing-node',
+          status: 'rebasing',
+          dependencies: [],
+          dependents: [],
+          session: createSession({ id: 'dag-session-1', slug: 'rebasing-node', status: 'running' }),
+        },
+      },
+    })
+    render(<UniverseCanvas {...defaultProps} dags={[dag]} />)
+    const rebasingIndicator = document.querySelector('[data-testid="rebasing-indicator"]')
+    expect(rebasingIndicator).toBeTruthy()
+  })
+
+  it('does not render rebasing spinner for non-rebasing nodes', () => {
+    const sessions = [createSession({ id: 's1', slug: 'normal-node', status: 'running' })]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    expect(document.querySelector('[data-testid="rebasing-indicator"]')).toBeFalsy()
+  })
 })

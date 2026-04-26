@@ -9,6 +9,7 @@ import { prepared } from "../db/sqlite"
 
 export interface PlanScheduler {
   start(dagId: string): Promise<void>
+  retryNode?(nodeId: string, dagId: string): Promise<void>
 }
 
 export interface PlanActionCtx {
