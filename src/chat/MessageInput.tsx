@@ -4,6 +4,7 @@ import type { ConnectionStore } from '../state/types'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { useImageAttachments, type ImageAttachment } from './ImageAttachments'
 import { hasFeature } from '../api/features'
+import { vibrateLight, MIN_TOUCH_TARGET_SIZE } from '../a11y'
 
 const PLACEHOLDER = 'Send instructions to the agent — Enter to send, Shift+Enter for newline'
 
@@ -81,6 +82,7 @@ export function MessageInput({ store, value, onValueChange, onSend }: MessageInp
         setErrorText('This engine does not advertise image support — needs sessions-create-images feature.')
         return
       }
+      vibrateLight()
       pendingRef.current = { text: trimmed, images: currentAttachments }
       setErrorText(null)
       setSending(true)
@@ -202,6 +204,7 @@ export function MessageInput({ store, value, onValueChange, onSend }: MessageInp
                 ? 'bg-red-600 hover:bg-red-700 active:bg-red-800 text-white border-red-600'
                 : 'bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600'
             }`}
+            style={{ minWidth: `${MIN_TOUCH_TARGET_SIZE}px`, minHeight: `${MIN_TOUCH_TARGET_SIZE}px` }}
             data-testid="mic-btn"
           >
             <MicIcon recording={recording} />
@@ -212,6 +215,7 @@ export function MessageInput({ store, value, onValueChange, onSend }: MessageInp
           onClick={() => void submit(value, attachments)}
           disabled={sending || (!trimmed && attachments.length === 0)}
           class="shrink-0 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors text-white shadow-sm bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ minWidth: `${MIN_TOUCH_TARGET_SIZE}px`, minHeight: `${MIN_TOUCH_TARGET_SIZE}px` }}
           data-testid="send-btn"
           aria-label={sending ? 'Sending' : 'Send'}
         >
@@ -235,7 +239,7 @@ function ComposerToolbar({
 }) {
   return (
     <div
-      class="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400"
+      class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400"
       data-testid="composer-toolbar"
     >
       <Kbd>Enter</Kbd>
@@ -281,7 +285,7 @@ function ComposerToolbar({
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd class="rounded border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 px-1 py-px font-mono text-[10px] text-slate-600 dark:text-slate-300">
+    <kbd class="rounded border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 px-1 py-px font-mono text-xs text-slate-600 dark:text-slate-300">
       {children}
     </kbd>
   )

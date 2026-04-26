@@ -144,6 +144,28 @@ describe('MessageInput', () => {
     expect(placeholder.toLowerCase()).not.toContain('telegram')
     expect(placeholder).toContain('agent')
   })
+
+  it('Send button meets 44px touch target minimum', () => {
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    const sendBtn = getSendBtn()
+    expect(sendBtn.style.minWidth).toBe('44px')
+    expect(sendBtn.style.minHeight).toBe('44px')
+  })
+
+  it('triggers haptic feedback on send', async () => {
+    const vibrateSpy = vi.fn()
+    Object.defineProperty(navigator, 'vibrate', {
+      writable: true,
+      value: vibrateSpy,
+    })
+
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    render(<Controlled onSend={onSend} />)
+    fireEvent.input(getTextarea(), { target: { value: 'test haptics' } })
+    fireEvent.click(getSendBtn())
+
+    await waitFor(() => expect(vibrateSpy).toHaveBeenCalledWith(10))
+  })
 })
 
 describe('MessageInput · voice input', () => {
@@ -200,6 +222,35 @@ describe('MessageInput · voice input', () => {
       fireEvent.click(mic)
     })
     await waitFor(() => expect(mic.getAttribute('aria-pressed')).toBe('false'))
+  })
+
+  it('Mic button meets 44px touch target minimum when supported', () => {
+    class FakeRec extends EventTarget implements SpeechRecognition {
+      continuous = false
+      interimResults = false
+      lang = ''
+      maxAlternatives = 1
+      onstart: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null = null
+      onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null = null
+      onend: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      start() {
+        this.onstart?.call(this, new Event('start'))
+      }
+      stop() {
+        this.onend?.call(this, new Event('end'))
+      }
+      abort() {
+        this.onend?.call(this, new Event('end'))
+      }
+    }
+    w.SpeechRecognition = FakeRec as unknown as SpeechRecognitionConstructor
+    delete w.webkitSpeechRecognition
+
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    const micBtn = screen.getByTestId('mic-btn') as HTMLButtonElement
+    expect(micBtn.style.minWidth).toBe('44px')
+    expect(micBtn.style.minHeight).toBe('44px')
   })
 
   it('appends final transcript to existing input', async () => {
