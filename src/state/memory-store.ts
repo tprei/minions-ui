@@ -39,9 +39,13 @@ export function createMemoryStore(client: ApiClient): MemoryStore {
       const statusParam =
         filters.value.status && filters.value.status !== 'all' ? filters.value.status : undefined
       const result = await client.getMemories(filters.value.query, statusParam)
+      if (!Array.isArray(result)) {
+        throw new Error('Invalid response: expected array of memories')
+      }
       memories.value = result
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e)
+      memories.value = []
     } finally {
       loading.value = false
       fetchInFlight = false
