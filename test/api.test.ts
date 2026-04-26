@@ -230,6 +230,81 @@ describe('ApiClient', () => {
     handle.close()
   })
 
+  it('openEventStream keeps the stream live across proxied snapshot closes', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+
+    const statuses: string[] = []
+    const reconnects: boolean[] = []
+    const handle = openEventStream({
+      baseUrl: BASE_URL,
+      token: TOKEN,
+      handlers: {
+        onEvent: () => {},
+        onStatusChange: (status) => statuses.push(status),
+        onReconnect: (event) => reconnects.push(event.quiet),
+      },
+      quietTimeoutMs: 1000,
+    })
+
+    const instance = [...mock.instances.values()][0]
+    instance.simulateOpen()
+    instance.dispatchEvent(new Event('keepalive'))
+    instance.simulateError()
+
+    expect(handle.status.value).toBe('live')
+    expect(handle.reconnectAt.value).toBeNull()
+    expect(statuses).not.toContain('retrying')
+    expect(reconnects).toEqual([false])
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    const reconnected = [...mock.instances.values()][0]
+    reconnected.simulateOpen()
+
+    expect(mock.constructedUrls).toHaveLength(2)
+    expect(handle.status.value).toBe('live')
+    expect(handle.reconnectAt.value).toBeNull()
+    expect(statuses).not.toContain('retrying')
+    expect(statuses.filter((status) => status === 'connecting')).toHaveLength(1)
+    expect(reconnects).toEqual([false, true])
+
+    handle.close()
+  })
+
+  it('openEventStream surfaces retrying when a quiet reconnect gets no activity', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+
+    const statuses: string[] = []
+    const handle = openEventStream({
+      baseUrl: BASE_URL,
+      token: TOKEN,
+      handlers: {
+        onEvent: () => {},
+        onStatusChange: (status) => statuses.push(status),
+      },
+      quietTimeoutMs: 1000,
+    })
+
+    const first = [...mock.instances.values()][0]
+    first.simulateOpen()
+    first.dispatchEvent(new Event('keepalive'))
+    first.simulateError()
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    const second = [...mock.instances.values()][0]
+    second.simulateOpen()
+    second.simulateError()
+
+    expect(handle.status.value).toBe('retrying')
+    expect(handle.reconnectAt.value).not.toBeNull()
+    expect(statuses).toContain('retrying')
+
+    handle.close()
+  })
+
   it('strips trailing slash from baseUrl', async () => {
     const fetchMock = mockFetch({ data: { apiVersion: '1', libraryVersion: '0.0.1', features: [] } as VersionInfo })
     vi.stubGlobal('fetch', fetchMock)

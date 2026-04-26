@@ -197,7 +197,8 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     onStatusChange(s: SseStatus) {
       status.value = s
     },
-    onReconnect() {
+    onReconnect(event) {
+      if (event.quiet) return
       void refresh()
       for (const ts of transcripts.values()) {
         void ts.reconcile()

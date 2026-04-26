@@ -83,6 +83,7 @@ describe('ConnectionStore SSE events', () => {
     mock.restore()
     vi.unstubAllGlobals()
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   function setup(initialSessions: ApiSession[] = [], initialDags: ApiDagGraph[] = []) {
@@ -178,6 +179,33 @@ describe('ConnectionStore SSE events', () => {
     await Promise.resolve()
 
     expect(fetchMock.mock.calls.length).toBeGreaterThan(countBefore)
+    store.dispose()
+  })
+
+  it('quiet reconnect does not trigger refresh', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+
+    const fetchMock = makeResponses()
+    vi.stubGlobal('fetch', fetchMock)
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'test-conn')
+    const first = [...mock.instances.values()][0] as MockEventSource
+
+    await Promise.resolve()
+    first.simulateOpen()
+    await Promise.resolve()
+    const countBeforeQuietReconnect = fetchMock.mock.calls.length
+
+    first.dispatchEvent(new Event('keepalive'))
+    first.simulateError()
+    await vi.advanceTimersByTimeAsync(1000)
+
+    const second = [...mock.instances.values()][0] as MockEventSource
+    second.simulateOpen()
+    await Promise.resolve()
+
+    expect(fetchMock.mock.calls.length).toBe(countBeforeQuietReconnect)
     store.dispose()
   })
 
