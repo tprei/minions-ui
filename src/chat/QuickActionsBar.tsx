@@ -40,7 +40,7 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
             }
           }}
           disabled={stageConfig.disabled}
-          class={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${btnClass}`}
+          class={`text-xs font-medium px-4 py-3 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
           data-testid="ship-advance-btn"
         >
           {stageConfig.label}
@@ -65,7 +65,7 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
         <button
           key={action.type}
           onClick={() => void onAction(action)}
-          class={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${btnClass}`}
+          class={`text-xs font-medium px-4 py-3 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
         >
           {action.label}
         </button>

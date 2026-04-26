@@ -55,7 +55,7 @@ export const viewMode = signal<ViewMode>('list')
 
 function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
   const tabClass = (active: boolean) =>
-    `px-1.5 sm:px-2.5 py-1 text-xs font-medium transition-colors ${
+    `px-3 sm:px-4 py-2.5 text-xs font-medium transition-colors min-h-[44px] flex items-center ${
       active
         ? 'bg-indigo-600 text-white'
         : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -259,7 +259,7 @@ function ChatPane({
           <button
             type="button"
             onClick={() => onNavigate(parentSession.id)}
-            class="shrink-0 rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+            class="shrink-0 rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-2.5 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700 min-h-[44px]"
             title={`Back to parent: ${parentSession.slug}`}
             data-testid="chat-pane-parent-btn"
           >
@@ -289,7 +289,7 @@ function ChatPane({
               onClick={toggleFullscreen}
               title={fullscreen ? 'Exit full screen' : 'Expand chat to full screen'}
               aria-label={fullscreen ? 'Exit full screen' : 'Expand chat to full screen'}
-              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-2.5 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700 min-h-[44px]"
               data-testid="chat-fullscreen-btn"
             >
               {fullscreen ? 'Collapse' : 'Expand'}
@@ -300,7 +300,7 @@ function ChatPane({
             onClick={() => void handleStop()}
             disabled={!stoppable || pending !== null}
             title={stoppable ? 'Stop this session' : 'Session is not running'}
-            class="rounded-md border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 text-xs font-medium hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-40 disabled:cursor-not-allowed"
+            class="rounded-md border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 px-3 py-2.5 text-xs font-medium hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-40 disabled:cursor-not-allowed min-h-[44px]"
             data-testid="chat-stop-btn"
           >
             {pending === 'stop' ? 'Stopping…' : 'Stop'}
@@ -310,7 +310,7 @@ function ChatPane({
             onClick={() => void handleClose()}
             disabled={pending !== null}
             title="Close this session permanently"
-            class="rounded-md border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 px-2 py-1 text-xs font-medium hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-40 disabled:cursor-not-allowed"
+            class="rounded-md border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 px-3 py-2.5 text-xs font-medium hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-40 disabled:cursor-not-allowed min-h-[44px]"
             data-testid="chat-close-btn"
           >
             {pending === 'close' ? 'Closing…' : 'Close'}
@@ -567,7 +567,7 @@ function MobileSessionStrip({
       <button
         type="button"
         onClick={toggle}
-        class="absolute right-1.5 top-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-1.5 text-[10px] font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+        class="absolute right-1.5 top-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-3 py-2.5 text-[10px] font-medium hover:bg-slate-100 dark:hover:bg-slate-700 min-h-[44px] min-w-[44px]"
         title="Collapse the session strip"
         aria-label="Collapse session strip"
         data-testid="mobile-strip-collapse"
@@ -800,7 +800,7 @@ function ActiveView() {
               <button
                 type="button"
                 onClick={() => { showMemory.value = true }}
-                class="relative rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+                class="relative rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 min-h-[44px] min-w-[44px] flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
                 title="Memory proposals"
                 aria-label="Open memory drawer"
                 data-testid="header-memory-btn"
@@ -820,7 +820,7 @@ function ActiveView() {
               <button
                 type="button"
                 onClick={() => { showRuntime.value = 'config' }}
-                class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+                class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 min-h-[44px] min-w-[44px] flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
                 title="Runtime config"
                 aria-label="Open runtime config"
                 data-testid="header-runtime-config-btn"
@@ -833,7 +833,7 @@ function ActiveView() {
                 type="button"
                 onClick={() => void handleClean()}
                 disabled={cleaning}
-                class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 min-h-[44px] min-w-[44px] flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 title={cleaning ? 'Cleaning…' : 'Clean unused worktrees, branches, and session state'}
                 aria-label={cleaning ? 'Cleaning…' : 'Clean unused worktrees, branches, and session state'}
                 data-testid="header-clean-btn"
@@ -844,7 +844,7 @@ function ActiveView() {
             <button
               type="button"
               onClick={() => void store.refresh()}
-              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 min-h-[44px] min-w-[44px] flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
               title="Refetch sessions and DAGs from the minion"
               aria-label="Refetch sessions and DAGs from the minion"
               data-testid="header-refresh-btn"
@@ -965,7 +965,7 @@ function ActiveView() {
             <button
               type="button"
               onClick={() => { viewMode.value = 'list' }}
-              class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+              class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-2.5 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700 min-h-[44px]"
               data-testid="canvas-mobile-close"
               aria-label="Close canvas"
             >
@@ -987,7 +987,7 @@ function ActiveView() {
             <button
               type="button"
               onClick={() => { viewMode.value = 'list' }}
-              class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+              class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-2.5 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700 min-h-[44px]"
               data-testid="ship-mobile-close"
               aria-label="Close ship view"
             >
@@ -1063,7 +1063,7 @@ function PwaController() {
         <button
           type="button"
           onClick={() => void sw.updateServiceWorker(true)}
-          class="pointer-events-auto rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+          class="pointer-events-auto rounded-md bg-indigo-600 px-3 py-2.5 text-xs font-medium text-white hover:bg-indigo-700 min-h-[44px]"
           data-testid="pwa-update-reload"
         >
           Reload
@@ -1072,7 +1072,7 @@ function PwaController() {
       <button
         type="button"
         onClick={close}
-        class="pointer-events-auto rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
+        class="pointer-events-auto rounded-md border border-slate-300 dark:border-slate-600 px-3 py-2.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 min-h-[44px]"
         data-testid="pwa-status-dismiss"
       >
         Dismiss
@@ -1096,7 +1096,7 @@ export default function App() {
               </p>
               <button
                 onClick={() => { showSettings.value = true }}
-                class="mt-2 w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                class="mt-2 w-full rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white hover:bg-indigo-700 min-h-[44px]"
               >
                 Add connection
               </button>
