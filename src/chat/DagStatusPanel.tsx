@@ -108,7 +108,11 @@ export function DagStatusPanel({ session, store, onSelect, onLand }: DagStatusPa
   const parent = parentSession.value
   const isViewingParent = !!parent && parent.id === session.id
 
-  const nodes = Object.values(graph.nodes)
+  const nodes = Object.values(graph.nodes).sort((a, b) => {
+    const aNum = parseInt(a.id.match(/\d+$/)?.[0] ?? '0', 10)
+    const bNum = parseInt(b.id.match(/\d+$/)?.[0] ?? '0', 10)
+    return aNum - bNum
+  })
   const done = nodes.filter((n) => n.status === 'completed' || n.status === 'landed').length
   const running = nodes.filter((n) => n.status === 'running' || n.status === 'ci-pending').length
   const failed = nodes.filter((n) => n.status === 'failed' || n.status === 'ci-failed').length
