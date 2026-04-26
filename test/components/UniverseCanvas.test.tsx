@@ -138,8 +138,15 @@ const defaultProps = {
 }
 
 describe('UniverseCanvas', () => {
+  let vibrateSpy: ReturnType<typeof vi.fn>
+
   beforeEach(() => {
     vi.clearAllMocks()
+    vibrateSpy = vi.fn()
+    Object.defineProperty(navigator, 'vibrate', {
+      writable: true,
+      value: vibrateSpy,
+    })
   })
 
   afterEach(() => {
@@ -447,5 +454,39 @@ describe('UniverseCanvas', () => {
     const sessions = [createSession({ id: 's1', slug: 'normal-node', status: 'running' })]
     render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
     expect(document.querySelector('[data-testid="rebasing-indicator"]')).toBeFalsy()
+  })
+
+  it('renders fit-to-screen button', () => {
+    const sessions = [createSession()]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    const button = document.querySelector('[data-testid="fit-to-screen-button"]')
+    expect(button).toBeTruthy()
+    expect(button?.textContent).toContain('Fit')
+  })
+
+  it('triggers haptic feedback when fit-to-screen button is clicked', () => {
+    const sessions = [createSession()]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    const button = document.querySelector('[data-testid="fit-to-screen-button"]')
+    expect(button).toBeTruthy()
+
+    if (button) {
+      fireEvent.click(button)
+      expect(vibrateSpy).toHaveBeenCalledWith(10)
+    }
+  })
+
+  it('fit-to-screen button has proper touch target size', () => {
+    const sessions = [createSession()]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    const button = document.querySelector('[data-testid="fit-to-screen-button"]') as HTMLElement
+    expect(button).toBeTruthy()
+
+    if (button) {
+      const minWidth = parseInt(button.style.minWidth)
+      const minHeight = parseInt(button.style.minHeight)
+      expect(minWidth).toBeGreaterThanOrEqual(44)
+      expect(minHeight).toBeGreaterThanOrEqual(44)
+    }
   })
 })

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'preact/hooks'
 import type { ApiSession, QuickAction } from '../api/types'
 import { useTheme } from '../hooks/useTheme'
 import { ConfirmDialog, ReplyDialog } from './ConfirmDialog'
+import { vibrateHeavy } from '../a11y'
 
 export interface ContextMenuPosition {
   x: number
@@ -341,9 +342,7 @@ export function useLongPress(
         if (touchPosRef.current) {
           triggeredRef.current = true
           e.preventDefault()
-          if (navigator.vibrate) {
-            navigator.vibrate(50)
-          }
+          vibrateHeavy()
           onLongPress(touchPosRef.current)
         }
       }, LONG_PRESS_DURATION)

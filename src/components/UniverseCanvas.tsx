@@ -30,6 +30,7 @@ const NODE_WIDTH_HALF = NODE_WIDTH / 2
 const NODE_HEIGHT_HALF = NODE_HEIGHT / 2
 import { NodeDetailPopup } from './NodeDetailPopup'
 import { useTheme } from '../hooks/useTheme'
+import { vibrateLight, MIN_TOUCH_TARGET_SIZE } from '../a11y'
 
 interface UniverseNodeData {
   session?: ApiSession
@@ -178,6 +179,63 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
 
 const nodeTypes = {
   universeNode: UniverseNodeComponent,
+}
+
+interface FitToScreenButtonProps {
+  onClick: () => void
+  isDark: boolean
+}
+
+function FitToScreenButton({ onClick, isDark }: FitToScreenButtonProps) {
+  const handleClick = useCallback(() => {
+    vibrateLight()
+    onClick()
+  }, [onClick])
+
+  const bgColor = isDark ? 'rgba(31, 41, 55, 0.9)' : 'rgba(255, 255, 255, 0.9)'
+  const borderColor = isDark ? 'rgba(75, 85, 99, 1)' : 'rgba(229, 231, 235, 1)'
+  const textColor = isDark ? 'rgba(156, 163, 175, 1)' : 'rgba(75, 85, 99, 1)'
+  const hoverBg = isDark ? 'rgba(55, 65, 81, 0.9)' : 'rgba(243, 244, 246, 0.9)'
+
+  return (
+    <button
+      onClick={handleClick}
+      aria-label="Fit to screen"
+      data-testid="fit-to-screen-button"
+      style={{
+        position: 'absolute',
+        bottom: '16px',
+        left: '16px',
+        zIndex: 10,
+        minWidth: `${MIN_TOUCH_TARGET_SIZE}px`,
+        minHeight: `${MIN_TOUCH_TARGET_SIZE}px`,
+        padding: '10px 12px',
+        backgroundColor: bgColor,
+        border: `1px solid ${borderColor}`,
+        borderRadius: '8px',
+        color: textColor,
+        fontSize: '13px',
+        fontWeight: '500',
+        cursor: 'pointer',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        transition: 'background-color 0.2s ease',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = hoverBg
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = bgColor
+      }}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 5L2 2L5 2M14 5V2L11 2M2 11L2 14L5 14M14 11V14L11 14" />
+      </svg>
+      <span>Fit</span>
+    </button>
+  )
 }
 
 export interface UniverseCanvasProps {
@@ -344,6 +402,10 @@ function UniverseCanvasInner({
     [layoutNodes, reactFlow]
   )
 
+  const handleFitToScreen = useCallback(() => {
+    reactFlow.fitView({ padding: 0.3, duration: 400 })
+  }, [reactFlow])
+
   const contextMenuActions: ContextMenuActions = useMemo(
     () => ({
       onSendReply,
@@ -422,6 +484,8 @@ function UniverseCanvasInner({
           style={{ filter: isDark ? 'invert(0.8) hue-rotate(180deg)' : undefined }}
         />
       </ReactFlow>
+
+      <FitToScreenButton onClick={handleFitToScreen} isDark={isDark} />
 
       {contextMenu.state.session && contextMenu.state.position && (
         <ContextMenu

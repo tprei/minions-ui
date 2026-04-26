@@ -510,6 +510,16 @@ describe('ContextMenu', () => {
 })
 
 describe('useLongPress', () => {
+  let vibrateSpy: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vibrateSpy = vi.fn()
+    Object.defineProperty(navigator, 'vibrate', {
+      writable: true,
+      value: vibrateSpy,
+    })
+  })
+
   afterEach(() => {
     cleanup()
     vi.useRealTimers()
@@ -585,6 +595,44 @@ describe('useLongPress', () => {
     vi.advanceTimersByTime(300)
 
     expect(onLongPress).not.toHaveBeenCalled()
+  })
+
+  it('triggers haptic feedback on long press', () => {
+    vi.useFakeTimers()
+    const onLongPress = vi.fn()
+    const onContextMenu = vi.fn()
+
+    const { result } = renderHook(() => useLongPress(onLongPress, onContextMenu))
+
+    const touchEvent = {
+      touches: [{ clientX: 100, clientY: 200 }],
+      preventDefault: vi.fn(),
+    } as unknown as TouchEvent
+
+    result.current.onTouchStart(touchEvent)
+    vi.advanceTimersByTime(500)
+
+    expect(vibrateSpy).toHaveBeenCalledWith(50)
+    expect(onLongPress).toHaveBeenCalledWith({ x: 100, y: 200 })
+  })
+
+  it('does not trigger haptic if touch is released early', () => {
+    vi.useFakeTimers()
+    const onLongPress = vi.fn()
+    const onContextMenu = vi.fn()
+
+    const { result } = renderHook(() => useLongPress(onLongPress, onContextMenu))
+
+    const touchEvent = {
+      touches: [{ clientX: 100, clientY: 200 }],
+      preventDefault: vi.fn(),
+    } as unknown as TouchEvent
+
+    result.current.onTouchStart(touchEvent)
+    vi.advanceTimersByTime(200)
+    result.current.onTouchEnd()
+
+    expect(vibrateSpy).not.toHaveBeenCalled()
   })
 })
 
