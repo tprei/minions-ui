@@ -42,12 +42,18 @@ function createSession(overrides: Partial<ApiSession> = {}): ApiSession {
 
 describe('QuickActionsBar', () => {
   describe('non-ship modes', () => {
-    it('renders N buttons for N actions', () => {
+    it('renders all buttons when under threshold (desktop)', () => {
+      window.matchMedia = vi.fn().mockImplementation((query) => ({
+        matches: query !== '(max-width: 767px)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
       const session = createSession()
       render(<QuickActionsBar session={session} onAction={vi.fn().mockResolvedValue(undefined)} />)
       expect(screen.getByText('Make PR')).toBeTruthy()
       expect(screen.getByText('Retry')).toBeTruthy()
       expect(screen.getByText('Resume')).toBeTruthy()
+      expect(screen.queryByTestId('quick-actions-menu-trigger')).toBeNull()
     })
 
     it('renders nothing when actions is empty', () => {
@@ -59,6 +65,11 @@ describe('QuickActionsBar', () => {
     })
 
     it('calls onAction with the matching QuickAction when button is clicked', async () => {
+      window.matchMedia = vi.fn().mockImplementation((query) => ({
+        matches: query !== '(max-width: 767px)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
       const session = createSession()
       const onAction = vi.fn().mockResolvedValue(undefined)
       render(<QuickActionsBar session={session} onAction={onAction} />)
@@ -67,6 +78,11 @@ describe('QuickActionsBar', () => {
     })
 
     it('calls onAction with the correct action for each button', async () => {
+      window.matchMedia = vi.fn().mockImplementation((query) => ({
+        matches: query !== '(max-width: 767px)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
       const session = createSession()
       const onAction = vi.fn().mockResolvedValue(undefined)
       render(<QuickActionsBar session={session} onAction={onAction} />)
@@ -74,6 +90,86 @@ describe('QuickActionsBar', () => {
       expect(onAction).toHaveBeenCalledWith(actions[1])
       fireEvent.click(screen.getByText('Resume'))
       expect(onAction).toHaveBeenCalledWith(actions[2])
+    })
+
+    it('shows overflow menu on mobile when more than 2 actions', () => {
+      window.matchMedia = vi.fn().mockImplementation((query) => ({
+        matches: query === '(max-width: 767px)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
+      const session = createSession()
+      render(<QuickActionsBar session={session} onAction={vi.fn().mockResolvedValue(undefined)} />)
+      expect(screen.getByText('Make PR')).toBeTruthy()
+      expect(screen.getByText('Retry')).toBeTruthy()
+      expect(screen.queryByText('Resume')).toBeNull()
+      expect(screen.getByTestId('quick-actions-menu-trigger')).toBeTruthy()
+    })
+
+    it('shows overflow menu on desktop when more than 5 actions', () => {
+      window.matchMedia = vi.fn().mockImplementation((query) => ({
+        matches: query !== '(max-width: 767px)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
+      const manyActions: QuickAction[] = [
+        { type: 'action1', label: 'Action 1', message: '/a1' },
+        { type: 'action2', label: 'Action 2', message: '/a2' },
+        { type: 'action3', label: 'Action 3', message: '/a3' },
+        { type: 'action4', label: 'Action 4', message: '/a4' },
+        { type: 'action5', label: 'Action 5', message: '/a5' },
+        { type: 'action6', label: 'Action 6', message: '/a6' },
+      ]
+      const session = createSession({ quickActions: manyActions })
+      render(<QuickActionsBar session={session} onAction={vi.fn().mockResolvedValue(undefined)} />)
+      expect(screen.getByText('Action 1')).toBeTruthy()
+      expect(screen.getByText('Action 5')).toBeTruthy()
+      expect(screen.queryByText('Action 6')).toBeNull()
+      expect(screen.getByTestId('quick-actions-menu-trigger')).toBeTruthy()
+    })
+
+    it('opens overflow menu when trigger is clicked', () => {
+      window.matchMedia = vi.fn().mockImplementation((query) => ({
+        matches: query === '(max-width: 767px)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
+      const session = createSession()
+      render(<QuickActionsBar session={session} onAction={vi.fn().mockResolvedValue(undefined)} />)
+      expect(screen.queryByTestId('quick-actions-menu')).toBeNull()
+      fireEvent.click(screen.getByTestId('quick-actions-menu-trigger'))
+      expect(screen.getByTestId('quick-actions-menu')).toBeTruthy()
+      expect(screen.getByText('Resume')).toBeTruthy()
+    })
+
+    it('calls onAction and closes menu when overflow action is clicked', () => {
+      window.matchMedia = vi.fn().mockImplementation((query) => ({
+        matches: query === '(max-width: 767px)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
+      const session = createSession()
+      const onAction = vi.fn().mockResolvedValue(undefined)
+      render(<QuickActionsBar session={session} onAction={onAction} />)
+      fireEvent.click(screen.getByTestId('quick-actions-menu-trigger'))
+      expect(screen.getByTestId('quick-actions-menu')).toBeTruthy()
+      fireEvent.click(screen.getByText('Resume'))
+      expect(onAction).toHaveBeenCalledWith(actions[2])
+      expect(screen.queryByTestId('quick-actions-menu')).toBeNull()
+    })
+
+    it('closes menu when clicking outside', () => {
+      window.matchMedia = vi.fn().mockImplementation((query) => ({
+        matches: query === '(max-width: 767px)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
+      const session = createSession()
+      render(<QuickActionsBar session={session} onAction={vi.fn().mockResolvedValue(undefined)} />)
+      fireEvent.click(screen.getByTestId('quick-actions-menu-trigger'))
+      expect(screen.getByTestId('quick-actions-menu')).toBeTruthy()
+      fireEvent.mouseDown(document.body)
+      expect(screen.queryByTestId('quick-actions-menu')).toBeNull()
     })
   })
 

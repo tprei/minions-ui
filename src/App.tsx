@@ -508,6 +508,7 @@ function MobileSessionStrip({
   const [collapsed, setCollapsed] = useState<boolean>(() =>
     typeof localStorage !== 'undefined' && localStorage.getItem('minions-ui:mobile-strip-collapsed') === 'true',
   )
+  const wasCollapsedRef = useRef(collapsed)
 
   function toggle() {
     const next = !collapsed
@@ -516,14 +517,15 @@ function MobileSessionStrip({
   }
 
   // Auto-expand when the active session changes so the user can actually see
-  // the focus-pulse + horizontal scroll-into-view. The preference is not
-  // persisted on this code path — manual collapses still stick.
+  // the focus-pulse + horizontal scroll-into-view. Delay the scroll slightly
+  // when transitioning from collapsed to give the layout time to settle.
   useEffect(() => {
     if (!activeSessionId) return
+    wasCollapsedRef.current = collapsed
     if (collapsed) setCollapsed(false)
     // Intentionally not persisting here; user's explicit collapse wins on next
     // navigation if they toggle again.
-  }, [activeSessionId])
+  }, [activeSessionId, collapsed])
 
   if (sessions.length === 0) {
     return (
@@ -533,47 +535,48 @@ function MobileSessionStrip({
     )
   }
 
-  if (collapsed) {
-    const activeSlug = sessions.find((s) => s.id === activeSessionId)?.slug
-    return (
-      <button
-        type="button"
-        onClick={toggle}
-        class="w-full flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-left"
-        data-testid="mobile-strip-expand"
-      >
-        <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">Sessions</span>
-        <span class="text-xs font-mono text-slate-600 dark:text-slate-300">{sessions.length}</span>
-        {activeSlug && (
-          <>
-            <span class="text-slate-400 dark:text-slate-500">·</span>
-            <span class="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{activeSlug}</span>
-          </>
-        )}
-        <span class="ml-auto text-[10px] text-slate-500 dark:text-slate-400">expand ▾</span>
-      </button>
-    )
-  }
+  const activeSlug = sessions.find((s) => s.id === activeSessionId)?.slug
 
   return (
-    <div class="relative">
-      <SessionList
-        sessions={sessions}
-        dags={dags}
-        activeSessionId={activeSessionId}
-        onSelect={onSelect}
-        orientation="horizontal"
-      />
-      <button
-        type="button"
-        onClick={toggle}
-        class="absolute right-1.5 top-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-1.5 text-[10px] font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
-        title="Collapse the session strip"
-        aria-label="Collapse session strip"
-        data-testid="mobile-strip-collapse"
-      >
-        ▴
-      </button>
+    <div class="relative border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+      {collapsed ? (
+        <button
+          type="button"
+          onClick={toggle}
+          class="w-full flex items-center gap-2 px-3 py-2 text-left"
+          data-testid="mobile-strip-expand"
+        >
+          <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">Sessions</span>
+          <span class="text-xs font-mono text-slate-600 dark:text-slate-300">{sessions.length}</span>
+          {activeSlug && (
+            <>
+              <span class="text-slate-400 dark:text-slate-500">·</span>
+              <span class="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{activeSlug}</span>
+            </>
+          )}
+          <span class="ml-auto text-[10px] text-slate-500 dark:text-slate-400">expand ▾</span>
+        </button>
+      ) : (
+        <div class="relative">
+          <SessionList
+            sessions={sessions}
+            dags={dags}
+            activeSessionId={activeSessionId}
+            onSelect={onSelect}
+            orientation="horizontal"
+          />
+          <button
+            type="button"
+            onClick={toggle}
+            class="absolute right-1.5 top-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-1.5 text-[10px] font-medium hover:bg-slate-100 dark:hover:bg-slate-700 z-10"
+            title="Collapse the session strip"
+            aria-label="Collapse session strip"
+            data-testid="mobile-strip-collapse"
+          >
+            ▴
+          </button>
+        </div>
+      )}
     </div>
   )
 }

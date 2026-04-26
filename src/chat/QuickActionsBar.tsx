@@ -1,5 +1,7 @@
+import { useState, useRef, useEffect } from 'preact/hooks'
 import type { QuickAction, ApiSession, ShipStage } from '../api/types'
 import { useTheme } from '../hooks/useTheme'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 
 interface QuickActionsBarProps {
   session: ApiSession
@@ -10,6 +12,20 @@ interface QuickActionsBarProps {
 export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActionsBarProps) {
   const theme = useTheme()
   const isDark = theme.value === 'dark'
+  const isMobile = useMediaQuery('(max-width: 767px)')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuOpen])
 
   if (session.mode === 'ship' && session.stage) {
     if (session.stage === 'done') return null
@@ -29,7 +45,7 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
 
     return (
       <div
-        class="flex flex-wrap gap-2 px-4 py-2 border-t"
+        class="flex gap-2 px-4 py-2 border-t"
         style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}
         data-testid="quick-actions-bar"
       >
@@ -55,13 +71,18 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
     ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-600'
     : 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-200'
 
+  const actions = session.quickActions
+  const maxVisible = isMobile.value ? 2 : 5
+  const visibleActions = actions.slice(0, maxVisible)
+  const overflowActions = actions.slice(maxVisible)
+
   return (
     <div
-      class="flex flex-wrap gap-2 px-4 py-2 border-t"
+      class="flex gap-2 px-4 py-2 border-t"
       style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}
       data-testid="quick-actions-bar"
     >
-      {session.quickActions.map((action) => (
+      {visibleActions.map((action) => (
         <button
           key={action.type}
           onClick={() => void onAction(action)}
@@ -70,6 +91,46 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
           {action.label}
         </button>
       ))}
+      {overflowActions.length > 0 && (
+        <div class="relative" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            class={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${btnClass}`}
+            aria-label="More actions"
+            aria-expanded={menuOpen}
+            data-testid="quick-actions-menu-trigger"
+          >
+            ⋯
+          </button>
+          {menuOpen && (
+            <div
+              class={`absolute bottom-full right-0 mb-1 min-w-[160px] rounded-md shadow-lg border ${
+                isDark
+                  ? 'bg-gray-800 border-gray-600'
+                  : 'bg-white border-gray-200'
+              }`}
+              data-testid="quick-actions-menu"
+            >
+              {overflowActions.map((action) => (
+                <button
+                  key={action.type}
+                  onClick={() => {
+                    void onAction(action)
+                    setMenuOpen(false)
+                  }}
+                  class={`w-full text-left px-3 py-2 text-xs font-medium transition-colors ${
+                    isDark
+                      ? 'text-gray-200 hover:bg-gray-700'
+                      : 'text-gray-800 hover:bg-gray-100'
+                  }`}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
