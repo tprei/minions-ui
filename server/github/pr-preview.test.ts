@@ -17,9 +17,16 @@ const PR_URL = "https://github.com/org/repo/pull/5001"
 describe("fetchPrPreview", () => {
   test("returns parsed preview with checks", async () => {
     const viewPayload = JSON.stringify({
+      number: 5001,
+      url: PR_URL,
       title: "My PR",
+      body: "Body",
       state: "OPEN",
+      isDraft: false,
       mergeable: "MERGEABLE",
+      headRefName: "feature",
+      baseRefName: "main",
+      author: { login: "octocat" },
       updatedAt: "2024-01-01T00:00:00Z",
     })
     const checksPayload = JSON.stringify([
@@ -30,18 +37,30 @@ describe("fetchPrPreview", () => {
     const result = await fetchPrPreview(PR_URL, exec)
 
     expect(result.title).toBe("My PR")
-    expect(result.state).toBe("OPEN")
-    expect(result.mergeable).toBe("MERGEABLE")
+    expect(result.number).toBe(5001)
+    expect(result.state).toBe("open")
+    expect(result.mergeable).toBe(true)
+    expect(result.branch).toBe("feature")
+    expect(result.baseBranch).toBe("main")
+    expect(result.author).toBe("octocat")
     expect(result.checks).toHaveLength(1)
     expect(result.checks[0]!.name).toBe("ci/test")
     expect(result.checks[0]!.conclusion).toBe("success")
+    expect(result.checks[0]!.status).toBe("success")
   })
 
   test("checks result is empty array when gh pr checks fails", async () => {
     const viewPayload = JSON.stringify({
+      number: 1002,
+      url: "https://github.com/org/repo/pull/1002",
       title: "My PR",
+      body: "",
       state: "OPEN",
+      isDraft: false,
       mergeable: "MERGEABLE",
+      headRefName: "feature",
+      baseRefName: "main",
+      author: { login: "octocat" },
       updatedAt: "2024-01-01T00:00:00Z",
     })
 
@@ -61,9 +80,16 @@ describe("fetchPrPreview", () => {
 
   test("returns cached result on second call within TTL", async () => {
     const viewPayload = JSON.stringify({
+      number: 5099,
+      url: "https://github.com/org/repo/pull/5099",
       title: "Cached PR",
+      body: "",
       state: "OPEN",
+      isDraft: false,
       mergeable: "MERGEABLE",
+      headRefName: "feature",
+      baseRefName: "main",
+      author: { login: "octocat" },
       updatedAt: "2024-01-01T00:00:00Z",
     })
     const checksPayload = JSON.stringify([])

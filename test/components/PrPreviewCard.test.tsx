@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/preact'
 import { PrPreviewCard, rollupChecks, PR_PREVIEW_POLL_MS } from '../../src/components/PrPreviewCard'
-import type { PrCheck, PrPreview } from '../../src/api/types'
+import type { MergeReadiness, PrCheck, PrPreview } from '../../src/api/types'
 import type { ApiClient } from '../../src/api/client'
 
 function makePr(overrides: Partial<PrPreview> = {}): PrPreview {
@@ -34,6 +34,7 @@ function makeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     createSession: vi.fn(),
     createSessionVariants: vi.fn(),
     getPr: vi.fn(),
+    getReadiness: vi.fn(),
     getDiff: vi.fn(),
     listScreenshots: vi.fn(),
     fetchScreenshotBlob: vi.fn(),
@@ -43,6 +44,25 @@ function makeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     openEventStream: vi.fn(),
     ...overrides,
   } as ApiClient
+}
+
+function makeReadiness(overrides: Partial<MergeReadiness> = {}): MergeReadiness {
+  return {
+    sessionId: 's-1',
+    generatedAt: '2026-04-26T00:00:00Z',
+    status: 'blocked',
+    prUrl: 'https://github.com/acme/widgets/pull/42',
+    checks: [
+      {
+        id: 'quality-gates',
+        label: 'Quality gates',
+        status: 'blocked',
+        required: true,
+        summary: 'lint',
+      },
+    ],
+    ...overrides,
+  }
 }
 
 describe('rollupChecks', () => {
@@ -152,6 +172,20 @@ describe('PrPreviewCard — ready state', () => {
     const client = makeClient({ getPr: vi.fn(async () => pr) })
     render(<PrPreviewCard sessionId="s-1" prUrl={pr.url} client={client} />)
     await waitFor(() => expect(screen.getByTestId('pr-checks-empty')).toBeTruthy())
+  })
+
+  it('renders merge readiness when the feature is available', async () => {
+    const pr = makePr()
+    const readiness = makeReadiness()
+    const client = makeClient({
+      getPr: vi.fn(async () => pr),
+      getReadiness: vi.fn(async () => readiness),
+    })
+    render(<PrPreviewCard sessionId="s-1" prUrl={pr.url} client={client} readinessAvailable />)
+
+    await waitFor(() => expect(screen.getByTestId('readiness-summary')).toBeTruthy())
+    expect(screen.getByText('Merge readiness')).toBeTruthy()
+    expect(screen.getByTestId('readiness-check-quality-gates')).toBeTruthy()
   })
 
   it('toggles the PR body (markdown-rendered) when expand button clicked', async () => {

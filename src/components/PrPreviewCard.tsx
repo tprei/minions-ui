@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type { ApiClient } from '../api/client'
-import type { PrCheck, PrCheckStatus, PrPreview, PrState } from '../api/types'
+import type { MergeReadiness, MergeReadinessStatus, PrCheck, PrCheckStatus, PrPreview, PrState } from '../api/types'
 import { MarkdownView } from './MarkdownView'
 import { Skeleton, SkeletonLines } from './Skeleton'
 
@@ -10,12 +10,19 @@ interface PrPreviewCardProps {
   sessionId: string
   prUrl: string
   client: ApiClient
+  readinessAvailable?: boolean
 }
 
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
   | { kind: 'ready'; pr: PrPreview }
+
+type ReadinessLoadState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'ready'; readiness: MergeReadiness }
 
 export interface ChecksRollup {
   pass: number
@@ -103,6 +110,57 @@ function ChecksSummary({ rollup }: { rollup: ChecksRollup }) {
   )
 }
 
+function readinessTone(status: MergeReadinessStatus): string {
+  if (status === 'ready') return 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+  if (status === 'blocked') return 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+  if (status === 'pending') return 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+  return 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+}
+
+function ReadinessSummary({ state }: { state: ReadinessLoadState }) {
+  if (state.kind === 'idle') return null
+  if (state.kind === 'loading') {
+    return (
+      <div class="border-t border-slate-100 dark:border-slate-700 px-3 py-2" data-testid="readiness-loading">
+        <Skeleton width={160} height={10} rounded="sm" />
+      </div>
+    )
+  }
+  if (state.kind === 'error') {
+    return (
+      <div class="border-t border-red-100 dark:border-red-900/60 px-3 py-2 text-xs text-red-700 dark:text-red-300" data-testid="readiness-error">
+        {state.message}
+      </div>
+    )
+  }
+
+  const readiness = state.readiness
+  const visibleChecks = readiness.checks.filter((check) => check.required || check.status !== 'ready')
+
+  return (
+    <div class="border-t border-slate-100 dark:border-slate-700 px-3 py-2" data-testid="readiness-summary">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${readinessTone(readiness.status)}`}>
+          {readiness.status}
+        </span>
+        <span class="text-xs font-medium text-slate-700 dark:text-slate-200">Merge readiness</span>
+      </div>
+      <div class="mt-2 flex flex-wrap gap-1.5">
+        {visibleChecks.map((check) => (
+          <span
+            key={check.id}
+            title={check.details ?? check.summary}
+            class={`inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] ${readinessTone(check.status)} border-transparent`}
+            data-testid={`readiness-check-${check.id}`}
+          >
+            <span class="truncate">{check.label}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function AuthorChip({ login }: { login: string }) {
   const avatar = `https://github.com/${encodeURIComponent(login)}.png?size=32`
   return (
@@ -166,8 +224,9 @@ function ErrorCard({ message, prUrl, onRetry }: { message: string; prUrl: string
   )
 }
 
-export function PrPreviewCard({ sessionId, prUrl, client }: PrPreviewCardProps) {
+export function PrPreviewCard({ sessionId, prUrl, client, readinessAvailable = false }: PrPreviewCardProps) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
+  const [readinessState, setReadinessState] = useState<ReadinessLoadState>({ kind: readinessAvailable ? 'loading' : 'idle' })
   const [expanded, setExpanded] = useState(false)
   const [reloadNonce, setReloadNonce] = useState(0)
   const aliveRef = useRef(true)
@@ -176,6 +235,7 @@ export function PrPreviewCard({ sessionId, prUrl, client }: PrPreviewCardProps) 
   useEffect(() => {
     aliveRef.current = true
     setState({ kind: 'loading' })
+    setReadinessState({ kind: readinessAvailable ? 'loading' : 'idle' })
 
     function clearTimer() {
       if (timerRef.current !== null) {
@@ -186,8 +246,30 @@ export function PrPreviewCard({ sessionId, prUrl, client }: PrPreviewCardProps) 
 
     async function load() {
       try {
-        const pr = await client.getPr(sessionId)
+        const [prResult, readinessResult] = await Promise.allSettled([
+          client.getPr(sessionId),
+          readinessAvailable ? client.getReadiness(sessionId) : Promise.resolve(null),
+        ])
         if (!aliveRef.current) return
+
+        if (readinessAvailable) {
+          if (readinessResult.status === 'fulfilled' && readinessResult.value !== null) {
+            setReadinessState({ kind: 'ready', readiness: readinessResult.value })
+          } else if (readinessResult.status === 'rejected') {
+            const message = readinessResult.reason instanceof Error ? readinessResult.reason.message : String(readinessResult.reason)
+            setReadinessState({ kind: 'error', message })
+          }
+        }
+
+        if (prResult.status === 'rejected') {
+          const message = prResult.reason instanceof Error ? prResult.reason.message : String(prResult.reason)
+          setState({ kind: 'error', message })
+          clearTimer()
+          timerRef.current = setTimeout(load, PR_PREVIEW_POLL_MS)
+          return
+        }
+
+        const pr = prResult.value
         setState({ kind: 'ready', pr })
         clearTimer()
         if (!isTerminalState(pr.state)) {
@@ -208,7 +290,7 @@ export function PrPreviewCard({ sessionId, prUrl, client }: PrPreviewCardProps) 
       aliveRef.current = false
       clearTimer()
     }
-  }, [sessionId, client, reloadNonce])
+  }, [sessionId, client, readinessAvailable, reloadNonce])
 
   const bodySource = state.kind === 'ready' ? state.pr.body?.trim() ?? '' : ''
 
@@ -285,6 +367,7 @@ export function PrPreviewCard({ sessionId, prUrl, client }: PrPreviewCardProps) 
           </span>
         )}
       </div>
+      <ReadinessSummary state={readinessState} />
       {bodySource && (
         <div class="border-t border-slate-100 dark:border-slate-700">
           <button

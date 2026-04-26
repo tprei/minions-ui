@@ -14,6 +14,7 @@ export type FeatureName =
   | 'transcript'
   | 'resource-metrics'
   | 'runtime-config'
+  | 'merge-readiness'
   | 'ship-coordinator'
   | 'memory'
 

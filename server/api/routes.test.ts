@@ -1,6 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { Hono } from 'hono'
 import { createSessionRegistry } from '../session/registry'
 import { resetEventBus } from '../events/bus'
@@ -8,6 +10,7 @@ import { prepared, runMigrations } from '../db/sqlite'
 import { registerApiRoutes } from './routes'
 import { registerSseRoute } from './sse'
 import type { SpawnFn, SubprocessHandle } from '../session/runtime'
+import type { MergeReadiness, QualityReport } from '../../shared/api-types'
 
 function setupTestDb(): Database {
   const db = new Database(':memory:')
@@ -107,6 +110,7 @@ describe('GET /api/version', () => {
     expect(features).toContain('sessions-create-images')
     expect(features).toContain('sessions-variants')
     expect(features).toContain('ship-coordinator')
+    expect(features).toContain('merge-readiness')
     expect(features).toContain('web-push')
     expect(features).toContain('transcript')
     expect(features).toContain('auth')
@@ -216,6 +220,51 @@ describe('GET /api/sessions/:slug', () => {
     const app = makeApp(testDb)
     const res = await app.fetch(new Request('http://localhost/api/sessions/no-such-slug'))
     expect(res.status).toBe(404)
+  })
+})
+
+describe('GET /api/sessions/:slug/readiness', () => {
+  test('returns merge readiness for a completed session without a PR', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'readiness-api-'))
+    const slug = 'readiness-slug'
+    mkdirSync(path.join(root, slug))
+    const now = Date.now()
+    const report: QualityReport = { allPassed: true, results: [] }
+    prepared.insertSession(testDb, {
+      id: 'readiness-session',
+      slug,
+      status: 'completed',
+      command: 'cmd',
+      mode: 'task',
+      repo: null,
+      branch: null,
+      bare_dir: null,
+      pr_url: null,
+      parent_id: null,
+      variant_group_id: null,
+      claude_session_id: null,
+      workspace_root: root,
+      created_at: now,
+      updated_at: now,
+      needs_attention: false,
+      attention_reasons: [],
+      quick_actions: [],
+      conversation: [],
+      quota_sleep_until: null,
+      quota_retry_count: 0,
+      metadata: { qualityReport: report },
+      pipeline_advancing: false,
+      stage: null,
+      coordinator_children: [],
+    })
+
+    const app = makeApp(testDb)
+    const res = await app.fetch(new Request(`http://localhost/api/sessions/${slug}/readiness`))
+    expect(res.status).toBe(200)
+    const body = await json<{ data: MergeReadiness }>(res)
+    expect(body.data.status).toBe('blocked')
+    expect(body.data.checks.find((check) => check.id === 'pull-request')?.status).toBe('blocked')
+    rmSync(root, { recursive: true, force: true })
   })
 })
 

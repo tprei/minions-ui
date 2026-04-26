@@ -4,6 +4,7 @@ import type { CIBabysitter } from "../handlers/types"
 import type { SessionRegistry } from "../session/registry"
 import type { ExecFn } from "../dag/preflight"
 import { fetchPrPreview } from "../github/pr-preview"
+import type { CheckRun } from "../github/pr-preview"
 import { checkPRMergeability } from "../dag/preflight"
 import { buildCIFixPrompt, buildMergeConflictPrompt } from "./prompts"
 import type { Database } from "bun:sqlite"
@@ -64,7 +65,7 @@ async function pollUntilDone(
   prUrl: string,
   execFn: ExecFn,
   delayFn: DelayFn,
-): Promise<{ passed: boolean; failedChecks: Array<{ name: string; status: string; conclusion: string | null; url: string | null }> }> {
+): Promise<{ passed: boolean; failedChecks: CheckRun[] }> {
   const startedAt = Date.now()
   let attempt = 0
 
@@ -165,7 +166,7 @@ export function createRealCIBabysitter(opts: BabysitterOpts): CIBabysitter {
 
       let pollResult: {
         passed: boolean
-        failedChecks: Array<{ name: string; status: string; conclusion: string | null; url: string | null }>
+        failedChecks: CheckRun[]
       }
       try {
         pollResult = await pollUntilDone(prUrl, execFn, delayFn)

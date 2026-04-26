@@ -53,7 +53,17 @@ describe('writeSessionLog', () => {
     const cwd = trackedDir()
     const qualityReport = {
       allPassed: false,
-      results: [{ name: 'lint', passed: false, output: 'error: unused import' }],
+      results: [
+        {
+          name: 'lint',
+          command: ['npm', 'run', 'lint'],
+          required: true,
+          passed: false,
+          skipped: false,
+          output: 'error: unused import',
+          durationMs: 1,
+        },
+      ],
     }
 
     writeSessionLog(cwd, { sessionId: 's1', slug: 'sl', mode: 'task', startedAt: Date.now() }, 'errored', 1000, qualityReport)

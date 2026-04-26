@@ -334,6 +334,7 @@ function ChatPane({
                 sessionId={session.id}
                 prUrl={session.prUrl}
                 client={store.client}
+                readinessAvailable={hasFeature(store, 'merge-readiness')}
               />
             )}
             {hasFeature(store, 'transcript') ? (

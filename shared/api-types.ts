@@ -71,6 +71,43 @@ export interface ApiDagGraph {
 export interface ApiResponse<T> { data: T; error?: string }
 export interface CommandResult { success: boolean; error?: string; dagId?: string }
 
+export interface QualityGateResult {
+  name: string
+  command: string[]
+  required: boolean
+  passed: boolean
+  skipped: boolean
+  output: string
+  durationMs: number
+}
+
+export interface QualityReport {
+  allPassed: boolean
+  results: QualityGateResult[]
+  configPath?: string
+  configError?: string
+}
+
+export type MergeReadinessStatus = 'ready' | 'blocked' | 'pending' | 'unknown'
+
+export interface MergeReadinessCheck {
+  id: string
+  label: string
+  status: MergeReadinessStatus
+  required: boolean
+  summary: string
+  details?: string
+}
+
+export interface MergeReadiness {
+  sessionId: string
+  generatedAt: string
+  status: MergeReadinessStatus
+  prUrl?: string
+  configPath?: string
+  checks: MergeReadinessCheck[]
+}
+
 export type SseEvent =
   | { type: 'session_created'; session: ApiSession }
   | { type: 'session_updated'; session: ApiSession }

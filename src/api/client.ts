@@ -8,6 +8,7 @@ import type {
   CreateSessionVariantsRequest,
   CreateSessionVariantsResult,
   MemoryEntry,
+  MergeReadiness,
   MinionCommand,
   PrPreview,
   PushSubscribeAck,
@@ -47,6 +48,7 @@ export interface ApiClient {
   createSession(req: CreateSessionRequest): Promise<ApiSession>
   createSessionVariants(req: CreateSessionVariantsRequest): Promise<CreateSessionVariantsResult>
   getPr(sessionId: string): Promise<PrPreview>
+  getReadiness(sessionId: string): Promise<MergeReadiness>
   getDiff(sessionId: string): Promise<WorkspaceDiff>
   getTranscript(slug: string, afterSeq?: number): Promise<TranscriptSnapshot>
   listScreenshots(sessionId: string): Promise<ScreenshotList>
@@ -171,6 +173,10 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
 
     getPr(sessionId: string) {
       return get<PrPreview>(`/api/sessions/${encodeURIComponent(sessionId)}/pr`)
+    },
+
+    getReadiness(sessionId: string) {
+      return get<MergeReadiness>(`/api/sessions/${encodeURIComponent(sessionId)}/readiness`)
     },
 
     async getDiff(sessionId: string): Promise<WorkspaceDiff> {

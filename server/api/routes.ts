@@ -11,6 +11,7 @@ import type {
   MemoryEntry,
   MinionCommand,
   OverrideField,
+  MergeReadiness,
   ResourceSnapshot,
   RuntimeConfigResponse,
   ScreenshotList,
@@ -51,6 +52,7 @@ import { handleLoopsCommand } from '../commands/loops'
 import { handleDoneCommand } from '../commands/done'
 import { handleDoctorCommand } from '../commands/doctor'
 import { getProvider } from '../session/providers/index'
+import { buildMergeReadiness } from '../readiness/merge-readiness'
 import {
   countPendingMemories,
   deleteMemory,
@@ -81,6 +83,7 @@ const FEATURES = [
   'pr-preview',
   'resource-metrics',
   'runtime-config',
+  'merge-readiness',
   'memory',
 ]
 
@@ -936,6 +939,27 @@ export function registerApiRoutes(
     try {
       const preview = await fetchPrPreview(row.pr_url)
       return c.json({ data: preview })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  app.get('/api/sessions/:slug/readiness', async (c) => {
+    const { slug } = c.req.param()
+    const db = resolveDb()
+    const row = findSessionRow(slug, db)
+    if (!row) return c.json({ data: null, error: 'Session not found' }, 404)
+    try {
+      const readiness = await buildMergeReadiness({
+        id: row.id,
+        slug: row.slug,
+        status: row.status,
+        pr_url: row.pr_url,
+        workspace_root: row.workspace_root,
+        metadata: row.metadata,
+      })
+      return c.json({ data: readiness } satisfies ApiResponse<MergeReadiness>)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)

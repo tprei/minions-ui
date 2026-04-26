@@ -34,6 +34,35 @@ PR_BODY
 
 In development, the `npm run dev` command starts both the Vite dev server (UI on port 3000) and the backend server (API on port 8080). The Vite dev server proxies `/api/*` requests to `http://localhost:8080`.
 
+## Repo config
+
+Target repositories can define `minions.json` at the repo root:
+
+```json
+{
+  "quality": {
+    "gates": [
+      {
+        "name": "typecheck",
+        "command": ["npm", "run", "typecheck"],
+        "required": true,
+        "timeoutMs": 300000,
+        "paths": ["src", "server"]
+      }
+    ]
+  },
+  "merge": {
+    "requirePr": true,
+    "requireMergeable": true,
+    "requireCiPass": true,
+    "requireQualityGates": true,
+    "allowDraft": false
+  }
+}
+```
+
+When `minions.json` is absent, the engine keeps its built-in `test`, `typecheck`, and `lint` script discovery.
+
 ## Architecture
 
 See [`CLAUDE.md`](./CLAUDE.md) for the full directory map and working rules, [`AGENTS.md`](./AGENTS.md) for agent routing. The engine lives in `server/`, the UI in `src/`.

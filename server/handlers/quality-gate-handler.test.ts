@@ -20,6 +20,10 @@ function makeQualityGates(report: QualityReport): QualityGates {
   return { run: async () => report }
 }
 
+function gate(name: string, passed: boolean, output: string): QualityReport['results'][number] {
+  return { name, passed, output, command: ['npm', 'run', name], required: true, skipped: false, durationMs: 1 }
+}
+
 function makeCtx(db: Database, bus: EngineEventBus, gates: QualityGates): HandlerCtx {
   return {
     db,
@@ -58,7 +62,7 @@ describe('qualityGateHandler', () => {
 
   test('emits session.quality_gates event when allPassed', async () => {
     seedSession(db, 'sess-qg')
-    const report: QualityReport = { allPassed: true, results: [{ name: 'lint', passed: true, output: 'ok' }] }
+    const report: QualityReport = { allPassed: true, results: [gate('lint', true, 'ok')] }
     const ctx = makeCtx(db, bus, makeQualityGates(report))
 
     const emitted: EngineEvent[] = []
@@ -72,13 +76,16 @@ describe('qualityGateHandler', () => {
     if (qgEv?.kind === 'session.quality_gates') {
       expect(qgEv.allPassed).toBe(true)
     }
+    const row = db.query<{ metadata: string }, [string]>('SELECT metadata FROM sessions WHERE id = ?').get('sess-qg')
+    const meta = JSON.parse(row!.metadata) as { qualityReport?: QualityReport }
+    expect(meta.qualityReport?.allPassed).toBe(true)
   })
 
   test('appends feedback to metadata.pendingFeedback when gates fail', async () => {
     seedSession(db, 'sess-fail-qg')
     const report: QualityReport = {
       allPassed: false,
-      results: [{ name: 'typecheck', passed: false, output: 'type error on line 5' }],
+      results: [gate('typecheck', false, 'type error on line 5')],
     }
     const ctx = makeCtx(db, bus, makeQualityGates(report))
 
@@ -86,10 +93,11 @@ describe('qualityGateHandler', () => {
     await qualityGateHandler.handle(ev, ctx)
 
     const row = db.query<{ metadata: string }, [string]>('SELECT metadata FROM sessions WHERE id = ?').get('sess-fail-qg')
-    const meta = JSON.parse(row!.metadata) as { pendingFeedback?: string[] }
+    const meta = JSON.parse(row!.metadata) as { pendingFeedback?: string[]; qualityReport?: QualityReport }
     expect(meta.pendingFeedback).toBeDefined()
     expect(meta.pendingFeedback!.length).toBeGreaterThan(0)
     expect(meta.pendingFeedback![0]).toContain('typecheck')
+    expect(meta.qualityReport?.allPassed).toBe(false)
   })
 
   test('does nothing when workspace_root is null', async () => {

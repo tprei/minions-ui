@@ -20,6 +20,14 @@ export const qualityGateHandler: CompletionHandler = {
     const cwd = `${row.workspace_root}/${row.slug}`
     const report = await ctx.qualityGates.run(cwd)
 
+    const meta = JSON.parse(row.metadata) as SessionMetadata
+    const updatedMeta: SessionMetadata = { ...meta, qualityReport: report }
+
+    ctx.db.run(
+      'UPDATE sessions SET metadata = ?, updated_at = ? WHERE id = ?',
+      [JSON.stringify(updatedMeta), Date.now(), ev.sessionId],
+    )
+
     ctx.bus.emit({
       kind: 'session.quality_gates',
       sessionId: ev.sessionId,
@@ -34,14 +42,13 @@ export const qualityGateHandler: CompletionHandler = {
         ...failed.map((r) => `- ${r.name}: ${r.output}`),
       ].join('\n')
 
-      const meta = JSON.parse(row.metadata) as SessionMetadata
       const pendingFeedback: string[] = Array.isArray(meta.pendingFeedback) ? meta.pendingFeedback : []
       pendingFeedback.push(feedback)
-      const updatedMeta: SessionMetadata = { ...meta, pendingFeedback }
+      const failedMeta: SessionMetadata = { ...updatedMeta, pendingFeedback }
 
       ctx.db.run(
         'UPDATE sessions SET metadata = ?, updated_at = ? WHERE id = ?',
-        [JSON.stringify(updatedMeta), Date.now(), ev.sessionId],
+        [JSON.stringify(failedMeta), Date.now(), ev.sessionId],
       )
     }
   },

@@ -1,4 +1,4 @@
-import type { TranscriptEvent, ApiSession, ApiDagGraph, ResourceSnapshot, MemoryEntry } from '../../shared/api-types'
+import type { TranscriptEvent, ApiSession, ApiDagGraph, ResourceSnapshot, MemoryEntry, QualityGateResult } from '../../shared/api-types'
 
 export type SessionRunState = 'completed' | 'errored' | 'quota_exhausted' | 'stream_stalled'
 
@@ -56,7 +56,7 @@ export type EngineEvent =
       kind: 'session.quality_gates'
       sessionId: string
       allPassed: boolean
-      results: Array<{ name: string; passed: boolean; output: string }>
+      results: QualityGateResult[]
     }
   | { kind: 'resource'; snapshot: ResourceSnapshot }
   | { kind: 'memory.proposed'; memory: MemoryEntry }
