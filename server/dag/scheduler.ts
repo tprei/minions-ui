@@ -131,6 +131,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
   const restackManager: RestackManager = createRestackManager({
     bus,
     workspaceRoot: opts.workspace,
+    registry,
   })
 
   const deferredRestacks = new Map<string, Array<{ dagId: string; nodeId: string; parentSha: string; newSha: string; cascadeDepth: number }>>()

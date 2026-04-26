@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test"
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test"
 import fs from "node:fs"
 import path from "node:path"
 import os from "node:os"
@@ -7,6 +7,7 @@ import { EngineEventBus } from "../events/bus"
 import { createRestackManager } from "./restack"
 import type { ExecFn } from "./preflight"
 import type { EngineEvent } from "../events/types"
+import type { SessionRegistry } from "../session/registry"
 
 function makeExecWithSha(headSha: string): { exec: ExecFn; calls: string[][]; setHeadSha: (sha: string) => void } {
   const calls: string[][] = []
@@ -41,6 +42,21 @@ function makeBus(): { bus: EngineEventBus; events: EngineEvent[] } {
   const bus = new EngineEventBus()
   bus.on((ev) => events.push(ev))
   return { bus, events }
+}
+
+function makeMockRegistry(): SessionRegistry {
+  return {
+    create: mock(() => Promise.resolve({ session: { id: 'test' } as unknown as Awaited<ReturnType<SessionRegistry['create']>>['session'], runtime: {} as unknown as Awaited<ReturnType<SessionRegistry['create']>>['runtime'] })),
+    get: mock(() => undefined),
+    getBySlug: mock(() => undefined),
+    list: mock(() => []),
+    snapshot: mock(() => undefined),
+    stop: mock(() => Promise.resolve()),
+    close: mock(() => Promise.resolve()),
+    reply: mock(() => Promise.resolve(true)),
+    reconcileOnBoot: mock(() => Promise.resolve()),
+    scheduleQuotaResume: mock(() => Promise.resolve()),
+  }
 }
 
 function makeGraph() {
@@ -78,7 +94,7 @@ describe("RestackManager.onParentPushed", () => {
   it("emits restack.started event for direct children", async () => {
     const { exec } = makeExecWithSha("new-sha-b")
     const { bus, events } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     await manager.onParentPushed({
@@ -102,7 +118,7 @@ describe("RestackManager.onParentPushed", () => {
   it("fetches parent branch and rebases child onto it", async () => {
     const { exec, calls } = makeExecWithSha("new-sha-b")
     const { bus } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     await manager.onParentPushed({
@@ -123,7 +139,7 @@ describe("RestackManager.onParentPushed", () => {
   it("force-pushes after successful rebase", async () => {
     const { exec, calls } = makeExecWithSha("new-sha-b")
     const { bus } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     await manager.onParentPushed({
@@ -141,7 +157,7 @@ describe("RestackManager.onParentPushed", () => {
   it("emits dag.node.pushed after successful rebase and push", async () => {
     const { exec } = makeExecWithSha("new-sha-b")
     const { bus, events } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     await manager.onParentPushed({
@@ -165,7 +181,7 @@ describe("RestackManager.onParentPushed", () => {
   it("cascades to downstream nodes after successful rebase", async () => {
     const { exec } = makeExecWithSha("new-sha-b")
     const { bus, events } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     await manager.onParentPushed({
@@ -194,7 +210,7 @@ describe("RestackManager.onParentPushed", () => {
       return originalExec(call)
     }
 
-    const interceptManager = createRestackManager({ bus, workspaceRoot, execFile: interceptExec })
+    const interceptManager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: interceptExec })
     await interceptManager.onParentPushed({
       dagId: "dag-1",
       nodeId: "a",
@@ -209,7 +225,7 @@ describe("RestackManager.onParentPushed", () => {
   it("restores prior status after successful rebase", async () => {
     const { exec } = makeExecWithSha("new-sha-b")
     const { bus } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     const priorStatus = graph.nodes[1]!.status
@@ -227,7 +243,7 @@ describe("RestackManager.onParentPushed", () => {
   it("skips nodes with status running", async () => {
     const { exec, calls } = makeExecWithSha("new-sha-b")
     const { bus } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
     graph.nodes[1]!.status = "running"
 
@@ -246,7 +262,7 @@ describe("RestackManager.onParentPushed", () => {
   it("sets rebase-conflict status when cascadeDepth exceeds max", async () => {
     const { exec } = makeExecWithSha("new-sha-b")
     const { bus, events } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     await manager.onParentPushed({
@@ -265,7 +281,7 @@ describe("RestackManager.onParentPushed", () => {
   it("leaves status as rebasing when rebase fails", async () => {
     const { exec } = makeFailingExec("rebase")
     const { bus } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     await manager.onParentPushed({
@@ -283,7 +299,7 @@ describe("RestackManager.onParentPushed", () => {
   it("emits restack.completed with conflict when push fails", async () => {
     const { exec } = makeFailingExec("push")
     const { bus, events } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     await manager.onParentPushed({
@@ -301,7 +317,7 @@ describe("RestackManager.onParentPushed", () => {
   it("does not cascade when rebase fails", async () => {
     const { exec } = makeFailingExec("rebase")
     const { bus, events } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     await manager.onParentPushed({
@@ -319,12 +335,12 @@ describe("RestackManager.onParentPushed", () => {
   it("skips node when worktree directory does not exist", async () => {
     const { exec, calls } = makeExecWithSha("new-sha-b")
     const { bus } = makeBus()
-    createRestackManager({ bus, workspaceRoot, execFile: exec })
+    createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     fs.rmSync(path.join(workspaceRoot, "slug-b"), { recursive: true, force: true })
 
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     await manager.onParentPushed({
       dagId: "dag-1",
       nodeId: "a",
@@ -340,7 +356,7 @@ describe("RestackManager.onParentPushed", () => {
   it("updates node headSha after successful rebase", async () => {
     const { exec } = makeExecWithSha("new-sha-b-updated")
     const { bus } = makeBus()
-    const manager = createRestackManager({ bus, workspaceRoot, execFile: exec })
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
     const graph = makeGraph()
 
     await manager.onParentPushed({

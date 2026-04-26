@@ -91,4 +91,7 @@ export interface SessionMetadata {
   pendingFeedback?: string[]
   ciBabysitStartedAt?: number
   ciBabysitTrigger?: 'stream' | 'completion'
+  parentBranch?: string
+  parentSha?: string
+  resolverAttemptKey?: string
 }

@@ -223,6 +223,7 @@ export type CreateSessionMode =
   | 'think'
   | 'review'
   | 'ship'
+  | 'rebase-resolver'
 
 export interface CreateSessionRequest {
   prompt: string
