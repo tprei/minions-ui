@@ -116,6 +116,26 @@ interface ExternalTaskDbRow {
   updated_at: number
 }
 
+export interface AuditEventRow {
+  id: string
+  action: string
+  session_id: string | null
+  target_type: string | null
+  target_id: string | null
+  metadata: Record<string, unknown>
+  created_at: number
+}
+
+interface AuditEventDbRow {
+  id: string
+  action: string
+  session_id: string | null
+  target_type: string | null
+  target_id: string | null
+  metadata: string
+  created_at: number
+}
+
 export interface SessionCheckpointRow {
   id: string
   session_id: string
@@ -177,6 +197,8 @@ type StmtCache = {
   insertExternalTask?: ReturnType<Database['prepare']>
   getExternalTaskByKey?: ReturnType<Database['prepare']>
   listExternalTasks?: ReturnType<Database['prepare']>
+  insertAuditEvent?: ReturnType<Database['prepare']>
+  listAuditEvents?: ReturnType<Database['prepare']>
   insertSessionCheckpoint?: ReturnType<Database['prepare']>
   listSessionCheckpoints?: ReturnType<Database['prepare']>
   getSessionCheckpoint?: ReturnType<Database['prepare']>
@@ -221,6 +243,13 @@ function mapEventRow(row: SessionEventDbRow): SessionEventRow {
 }
 
 function mapExternalTaskRow(row: ExternalTaskDbRow): ExternalTaskRow {
+  return {
+    ...row,
+    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+  }
+}
+
+function mapAuditEventRow(row: AuditEventDbRow): AuditEventRow {
   return {
     ...row,
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
@@ -512,6 +541,36 @@ export const prepared = {
     }
     const rows = c.listExternalTasks.all() as ExternalTaskDbRow[]
     return rows.map(mapExternalTaskRow)
+  },
+
+  insertAuditEvent(db: Database, row: AuditEventRow): void {
+    const c = stmts(db)
+    if (!c.insertAuditEvent) {
+      c.insertAuditEvent = db.prepare(
+        `INSERT INTO audit_events (id, action, session_id, target_type, target_id, metadata, created_at)
+         VALUES ($id, $action, $session_id, $target_type, $target_id, $metadata, $created_at)`,
+      )
+    }
+    c.insertAuditEvent.run({
+      $id: row.id,
+      $action: row.action,
+      $session_id: row.session_id,
+      $target_type: row.target_type,
+      $target_id: row.target_id,
+      $metadata: JSON.stringify(row.metadata),
+      $created_at: row.created_at,
+    })
+  },
+
+  listAuditEvents(db: Database, limit = 100): AuditEventRow[] {
+    const c = stmts(db)
+    if (!c.listAuditEvents) {
+      c.listAuditEvents = db.prepare<AuditEventDbRow, [number]>(
+        'SELECT * FROM audit_events ORDER BY created_at DESC LIMIT ?',
+      )
+    }
+    const rows = c.listAuditEvents.all(limit) as AuditEventDbRow[]
+    return rows.map(mapAuditEventRow)
   },
 
   insertSessionCheckpoint(db: Database, row: SessionCheckpointRow): void {

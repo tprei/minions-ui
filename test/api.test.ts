@@ -198,6 +198,17 @@ describe('ApiClient', () => {
     expect(url).toBe(`${BASE_URL}/api/readiness/summary`)
   })
 
+  it('getAuditEvents fetches audit events with an optional limit', async () => {
+    const fetchMock = mockFetch({ data: [] })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.getAuditEvents(25)
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(`${BASE_URL}/api/audit/events?limit=25`)
+  })
+
   it('restoreCheckpoint posts to the checkpoint restore endpoint', async () => {
     const fetchMock = mockFetch({ data: { checkpoint: null, session: null } })
     vi.stubGlobal('fetch', fetchMock)

@@ -55,6 +55,19 @@ CREATE TABLE IF NOT EXISTS external_tasks (
 CREATE INDEX IF NOT EXISTS idx_external_tasks_session ON external_tasks(session_id);
 CREATE INDEX IF NOT EXISTS idx_external_tasks_source ON external_tasks(source, updated_at DESC);
 
+CREATE TABLE IF NOT EXISTS audit_events (
+  id TEXT PRIMARY KEY,
+  action TEXT NOT NULL,
+  session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+  target_type TEXT,
+  target_id TEXT,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_events_created ON audit_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_events_session ON audit_events(session_id);
+
 CREATE TABLE IF NOT EXISTS session_events (
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   seq INTEGER NOT NULL,

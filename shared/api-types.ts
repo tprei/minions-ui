@@ -195,6 +195,16 @@ export interface ExternalTaskResult {
   existing: boolean
 }
 
+export interface AuditEvent {
+  id: string
+  action: string
+  sessionId?: string
+  targetType?: string
+  targetId?: string
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
 export type SseEvent =
   | { type: 'session_created'; session: ApiSession }
   | { type: 'session_updated'; session: ApiSession }

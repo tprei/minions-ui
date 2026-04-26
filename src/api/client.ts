@@ -2,6 +2,7 @@ import type {
   ApiDagGraph,
   ApiResponse,
   ApiSession,
+  AuditEvent,
   CommandResult,
   CreateExternalTaskRequest,
   ExternalTaskResult,
@@ -56,6 +57,7 @@ export interface ApiClient {
   getPr(sessionId: string): Promise<PrPreview>
   getReadiness(sessionId: string): Promise<MergeReadiness>
   getReadinessSummary(): Promise<ReadinessSummary>
+  getAuditEvents(limit?: number): Promise<AuditEvent[]>
   listCheckpoints(sessionId: string): Promise<SessionCheckpoint[]>
   restoreCheckpoint(sessionId: string, checkpointId: string): Promise<RestoreCheckpointResult>
   getDiff(sessionId: string): Promise<WorkspaceDiff>
@@ -194,6 +196,11 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
 
     getReadinessSummary() {
       return get<ReadinessSummary>('/api/readiness/summary')
+    },
+
+    getAuditEvents(limit?: number) {
+      const query = limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : ''
+      return get<AuditEvent[]>(`/api/audit/events${query}`)
     },
 
     listCheckpoints(sessionId: string) {

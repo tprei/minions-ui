@@ -6,6 +6,7 @@ import type { Database } from 'bun:sqlite'
 import type {
   ApiResponse,
   ApiSession,
+  AuditEvent,
   CommandResult,
   CreateExternalTaskRequest,
   CreateSessionVariantsResult,
@@ -68,6 +69,7 @@ import {
   externalTaskRowToApi,
   insertExternalTask,
 } from '../intake/external-tasks'
+import { auditEventRowToApi, recordAuditEvent } from '../audit/audit-log'
 import {
   countPendingMemories,
   deleteMemory,
@@ -102,6 +104,7 @@ const FEATURES = [
   'readiness-analytics',
   'session-checkpoints',
   'external-entrypoints',
+  'audit-log',
   'memory',
 ]
 
@@ -288,6 +291,16 @@ export function registerApiRoutes(
     return c.json({ data: summary } satisfies ApiResponse<ReadinessSummary>)
   })
 
+  app.get('/api/audit/events', (c) => {
+    const rawLimit = c.req.query('limit')
+    const limit = rawLimit === undefined ? 100 : Number(rawLimit)
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      return c.json({ error: 'limit must be an integer between 1 and 500' }, 400)
+    }
+    const events = prepared.listAuditEvents(resolveDb(), limit).map(auditEventRowToApi)
+    return c.json({ data: events } satisfies ApiResponse<AuditEvent[]>)
+  })
+
   app.get('/api/sessions', (c) => {
     const sessions = registry.list()
     const body: ApiResponse<ApiSession[]> = { data: sessions }
@@ -365,6 +378,13 @@ export function registerApiRoutes(
         metadata: buildExternalTaskMetadata(req),
       })
       const task = insertExternalTask(db, req, session.id, repo)
+      recordAuditEvent(db, {
+        action: 'external_task.started',
+        sessionId: session.id,
+        targetType: req.source,
+        targetId: req.externalId,
+        metadata: { taskId: task.id, repo },
+      })
       return c.json({ data: { task, session, existing: false } satisfies ExternalTaskResult }, 201)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -1062,6 +1082,13 @@ export function registerApiRoutes(
 
     try {
       const checkpoint = await restoreSessionCheckpoint({ db, session: row, checkpointId })
+      recordAuditEvent(db, {
+        action: 'checkpoint.restored',
+        sessionId: row.id,
+        targetType: 'session_checkpoint',
+        targetId: checkpoint.id,
+        metadata: { turn: checkpoint.turn, kind: checkpoint.kind, sha: checkpoint.sha },
+      })
       const updated = prepared.getSession(db, row.id)
       const session = sessionRowToApi(updated ?? row)
       getEventBus().emit({ kind: 'session.snapshot', session })

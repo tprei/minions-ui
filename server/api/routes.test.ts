@@ -12,7 +12,7 @@ import { registerSseRoute } from './sse'
 import { runGit } from '../workspace/git'
 import { createSessionCheckpoint } from '../checkpoints/session-checkpoints'
 import type { SpawnFn, SubprocessHandle } from '../session/runtime'
-import type { ExternalTaskResult, MergeReadiness, QualityReport, ReadinessSummary, RestoreCheckpointResult, SessionCheckpoint } from '../../shared/api-types'
+import type { AuditEvent, ExternalTaskResult, MergeReadiness, QualityReport, ReadinessSummary, RestoreCheckpointResult, SessionCheckpoint } from '../../shared/api-types'
 
 function setupTestDb(): Database {
   const db = new Database(':memory:')
@@ -125,6 +125,7 @@ describe('GET /api/version', () => {
     expect(features).toContain('readiness-analytics')
     expect(features).toContain('session-checkpoints')
     expect(features).toContain('external-entrypoints')
+    expect(features).toContain('audit-log')
     expect(features).toContain('web-push')
     expect(features).toContain('transcript')
     expect(features).toContain('auth')
@@ -223,6 +224,30 @@ describe('GET /api/readiness/summary', () => {
     expect(body.data.quality.passed).toBe(1)
     expect(body.data.quality.missing).toBe(1)
     expect(body.data.checkpoints.total).toBe(1)
+  })
+})
+
+describe('GET /api/audit/events', () => {
+  test('returns recent audit events with limit validation', async () => {
+    const now = Date.now()
+    prepared.insertAuditEvent(testDb, {
+      id: 'audit-1',
+      action: 'checkpoint.restored',
+      session_id: null,
+      target_type: 'session_checkpoint',
+      target_id: 'cp-1',
+      metadata: { turn: 2 },
+      created_at: now,
+    })
+    const app = makeApp(testDb)
+    const res = await app.fetch(new Request('http://localhost/api/audit/events?limit=1'))
+    expect(res.status).toBe(200)
+    const body = await json<{ data: AuditEvent[] }>(res)
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0]?.action).toBe('checkpoint.restored')
+
+    const invalid = await app.fetch(new Request('http://localhost/api/audit/events?limit=0'))
+    expect(invalid.status).toBe(400)
   })
 })
 
@@ -359,6 +384,8 @@ describe('POST /api/entrypoints', () => {
       await waitForCondition(() =>
         prepared.listSessionCheckpoints(testDb, firstBody.data.session.id).some((checkpoint) => checkpoint.kind === 'completion'),
       )
+      const audit = prepared.listAuditEvents(testDb)
+      expect(audit.some((event) => event.action === 'external_task.started' && event.session_id === firstBody.data.session.id)).toBe(true)
 
       const second = await app.fetch(new Request('http://localhost/api/entrypoints', {
         method: 'POST',
@@ -515,6 +542,9 @@ describe('session checkpoint routes', () => {
       const restoreBody = await json<{ data: RestoreCheckpointResult }>(restoreRes)
       expect(restoreBody.data.checkpoint.id).toBe(checkpoint.id)
       expect(readFileSync(path.join(cwd, 'tracked.txt'), 'utf8')).toBe('checkpoint\n')
+      const events = prepared.listAuditEvents(testDb)
+      expect(events[0]?.action).toBe('checkpoint.restored')
+      expect(events[0]?.target_id).toBe(checkpoint.id)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

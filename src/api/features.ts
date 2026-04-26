@@ -18,6 +18,7 @@ export type FeatureName =
   | 'readiness-analytics'
   | 'session-checkpoints'
   | 'external-entrypoints'
+  | 'audit-log'
   | 'ship-coordinator'
   | 'memory'
 
