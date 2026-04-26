@@ -8,6 +8,7 @@ import { TranscriptTranslator } from './transcript'
 import { getModeConfig, type AllSessionMode } from './prompts'
 import { getProvider } from './providers/index'
 import type { AgentProvider, ParserState, SpawnArgsOpts } from './providers/types'
+import { buildMemoryPreamble } from './memory-preamble'
 
 export interface SubprocessHandle {
   pid: number
@@ -97,6 +98,16 @@ export class SessionRuntime {
 
     this.bus.emit({ kind: 'session.spawning', sessionId, mode, cwd })
 
+    const db = this.getDb()
+    const sessionRow = prepared.getSession(db, sessionId)
+    const memoryPreamble = sessionRow
+      ? buildMemoryPreamble({ db, repo: sessionRow.repo })
+      : ''
+
+    const augmentedConfig = memoryPreamble
+      ? { ...cfg, systemPrompt: `${cfg.systemPrompt}\n\n${memoryPreamble}` }
+      : cfg
+
     const parentHome = process.env['HOME'] ?? os.homedir()
     const workspaceHome = path.join(cwd, '.home')
 
@@ -106,7 +117,7 @@ export class SessionRuntime {
       cwd,
       workspaceHome,
       parentHome,
-      modeConfig: cfg,
+      modeConfig: augmentedConfig,
       resumeSessionId,
       mcpConfig,
     }
@@ -307,11 +318,6 @@ export class SessionRuntime {
   private async onClose(): Promise<void> {
     this.clearTimers()
     this.state = 'done'
-
-    const flushed = this.translator.flushAllBuffers()
-    for (const evt of flushed) {
-      this.persistAndEmit(evt)
-    }
 
     const closeEvt = this.translator.closeTurn(undefined, undefined, true)
     if (closeEvt) {

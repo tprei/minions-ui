@@ -24,7 +24,7 @@ describe('buildLoopPrompt', () => {
   })
 
   test('includes existing PR URL when provided', () => {
-    const prompt = buildLoopPrompt(testDef, [], 'https://github.com/org/repo/pull/7')
+    const prompt = buildLoopPrompt(testDef, [], { existingPrUrl: 'https://github.com/org/repo/pull/7' })
     expect(prompt).toContain('https://github.com/org/repo/pull/7')
   })
 

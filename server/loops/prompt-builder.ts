@@ -1,4 +1,6 @@
+import type { Database } from 'bun:sqlite'
 import type { LoopDefinition } from './definitions'
+import { buildMemoryPreamble } from '../session/memory-preamble'
 
 export interface RunHistoryEntry {
   ranAt: number
@@ -9,13 +11,26 @@ export interface RunHistoryEntry {
 export function buildLoopPrompt(
   def: LoopDefinition,
   runHistory: RunHistoryEntry[],
-  existingPrUrl?: string,
+  opts: {
+    existingPrUrl?: string
+    db?: Database
+    repo?: string | null
+  } = {},
 ): string {
+  const { existingPrUrl, db, repo } = opts
   const parts: string[] = []
 
   parts.push(`# ${def.title}`)
   parts.push('')
   parts.push(def.promptTemplate)
+
+  if (db) {
+    const memoryPreamble = buildMemoryPreamble({ db, repo: repo ?? null })
+    if (memoryPreamble) {
+      parts.push('')
+      parts.push(memoryPreamble)
+    }
+  }
 
   parts.push('')
   parts.push('## Branch and PR instructions')

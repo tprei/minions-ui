@@ -169,7 +169,7 @@ export class TranscriptTranslator {
     return [evt]
   }
 
-  flushAllBuffers(): TranscriptEvent[] {
+  private flushAllBuffers(): TranscriptEvent[] {
     const out: TranscriptEvent[] = []
     for (const [, buf] of this.textBuffers) {
       out.push({ ...this.base(), type: 'assistant_text', blockId: buf.blockId, text: buf.text, final: true })

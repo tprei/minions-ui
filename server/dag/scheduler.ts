@@ -11,7 +11,6 @@ import type { EngineEventBus } from "../events/bus"
 import type { SessionRunState } from "../events/types"
 import type { ApiDagNode, ApiDagGraph } from "../../shared/api-types"
 import { advanceShip } from "../ship/coordinator"
-import type { CIBabysitter } from "../handlers/types"
 
 function fetchRootConversation(db: Database, rootSessionId: string): TopicMessage[] {
   const rows = db
@@ -102,7 +101,6 @@ export interface DagSchedulerOpts {
   db: Database
   bus: EngineEventBus
   workspace: string
-  ciBabysitter: CIBabysitter
   updateStackComment?: (graph: DagGraph) => Promise<void>
 }
 
@@ -118,7 +116,7 @@ export interface DagScheduler {
 }
 
 export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
-  const { registry, db, bus, ciBabysitter } = opts
+  const { registry, db, bus } = opts
   const commentUpdater = opts.updateStackComment ?? updateStackComment
 
   const activeGraphs = new Map<string, DagGraph>()
@@ -266,32 +264,6 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
       const { prUrl, branch } = readNodePrInfo(db, sessionId)
       if (branch) node.branch = branch
       if (prUrl) node.prUrl = prUrl
-
-      if (prUrl) {
-        const metaRow = db
-          .query<{ metadata: string }, [string]>("SELECT metadata FROM sessions WHERE id = ?")
-          .get(sessionId)
-
-        let metadata: Record<string, unknown>
-        try {
-          const parsed = metaRow?.metadata ? JSON.parse(metaRow.metadata) : {}
-          metadata = (parsed && typeof parsed === "object") ? parsed as Record<string, unknown> : {}
-        } catch {
-          metadata = {}
-        }
-
-        if (!metadata.ciBabysitStartedAt) {
-          metadata.ciBabysitStartedAt = Date.now()
-          metadata.ciBabysitTrigger = "completion"
-          prepared.updateSession(db, {
-            id: sessionId,
-            metadata,
-            updated_at: Date.now(),
-          })
-          void ciBabysitter.babysitDagChildCI(sessionId, prUrl)
-        }
-      }
-
       node.status = "done"
       advanceDag(graph)
 

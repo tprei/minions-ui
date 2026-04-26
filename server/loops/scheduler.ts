@@ -92,7 +92,11 @@ export class LoopScheduler implements LoopSchedulerInterface {
 
     const existingPrUrl = row.last_pr_url ?? undefined
 
-    const prompt = buildLoopPrompt(def, [], existingPrUrl)
+    const prompt = buildLoopPrompt(def, [], {
+      existingPrUrl,
+      db: this.db,
+      repo: this.repo,
+    })
 
     try {
       const { session } = await this.registry.create({
