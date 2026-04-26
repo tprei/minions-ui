@@ -170,7 +170,10 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
     prepared.updateSession(db(), { id: sessionId, status: 'running', updated_at: Date.now() })
     emitSnapshot(sessionId)
 
-    const mcp = buildMcpConfig({})
+    const mcp = buildMcpConfig({
+      memoryRepo: createOpts.repo,
+      memorySessionId: sessionId,
+    })
     const runtime = makeRuntime({
       sessionId,
       mode: createOpts.mode,

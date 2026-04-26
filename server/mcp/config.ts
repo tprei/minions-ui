@@ -4,6 +4,10 @@ export interface McpToggles {
   context7Enabled?: boolean
   supabaseEnabled?: boolean
   supabaseProjectRef?: string
+  memoryEnabled?: boolean
+  memoryRepo?: string
+  memorySessionId?: string
+  apiPort?: string
 }
 
 export interface McpServerEntry {
@@ -21,6 +25,7 @@ export function buildMcpConfig(toggles: McpToggles = {}): McpConfigJson {
   const githubEnabled = toggles.githubEnabled ?? (process.env.ENABLE_GITHUB_MCP !== 'false' && Boolean(process.env.GITHUB_TOKEN ?? process.env.GITHUB_PERSONAL_ACCESS_TOKEN))
   const context7Enabled = toggles.context7Enabled ?? process.env.ENABLE_CONTEXT7_MCP !== 'false'
   const supabaseEnabled = toggles.supabaseEnabled ?? (process.env.ENABLE_SUPABASE_MCP !== 'false' && Boolean(process.env.SUPABASE_ACCESS_TOKEN))
+  const memoryEnabled = toggles.memoryEnabled ?? process.env.ENABLE_MEMORY_MCP !== 'false'
 
   const mcpServers: Record<string, McpServerEntry> = {}
 
@@ -58,6 +63,19 @@ export function buildMcpConfig(toggles: McpToggles = {}): McpConfigJson {
         args.push('--project-ref', toggles.supabaseProjectRef)
       }
       mcpServers['supabase'] = { command: 'npx', args }
+    }
+  }
+
+  if (memoryEnabled) {
+    const env: Record<string, string> = {
+      MEMORY_REPO: toggles.memoryRepo ?? '',
+      MEMORY_SESSION_ID: toggles.memorySessionId ?? '',
+      API_PORT: toggles.apiPort ?? process.env.PORT ?? '8080',
+    }
+    mcpServers['memory'] = {
+      command: 'bun',
+      args: ['run', 'server/mcp/memory-server.ts'],
+      env,
     }
   }
 
