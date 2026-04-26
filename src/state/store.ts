@@ -23,6 +23,7 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
   const transcripts = new Map<string, TranscriptStore>()
   const resourceSnapshot = signal<ResourceSnapshot | null>(null)
   const runtimeConfig = signal<RuntimeConfigResponse | null>(null)
+  const memoryProposalsCount = signal<number>(0)
 
   function getTranscript(sessionId: string): TranscriptStore | null {
     const existing = transcripts.get(sessionId)
@@ -176,6 +177,18 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
         break
       case 'session_screenshot_captured':
         break
+      case 'memory_proposed':
+        memoryProposalsCount.value++
+        break
+      case 'memory_updated':
+        break
+      case 'memory_reviewed':
+        if (memoryProposalsCount.value > 0) {
+          memoryProposalsCount.value--
+        }
+        break
+      case 'memory_deleted':
+        break
     }
   }
 
@@ -255,6 +268,7 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     diffStatsBySessionId,
     resourceSnapshot,
     runtimeConfig,
+    memoryProposalsCount,
     loadDiffStats,
     refresh,
     async sendCommand(cmd) {

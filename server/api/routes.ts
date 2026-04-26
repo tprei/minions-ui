@@ -61,6 +61,7 @@ import {
   updateMemory,
   type MemoryRow,
 } from '../db/memories'
+import { getEventBus } from '../events/bus'
 
 const API_VERSION = '2.0.0'
 const LIBRARY_VERSION = '0.1.0'
@@ -1176,6 +1177,7 @@ export function registerApiRoutes(
       }
 
       const apiMemory = memoryRowToApi(memory)
+      getEventBus().emit({ kind: 'memory.proposed', memory: apiMemory })
       const response: ApiResponse<MemoryEntry> = { data: apiMemory }
       return c.json(response, 201)
     } catch (err) {
@@ -1252,6 +1254,7 @@ export function registerApiRoutes(
     if (existing.status === 'pending_deletion' && parsed.data.status === 'approved') {
       try {
         deleteMemory(db, memoryId)
+        getEventBus().emit({ kind: 'memory.deleted', memoryId })
         const response: ApiResponse<{ deleted: true }> = { data: { deleted: true } }
         return c.json(response)
       } catch (err) {
@@ -1275,6 +1278,7 @@ export function registerApiRoutes(
       }
 
       const apiMemory = memoryRowToApi(updated)
+      getEventBus().emit({ kind: 'memory.reviewed', memory: apiMemory })
       const response: ApiResponse<MemoryEntry> = { data: apiMemory }
       return c.json(response)
     } catch (err) {
@@ -1298,6 +1302,7 @@ export function registerApiRoutes(
 
     try {
       deleteMemory(db, memoryId)
+      getEventBus().emit({ kind: 'memory.deleted', memoryId })
       const response: ApiResponse<{ deleted: true }> = { data: { deleted: true } }
       return c.json(response)
     } catch (err) {
