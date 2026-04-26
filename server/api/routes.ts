@@ -8,6 +8,7 @@ import type {
   ApiSession,
   CommandResult,
   CreateSessionVariantsResult,
+  MemoryEntry,
   MinionCommand,
   OverrideField,
   ResourceSnapshot,
@@ -50,6 +51,16 @@ import { handleLoopsCommand } from '../commands/loops'
 import { handleDoneCommand } from '../commands/done'
 import { handleDoctorCommand } from '../commands/doctor'
 import { getProvider } from '../session/providers/index'
+import {
+  countPendingMemories,
+  deleteMemory,
+  getMemory,
+  insertMemory,
+  listMemories,
+  searchMemories,
+  updateMemory,
+  type MemoryRow,
+} from '../db/memories'
 
 const API_VERSION = '2.0.0'
 const LIBRARY_VERSION = '0.1.0'
@@ -69,6 +80,7 @@ const FEATURES = [
   'pr-preview',
   'resource-metrics',
   'runtime-config',
+  'memory',
 ]
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -120,6 +132,28 @@ const MessageSchema = z.object({
   images: z.array(ImageSchema).optional(),
 })
 
+const CreateMemorySchema = z.object({
+  repo: z.string().nullable().optional(),
+  kind: z.enum(['user', 'feedback', 'project', 'reference']),
+  title: z.string().min(1),
+  body: z.string().min(1),
+  sourceSessionId: z.string().optional(),
+  sourceDagId: z.string().optional(),
+  pinned: z.boolean().optional(),
+})
+
+const UpdateMemorySchema = z.object({
+  title: z.string().min(1).optional(),
+  body: z.string().min(1).optional(),
+  kind: z.enum(['user', 'feedback', 'project', 'reference']).optional(),
+  status: z.enum(['pending', 'approved', 'rejected', 'superseded', 'pending_deletion']).optional(),
+  pinned: z.boolean().optional(),
+})
+
+const ReviewMemorySchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+})
+
 const SLASH_MODES = new Map([
   ['task', 'task'],
   ['w', 'task'],
@@ -152,6 +186,24 @@ function findDagForSession(db: Database, sessionId: string): DagGraph | null {
 
 function formatZod(issues: Array<{ path: Array<string | number>; message: string }>): string {
   return issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')
+}
+
+function memoryRowToApi(row: MemoryRow): MemoryEntry {
+  return {
+    id: row.id,
+    repo: row.repo,
+    kind: row.kind,
+    title: row.title,
+    body: row.body,
+    status: row.status,
+    sourceSessionId: row.source_session_id,
+    sourceDagId: row.source_dag_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    supersededBy: row.superseded_by,
+    reviewedAt: row.reviewed_at,
+    pinned: row.pinned,
+  }
 }
 
 export interface RuntimeBaseConfig {
@@ -1059,5 +1111,198 @@ export function registerApiRoutes(
     }
     unsubscribe(parsed.data.endpoint, resolveDb)
     return c.json({ data: { ok: true } })
+  })
+
+  app.get('/api/memories', (c) => {
+    const db = resolveDb()
+    const repo = c.req.query('repo')
+    const status = c.req.query('status')
+    const kind = c.req.query('kind')
+    const q = c.req.query('q')
+
+    let memories: MemoryRow[]
+    if (q) {
+      memories = searchMemories(db, q, {
+        repo: repo ?? undefined,
+        status: status as MemoryRow['status'] | undefined,
+        kind: kind as MemoryRow['kind'] | undefined,
+      })
+    } else {
+      memories = listMemories(db, {
+        repo: repo ?? undefined,
+        status: status as MemoryRow['status'] | undefined,
+        kind: kind as MemoryRow['kind'] | undefined,
+      })
+    }
+
+    const data = memories.map(memoryRowToApi)
+    const pendingCount = countPendingMemories(db, repo ?? undefined)
+    const body: ApiResponse<{ memories: MemoryEntry[]; pendingCount: number }> = {
+      data: { memories: data, pendingCount },
+    }
+    return c.json(body)
+  })
+
+  app.post('/api/memories', async (c) => {
+    const raw = await c.req.json().catch(() => null)
+    const parsed = CreateMemorySchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: formatZod(parsed.error.issues) }, 400)
+    }
+    const { repo, kind, title, body, sourceSessionId, sourceDagId, pinned } = parsed.data
+
+    const db = resolveDb()
+    const now = Date.now()
+
+    try {
+      const id = insertMemory(db, {
+        repo: repo ?? null,
+        kind,
+        title,
+        body,
+        status: 'pending',
+        source_session_id: sourceSessionId ?? null,
+        source_dag_id: sourceDagId ?? null,
+        created_at: now,
+        updated_at: now,
+        superseded_by: null,
+        reviewed_at: null,
+        pinned: pinned ?? false,
+      })
+
+      const memory = getMemory(db, id)
+      if (!memory) {
+        return c.json({ error: 'Failed to retrieve created memory' }, 500)
+      }
+
+      const apiMemory = memoryRowToApi(memory)
+      const response: ApiResponse<MemoryEntry> = { data: apiMemory }
+      return c.json(response, 201)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  app.patch('/api/memories/:id', async (c) => {
+    const { id } = c.req.param()
+    const memoryId = parseInt(id, 10)
+    if (!Number.isFinite(memoryId)) {
+      return c.json({ error: 'Invalid memory ID' }, 400)
+    }
+
+    const raw = await c.req.json().catch(() => null)
+    const parsed = UpdateMemorySchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: formatZod(parsed.error.issues) }, 400)
+    }
+
+    const db = resolveDb()
+    const existing = getMemory(db, memoryId)
+    if (!existing) {
+      return c.json({ error: 'Memory not found' }, 404)
+    }
+
+    if (existing.status !== 'approved' && existing.status !== 'pending' && parsed.data.status === undefined) {
+      return c.json({ error: 'Only approved or pending memories can be updated' }, 422)
+    }
+
+    const updates = parsed.data
+    const now = Date.now()
+
+    try {
+      updateMemory(db, memoryId, {
+        ...updates,
+        updated_at: now,
+      })
+
+      const updated = getMemory(db, memoryId)
+      if (!updated) {
+        return c.json({ error: 'Failed to retrieve updated memory' }, 500)
+      }
+
+      const apiMemory = memoryRowToApi(updated)
+      const response: ApiResponse<MemoryEntry> = { data: apiMemory }
+      return c.json(response)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  app.patch('/api/memories/:id/review', async (c) => {
+    const { id } = c.req.param()
+    const memoryId = parseInt(id, 10)
+    if (!Number.isFinite(memoryId)) {
+      return c.json({ error: 'Invalid memory ID' }, 400)
+    }
+
+    const raw = await c.req.json().catch(() => null)
+    const parsed = ReviewMemorySchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: formatZod(parsed.error.issues) }, 400)
+    }
+
+    const db = resolveDb()
+    const existing = getMemory(db, memoryId)
+    if (!existing) {
+      return c.json({ error: 'Memory not found' }, 404)
+    }
+
+    if (existing.status === 'pending_deletion' && parsed.data.status === 'approved') {
+      try {
+        deleteMemory(db, memoryId)
+        const response: ApiResponse<{ deleted: true }> = { data: { deleted: true } }
+        return c.json(response)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ error: message }, 500)
+      }
+    }
+
+    const now = Date.now()
+
+    try {
+      updateMemory(db, memoryId, {
+        status: parsed.data.status,
+        reviewed_at: now,
+        updated_at: now,
+      })
+
+      const updated = getMemory(db, memoryId)
+      if (!updated) {
+        return c.json({ error: 'Failed to retrieve reviewed memory' }, 500)
+      }
+
+      const apiMemory = memoryRowToApi(updated)
+      const response: ApiResponse<MemoryEntry> = { data: apiMemory }
+      return c.json(response)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  app.delete('/api/memories/:id', async (c) => {
+    const { id } = c.req.param()
+    const memoryId = parseInt(id, 10)
+    if (!Number.isFinite(memoryId)) {
+      return c.json({ error: 'Invalid memory ID' }, 400)
+    }
+
+    const db = resolveDb()
+    const existing = getMemory(db, memoryId)
+    if (!existing) {
+      return c.json({ error: 'Memory not found' }, 404)
+    }
+
+    try {
+      deleteMemory(db, memoryId)
+      const response: ApiResponse<{ deleted: true }> = { data: { deleted: true } }
+      return c.json(response)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
   })
 }
