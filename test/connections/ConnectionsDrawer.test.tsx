@@ -101,4 +101,36 @@ describe('ConnectionsDrawer', () => {
     fireEvent.click(screen.getByTestId('drawer-close-btn'))
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('renders with drag handle on mobile', async () => {
+    const originalMatchMedia = window.matchMedia
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(max-width: 767px)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+
+    await setup()
+    const handle = document.querySelector('.w-10.h-1.rounded-full')
+    expect(handle).toBeTruthy()
+
+    window.matchMedia = originalMatchMedia
+  })
+
+  it('renders as sidebar on desktop without drag handle', async () => {
+    const originalMatchMedia = window.matchMedia
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query !== '(max-width: 767px)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+
+    await setup()
+    const handle = document.querySelector('.w-10.h-1.rounded-full')
+    expect(handle).toBeFalsy()
+
+    window.matchMedia = originalMatchMedia
+  })
 })
