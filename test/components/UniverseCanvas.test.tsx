@@ -448,4 +448,82 @@ describe('UniverseCanvas', () => {
     render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
     expect(document.querySelector('[data-testid="rebasing-indicator"]')).toBeFalsy()
   })
+
+  it('renders fit-to-screen FAB', () => {
+    const sessions = [createSession()]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    const fab = document.querySelector('[data-testid="fit-to-screen-fab"]')
+    expect(fab).toBeTruthy()
+  })
+
+  it('calls fitView when FAB is clicked', async () => {
+    const mockFitView = vi.fn()
+    const mockModule = await import('@reactflow/core')
+    vi.mocked(mockModule.useReactFlow).mockReturnValue({
+      setCenter: vi.fn(),
+      fitBounds: vi.fn(),
+      fitView: mockFitView,
+    } as unknown as ReturnType<typeof mockModule.useReactFlow>)
+
+    const sessions = [createSession()]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    const fab = document.querySelector('[data-testid="fit-to-screen-fab"]')
+    if (fab) {
+      fireEvent.click(fab)
+      expect(mockFitView).toHaveBeenCalledWith({ padding: 0.2, duration: 400 })
+    }
+  })
+
+  it('FAB has proper touch target size', () => {
+    const sessions = [createSession()]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    const fab = document.querySelector('[data-testid="fit-to-screen-fab"]') as HTMLElement
+    expect(fab).toBeTruthy()
+    if (fab) {
+      expect(fab.style.width).toBe('48px')
+      expect(fab.style.height).toBe('48px')
+    }
+  })
+
+  it('FAB positioned in bottom-right corner', () => {
+    const sessions = [createSession()]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    const fab = document.querySelector('[data-testid="fit-to-screen-fab"]') as HTMLElement
+    expect(fab).toBeTruthy()
+    if (fab) {
+      expect(fab.style.position).toBe('absolute')
+      expect(fab.style.bottom).toBe('20px')
+      expect(fab.style.right).toBe('20px')
+    }
+  })
+
+  it('disables double-click zoom on ReactFlow', async () => {
+    const mockModule = await import('@reactflow/core')
+    const sessions = [createSession()]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    expect(mockModule.ReactFlow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        zoomOnDoubleClick: false,
+      }),
+      expect.anything()
+    )
+  })
+
+  it('passes scale to node data', async () => {
+    const mockModule = await import('@reactflow/core')
+    const sessions = [createSession({ id: 's1', slug: 'scaled-node' })]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+
+    const calls = vi.mocked(mockModule.ReactFlow).mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    const lastCall = calls[calls.length - 1]
+    const nodes = lastCall[0].nodes
+
+    if (nodes && nodes.length > 0) {
+      expect(nodes[0].data.scale).toBeDefined()
+      expect(typeof nodes[0].data.scale).toBe('number')
+      expect(nodes[0].data.scale).toBeGreaterThan(0)
+      expect(nodes[0].data.scale).toBeLessThanOrEqual(1)
+    }
+  })
 })

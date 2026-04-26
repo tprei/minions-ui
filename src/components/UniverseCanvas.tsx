@@ -30,6 +30,8 @@ const NODE_WIDTH_HALF = NODE_WIDTH / 2
 const NODE_HEIGHT_HALF = NODE_HEIGHT / 2
 import { NodeDetailPopup } from './NodeDetailPopup'
 import { useTheme } from '../hooks/useTheme'
+import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useHaptics } from '../hooks/useHaptics'
 
 interface UniverseNodeData {
   session?: ApiSession
@@ -38,6 +40,7 @@ interface UniverseNodeData {
   groupId: string
   nodeType: 'dag' | 'parent-child' | 'standalone' | 'ship'
   isDark: boolean
+  scale: number
   onContextMenu: (session: ApiSession, position: { x: number; y: number }) => void
   onNodeClick: (session: ApiSession) => void
 }
@@ -48,16 +51,18 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
   const statusColors = getStatusColors(isDark)
   const status = data.status as keyof ReturnType<typeof getStatusColors>
   const colors = statusColors[status] || statusColors.pending
+  const { vibrate } = useHaptics()
 
   const attentionRing = session ? getAttentionBorder(session, isDark) : ''
 
   const handleContextMenuOpen = useCallback(
     (position: { x: number; y: number }) => {
       if (session) {
+        vibrate('medium')
         data.onContextMenu(session, position)
       }
     },
-    [session, data]
+    [session, data, vibrate]
   )
 
   const longPressHandlers = useLongPress(handleContextMenuOpen, handleContextMenuOpen)
@@ -75,8 +80,10 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
 
   const nodeTypeLabel = data.nodeType === 'dag' ? 'DAG' : data.nodeType === 'parent-child' ? 'Tree' : null
 
-  const nodeWidth = isCoordinator ? 300 : 240
-  const nodeHeight = isCoordinator ? 120 : 100
+  const baseWidth = isCoordinator ? 300 : 240
+  const baseHeight = isCoordinator ? 120 : 100
+  const nodeWidth = Math.round(baseWidth * data.scale)
+  const nodeHeight = Math.round(baseHeight * data.scale)
 
   return (
     <div
@@ -180,6 +187,85 @@ const nodeTypes = {
   universeNode: UniverseNodeComponent,
 }
 
+interface FitToScreenFABProps {
+  onClick: () => void
+  isDark: boolean
+}
+
+function FitToScreenFAB({ onClick, isDark }: FitToScreenFABProps) {
+  const { vibrate } = useHaptics()
+
+  const handleClick = useCallback(() => {
+    vibrate('light')
+    onClick()
+  }, [onClick, vibrate])
+
+  return (
+    <button
+      onClick={handleClick}
+      data-testid="fit-to-screen-fab"
+      aria-label="Fit to screen"
+      style={{
+        position: 'absolute',
+        bottom: '20px',
+        right: '20px',
+        width: '48px',
+        height: '48px',
+        borderRadius: '50%',
+        backgroundColor: isDark ? '#4b5563' : '#ffffff',
+        color: isDark ? '#ffffff' : '#1f2937',
+        border: isDark ? '1px solid #6b7280' : '1px solid #d1d5db',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 5,
+        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+      }}
+      onMouseDown={(e) => {
+        const target = e.currentTarget
+        target.style.transform = 'scale(0.95)'
+      }}
+      onMouseUp={(e) => {
+        const target = e.currentTarget
+        target.style.transform = 'scale(1)'
+      }}
+      onMouseLeave={(e) => {
+        const target = e.currentTarget
+        target.style.transform = 'scale(1)'
+      }}
+      onTouchStart={(e) => {
+        const target = e.currentTarget
+        target.style.transform = 'scale(0.95)'
+      }}
+      onTouchEnd={(e) => {
+        const target = e.currentTarget
+        target.style.transform = 'scale(1)'
+      }}
+    >
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+      </svg>
+    </button>
+  )
+}
+
+function getResponsiveNodeScale(isMobile: boolean, isTablet: boolean): number {
+  if (isMobile) return 0.85
+  if (isTablet) return 0.92
+  return 1
+}
+
 export interface UniverseCanvasProps {
   sessions: ApiSession[]
   dags: ApiDagGraph[]
@@ -224,6 +310,9 @@ function UniverseCanvasInner({
   const [detailSession, setDetailSession] = useState<ApiSession | null>(null)
   const prevLayoutRef = useRef<{ nodes: Node[]; edges: UniverseEdge[] } | null>(null)
   const reactFlow = useReactFlow()
+  const isMobile = useMediaQuery('(max-width: 640px)')
+  const isTablet = useMediaQuery('(min-width: 641px) and (max-width: 1024px)')
+  const nodeScale = getResponsiveNodeScale(isMobile.value, isTablet.value)
 
   const dagBySessionId = useMemo(() => {
     const map = new Map<string, { dagId: string; nodeStatus: string }>()
@@ -274,11 +363,12 @@ function UniverseCanvasInner({
       data: {
         ...node.data,
         isDark,
+        scale: nodeScale,
         onContextMenu: handleNodeContextMenu,
         onNodeClick: handleNodeClick,
       },
     }))
-  }, [layoutNodes, isDark, handleNodeContextMenu, handleNodeClick])
+  }, [layoutNodes, isDark, nodeScale, handleNodeContextMenu, handleNodeClick])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(nodesWithHandlers)
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutEdges)
@@ -387,8 +477,15 @@ function UniverseCanvasInner({
     )
   }
 
+  const handleFitToScreen = useCallback(() => {
+    reactFlow.fitView({ padding: 0.2, duration: 400 })
+  }, [reactFlow])
+
+  const minZoom = isMobile.value ? 0.15 : 0.1
+  const maxZoom = isMobile.value ? 1.5 : 2
+
   return (
-    <div style={{ width: '100%', height: 'calc(100vh - 120px)' }} data-testid="universe-canvas">
+    <div style={{ width: '100%', height: 'calc(100vh - 120px)', position: 'relative' }} data-testid="universe-canvas">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -397,13 +494,14 @@ function UniverseCanvasInner({
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.3 }}
-        minZoom={0.1}
-        maxZoom={2}
+        minZoom={minZoom}
+        maxZoom={maxZoom}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
         panOnScroll
         zoomOnPinch
+        zoomOnDoubleClick={false}
       >
         <Background gap={20} size={1} color={isDark ? '#1f2937' : '#f3f4f6'} />
         <Controls
@@ -422,6 +520,8 @@ function UniverseCanvasInner({
           style={{ filter: isDark ? 'invert(0.8) hue-rotate(180deg)' : undefined }}
         />
       </ReactFlow>
+
+      <FitToScreenFAB onClick={handleFitToScreen} isDark={isDark} />
 
       {contextMenu.state.session && contextMenu.state.position && (
         <ContextMenu
