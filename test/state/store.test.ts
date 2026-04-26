@@ -298,4 +298,146 @@ describe('createConnectionStore snapshot integration', () => {
     window.dispatchEvent(new Event('online'))
     expect(mock.constructedUrls).toHaveLength(1)
   })
+
+  it('increments memoryProposalsCount on memory_proposed event', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    vi.stubGlobal('fetch', makeResponses())
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-memory-proposed')
+
+    expect(store.memoryProposalsCount.value).toBe(0)
+
+    const es = [...mock.instances.values()][0]
+    es?.simulateOpen()
+    es?.push({
+      type: 'memory_proposed',
+      memory: {
+        id: 1,
+        repo: 'test/repo',
+        kind: 'user',
+        title: 'Test',
+        body: 'Body',
+        status: 'pending',
+        sourceSessionId: null,
+        sourceDagId: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        supersededBy: null,
+        reviewedAt: null,
+        pinned: false,
+      },
+    })
+
+    expect(store.memoryProposalsCount.value).toBe(1)
+
+    es?.push({
+      type: 'memory_proposed',
+      memory: {
+        id: 2,
+        repo: 'test/repo',
+        kind: 'feedback',
+        title: 'Test 2',
+        body: 'Body 2',
+        status: 'pending',
+        sourceSessionId: null,
+        sourceDagId: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        supersededBy: null,
+        reviewedAt: null,
+        pinned: false,
+      },
+    })
+
+    expect(store.memoryProposalsCount.value).toBe(2)
+    store.dispose()
+  })
+
+  it('decrements memoryProposalsCount on memory_reviewed event', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    vi.stubGlobal('fetch', makeResponses())
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-memory-reviewed')
+
+    const es = [...mock.instances.values()][0]
+    es?.simulateOpen()
+    es?.push({
+      type: 'memory_proposed',
+      memory: {
+        id: 1,
+        repo: 'test/repo',
+        kind: 'user',
+        title: 'Test',
+        body: 'Body',
+        status: 'pending',
+        sourceSessionId: null,
+        sourceDagId: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        supersededBy: null,
+        reviewedAt: null,
+        pinned: false,
+      },
+    })
+
+    expect(store.memoryProposalsCount.value).toBe(1)
+
+    es?.push({
+      type: 'memory_reviewed',
+      memory: {
+        id: 1,
+        repo: 'test/repo',
+        kind: 'user',
+        title: 'Test',
+        body: 'Body',
+        status: 'approved',
+        sourceSessionId: null,
+        sourceDagId: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        supersededBy: null,
+        reviewedAt: Date.now(),
+        pinned: false,
+      },
+    })
+
+    expect(store.memoryProposalsCount.value).toBe(0)
+    store.dispose()
+  })
+
+  it('does not decrement memoryProposalsCount below zero', async () => {
+    mockLoadSnapshot.mockResolvedValue(null)
+    vi.stubGlobal('fetch', makeResponses())
+    const { createConnectionStore } = await import('../../src/state/store')
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const store = createConnectionStore(client, 'conn-memory-floor')
+
+    expect(store.memoryProposalsCount.value).toBe(0)
+
+    const es = [...mock.instances.values()][0]
+    es?.simulateOpen()
+    es?.push({
+      type: 'memory_reviewed',
+      memory: {
+        id: 1,
+        repo: 'test/repo',
+        kind: 'user',
+        title: 'Test',
+        body: 'Body',
+        status: 'approved',
+        sourceSessionId: null,
+        sourceDagId: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        supersededBy: null,
+        reviewedAt: Date.now(),
+        pinned: false,
+      },
+    })
+
+    expect(store.memoryProposalsCount.value).toBe(0)
+    store.dispose()
+  })
 })

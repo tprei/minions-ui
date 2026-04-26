@@ -83,6 +83,7 @@ function makeStore(opts: {
     diffStatsBySessionId: signal(new Map()),
     resourceSnapshot: signal(null),
     runtimeConfig: signal(null),
+    memoryProposalsCount: signal(0),
     loadDiffStats: vi.fn(async () => {}),
     refresh: vi.fn(async () => {}),
     sendCommand: vi.fn(async () => ({ success: true })),

@@ -164,5 +164,21 @@ function projectEvent(
     return { type: 'resource', snapshot: event.snapshot }
   }
 
+  if (event.kind === 'memory.proposed') {
+    return { type: 'memory_proposed', memory: event.memory }
+  }
+
+  if (event.kind === 'memory.updated') {
+    return { type: 'memory_updated', memory: event.memory }
+  }
+
+  if (event.kind === 'memory.reviewed') {
+    return { type: 'memory_reviewed', memory: event.memory }
+  }
+
+  if (event.kind === 'memory.deleted') {
+    return { type: 'memory_deleted', memoryId: event.memoryId }
+  }
+
   return null
 }

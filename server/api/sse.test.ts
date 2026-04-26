@@ -298,4 +298,136 @@ describe('live event projection', () => {
     expect(second.length).toBe(1)
     expect(JSON.parse(second[0]!.data)).toMatchObject({ type: 'session_updated' })
   })
+
+  test('memory.proposed emits memory_proposed', async () => {
+    const app = makeApp(testDb)
+    const bus = getEventBus()
+    const res = await app.fetch(new Request('http://localhost/api/events'))
+    expect(res.status).toBe(200)
+
+    const reader = new SseReader(res)
+    const ready = await reader.read(1)
+    expect(ready[0]!.event).toBe('keepalive')
+
+    const memory = {
+      id: 1,
+      repo: 'test/repo',
+      kind: 'user' as const,
+      title: 'Test memory',
+      body: 'Test content',
+      status: 'pending' as const,
+      sourceSessionId: null,
+      sourceDagId: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      supersededBy: null,
+      reviewedAt: null,
+      pinned: false,
+    }
+
+    const collectPromise = reader.read(1)
+    bus.emit({ kind: 'memory.proposed', memory })
+    const events = await collectPromise
+    reader.cancel()
+
+    expect(events).toHaveLength(1)
+    const parsed = JSON.parse(events[0]!.data) as { type: string; memory: { id: number } }
+    expect(parsed.type).toBe('memory_proposed')
+    expect(parsed.memory.id).toBe(1)
+  })
+
+  test('memory.updated emits memory_updated', async () => {
+    const app = makeApp(testDb)
+    const bus = getEventBus()
+    const res = await app.fetch(new Request('http://localhost/api/events'))
+    expect(res.status).toBe(200)
+
+    const reader = new SseReader(res)
+    const ready = await reader.read(1)
+    expect(ready[0]!.event).toBe('keepalive')
+
+    const memory = {
+      id: 2,
+      repo: 'test/repo',
+      kind: 'feedback' as const,
+      title: 'Updated memory',
+      body: 'Updated content',
+      status: 'approved' as const,
+      sourceSessionId: null,
+      sourceDagId: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      supersededBy: null,
+      reviewedAt: null,
+      pinned: false,
+    }
+
+    const collectPromise = reader.read(1)
+    bus.emit({ kind: 'memory.updated', memory })
+    const events = await collectPromise
+    reader.cancel()
+
+    expect(events).toHaveLength(1)
+    const parsed = JSON.parse(events[0]!.data) as { type: string; memory: { id: number } }
+    expect(parsed.type).toBe('memory_updated')
+    expect(parsed.memory.id).toBe(2)
+  })
+
+  test('memory.reviewed emits memory_reviewed', async () => {
+    const app = makeApp(testDb)
+    const bus = getEventBus()
+    const res = await app.fetch(new Request('http://localhost/api/events'))
+    expect(res.status).toBe(200)
+
+    const reader = new SseReader(res)
+    const ready = await reader.read(1)
+    expect(ready[0]!.event).toBe('keepalive')
+
+    const memory = {
+      id: 3,
+      repo: 'test/repo',
+      kind: 'project' as const,
+      title: 'Reviewed memory',
+      body: 'Reviewed content',
+      status: 'approved' as const,
+      sourceSessionId: null,
+      sourceDagId: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      supersededBy: null,
+      reviewedAt: Date.now(),
+      pinned: false,
+    }
+
+    const collectPromise = reader.read(1)
+    bus.emit({ kind: 'memory.reviewed', memory })
+    const events = await collectPromise
+    reader.cancel()
+
+    expect(events).toHaveLength(1)
+    const parsed = JSON.parse(events[0]!.data) as { type: string; memory: { id: number } }
+    expect(parsed.type).toBe('memory_reviewed')
+    expect(parsed.memory.id).toBe(3)
+  })
+
+  test('memory.deleted emits memory_deleted', async () => {
+    const app = makeApp(testDb)
+    const bus = getEventBus()
+    const res = await app.fetch(new Request('http://localhost/api/events'))
+    expect(res.status).toBe(200)
+
+    const reader = new SseReader(res)
+    const ready = await reader.read(1)
+    expect(ready[0]!.event).toBe('keepalive')
+
+    const collectPromise = reader.read(1)
+    bus.emit({ kind: 'memory.deleted', memoryId: 42 })
+    const events = await collectPromise
+    reader.cancel()
+
+    expect(events).toHaveLength(1)
+    const parsed = JSON.parse(events[0]!.data) as { type: string; memoryId: number }
+    expect(parsed.type).toBe('memory_deleted')
+    expect(parsed.memoryId).toBe(42)
+  })
 })

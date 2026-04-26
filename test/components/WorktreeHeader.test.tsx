@@ -49,6 +49,7 @@ function makeStore(opts: {
     diffStatsBySessionId,
     resourceSnapshot: signal(null),
     runtimeConfig: signal(null),
+    memoryProposalsCount: signal(0),
     loadDiffStats: opts.loadDiffStats ?? (async () => {}),
     refresh: async () => {},
     sendCommand: async () => ({ success: true }),

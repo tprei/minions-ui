@@ -1,4 +1,4 @@
-import type { TranscriptEvent, ApiSession, ApiDagGraph, ResourceSnapshot } from '../../shared/api-types'
+import type { TranscriptEvent, ApiSession, ApiDagGraph, ResourceSnapshot, MemoryEntry } from '../../shared/api-types'
 
 export type SessionRunState = 'completed' | 'errored' | 'quota_exhausted' | 'stream_stalled'
 
@@ -50,6 +50,10 @@ export type EngineEvent =
       results: Array<{ name: string; passed: boolean; output: string }>
     }
   | { kind: 'resource'; snapshot: ResourceSnapshot }
+  | { kind: 'memory.proposed'; memory: MemoryEntry }
+  | { kind: 'memory.updated'; memory: MemoryEntry }
+  | { kind: 'memory.reviewed'; memory: MemoryEntry }
+  | { kind: 'memory.deleted'; memoryId: number }
 
 export type EngineEventKind = EngineEvent['kind']
 export type EngineEventOfKind<K extends EngineEventKind> = Extract<EngineEvent, { kind: K }>

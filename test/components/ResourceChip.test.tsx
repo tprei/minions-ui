@@ -19,6 +19,7 @@ function makeStore(snapshot: ResourceSnapshot | null): ConnectionStore {
     diffStatsBySessionId: signal(new Map()),
     resourceSnapshot: signal(snapshot),
     runtimeConfig: signal(null),
+    memoryProposalsCount: signal(0),
     loadDiffStats: vi.fn(async () => {}),
     refresh: vi.fn(async () => {}),
     sendCommand: vi.fn(async () => ({ success: true })),
