@@ -44,6 +44,7 @@ import { VariantGroupView } from './groups/VariantGroupView'
 import type { ApiSession, AttentionReason, MinionCommand, QuickAction } from './api/types'
 import { HeaderMenu } from './components/HeaderMenu'
 import { MemoryDrawer } from './components/MemoryDrawer'
+import { DagStatusPill } from './components/DagStatusPill'
 
 export type ViewMode = 'list' | 'canvas' | 'ship'
 
@@ -791,6 +792,7 @@ function ActiveView() {
       <header class="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0 overflow-x-clip">
         <ConnectionPicker onManage={() => { showDrawer.value = true }} />
         <ConnectionStatusBadge status={store.status.value} reconnectAt={store.reconnectAt.value} />
+        <DagStatusPill dags={dags} />
         {hasFeature(store, 'resource-metrics') && (
           <ResourceChip store={store} onOpen={() => { showRuntime.value = 'resources' }} />
         )}
