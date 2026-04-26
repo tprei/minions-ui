@@ -76,6 +76,10 @@ export type SseEvent =
       url: string
       capturedAt: string
     }
+  | { type: 'memory_proposed'; memory: MemoryEntry }
+  | { type: 'memory_updated'; memory: MemoryEntry }
+  | { type: 'memory_reviewed'; memory: MemoryEntry }
+  | { type: 'memory_deleted'; memoryId: number }
 
 export type LimitSource = 'cgroup' | 'host'
 
@@ -468,4 +472,45 @@ export function isTranscriptEventOfType<T extends TranscriptEventType>(
   type: T,
 ): event is Extract<TranscriptEvent, { type: T }> {
   return event.type === type
+}
+
+export type MemoryKind = 'user' | 'feedback' | 'project' | 'reference'
+export type MemoryStatus = 'pending' | 'approved' | 'rejected' | 'superseded' | 'pending_deletion'
+
+export interface MemoryEntry {
+  id: number
+  repo: string | null
+  kind: MemoryKind
+  title: string
+  body: string
+  status: MemoryStatus
+  sourceSessionId: string | null
+  sourceDagId: string | null
+  createdAt: number
+  updatedAt: number
+  supersededBy: number | null
+  reviewedAt: number | null
+  pinned: boolean
+}
+
+export interface CreateMemoryRequest {
+  repo?: string | null
+  kind: MemoryKind
+  title: string
+  body: string
+  sourceSessionId?: string
+  sourceDagId?: string
+  pinned?: boolean
+}
+
+export interface UpdateMemoryRequest {
+  title?: string
+  body?: string
+  kind?: MemoryKind
+  status?: MemoryStatus
+  pinned?: boolean
+}
+
+export interface ReviewMemoryRequest {
+  status: 'approved' | 'rejected'
 }
