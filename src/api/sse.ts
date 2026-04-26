@@ -7,7 +7,7 @@ export type SseStatus = 'connecting' | 'live' | 'retrying' | 'closed'
 export interface SseHandlers {
   onEvent: (event: SseEvent) => void
   onStatusChange?: (status: SseStatus) => void
-  onReconnect?: () => void
+  onReconnect?: (event: { quiet: boolean }) => void
 }
 
 export interface EventStreamHandle {
@@ -16,6 +16,9 @@ export interface EventStreamHandle {
   status: Signal<SseStatus>
   reconnectAt: Signal<number | null>
 }
+
+const QUIET_RECONNECT_DELAY_MS = 1000
+const RECENT_ACTIVITY_RECONNECT_MS = 5000
 
 export function openEventStream(opts: {
   baseUrl: string
@@ -31,6 +34,8 @@ export function openEventStream(opts: {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let watchdogTimer: ReturnType<typeof setTimeout> | null = null
   let closed = false
+  let lastActivityAt = 0
+  let quietReconnectsSinceActivity = 0
 
   function setStatus(s: SseStatus) {
     status.value = s
@@ -56,27 +61,54 @@ export function openEventStream(opts: {
       if (closed) return
       es?.close()
       es = null
-      scheduleReconnect()
+      scheduleReconnect(false)
     }, quietTimeoutMs)
   }
 
-  function scheduleReconnect() {
+  function markActivity() {
+    lastActivityAt = Date.now()
+    quietReconnectsSinceActivity = 0
+    attempt = 0
+    reconnectAt.value = null
+    if (status.value !== 'live') {
+      setStatus('live')
+    }
+    scheduleWatchdog()
+  }
+
+  function shouldReconnectQuietly(): boolean {
+    return status.value === 'live'
+      && lastActivityAt > 0
+      && Date.now() - lastActivityAt <= RECENT_ACTIVITY_RECONNECT_MS
+      && quietReconnectsSinceActivity === 0
+  }
+
+  function scheduleReconnect(quiet: boolean) {
     if (closed) return
     if (reconnectTimer !== null) return
     clearWatchdog()
-    setStatus('retrying')
-    const delay = Math.floor(Math.random() * Math.min(30000, 500 * 2 ** attempt))
-    attempt++
-    reconnectAt.value = Date.now() + delay
+    const delay = quiet
+      ? QUIET_RECONNECT_DELAY_MS
+      : Math.floor(Math.random() * Math.min(30000, 500 * 2 ** attempt))
+    if (quiet) {
+      quietReconnectsSinceActivity++
+      reconnectAt.value = null
+    } else {
+      setStatus('retrying')
+      attempt++
+      reconnectAt.value = Date.now() + delay
+    }
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null
-      connect()
+      connect(quiet)
     }, delay)
   }
 
-  function connect() {
+  function connect(quiet = false) {
     if (closed) return
-    setStatus('connecting')
+    if (!quiet || status.value !== 'live') {
+      setStatus('connecting')
+    }
     reconnectAt.value = null
     es = new EventSource(buildUrl())
 
@@ -85,18 +117,18 @@ export function openEventStream(opts: {
       reconnectAt.value = null
       setStatus('live')
       scheduleWatchdog()
-      handlers.onReconnect?.()
+      handlers.onReconnect?.({ quiet })
     }
 
     es.onerror = () => {
       es?.close()
       es = null
       if (closed) return
-      scheduleReconnect()
+      scheduleReconnect(shouldReconnectQuietly())
     }
 
     es.onmessage = (e: MessageEvent) => {
-      scheduleWatchdog()
+      markActivity()
       try {
         const event = JSON.parse(e.data as string) as SseEvent
         handlers.onEvent(event)
@@ -105,7 +137,7 @@ export function openEventStream(opts: {
       }
     }
 
-    es.addEventListener('keepalive', scheduleWatchdog)
+    es.addEventListener('keepalive', markActivity)
   }
 
   connect()
@@ -123,6 +155,8 @@ export function openEventStream(opts: {
       es?.close()
       es = null
       attempt = 0
+      lastActivityAt = 0
+      quietReconnectsSinceActivity = 0
       reconnectAt.value = null
       connect()
     },
