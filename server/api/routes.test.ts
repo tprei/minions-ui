@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { Hono } from 'hono'
@@ -9,8 +9,10 @@ import { resetEventBus } from '../events/bus'
 import { prepared, runMigrations } from '../db/sqlite'
 import { registerApiRoutes } from './routes'
 import { registerSseRoute } from './sse'
+import { runGit } from '../workspace/git'
+import { createSessionCheckpoint } from '../checkpoints/session-checkpoints'
 import type { SpawnFn, SubprocessHandle } from '../session/runtime'
-import type { MergeReadiness, QualityReport } from '../../shared/api-types'
+import type { MergeReadiness, QualityReport, RestoreCheckpointResult, SessionCheckpoint } from '../../shared/api-types'
 
 function setupTestDb(): Database {
   const db = new Database(':memory:')
@@ -111,6 +113,7 @@ describe('GET /api/version', () => {
     expect(features).toContain('sessions-variants')
     expect(features).toContain('ship-coordinator')
     expect(features).toContain('merge-readiness')
+    expect(features).toContain('session-checkpoints')
     expect(features).toContain('web-push')
     expect(features).toContain('transcript')
     expect(features).toContain('auth')
@@ -265,6 +268,80 @@ describe('GET /api/sessions/:slug/readiness', () => {
     expect(body.data.status).toBe('blocked')
     expect(body.data.checks.find((check) => check.id === 'pull-request')?.status).toBe('blocked')
     rmSync(root, { recursive: true, force: true })
+  })
+})
+
+describe('session checkpoint routes', () => {
+  test('lists checkpoints and restores a stopped session workspace', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'checkpoint-api-'))
+    const slug = 'checkpoint-slug'
+    const cwd = path.join(root, slug)
+    mkdirSync(cwd, { recursive: true })
+
+    try {
+      await runGit(cwd, ['init', '-b', 'main'])
+      await runGit(cwd, ['config', 'user.email', 'minions@example.test'])
+      await runGit(cwd, ['config', 'user.name', 'Minions Test'])
+      writeFileSync(path.join(cwd, 'tracked.txt'), 'base\n')
+      await runGit(cwd, ['add', 'tracked.txt'])
+      await runGit(cwd, ['commit', '-m', 'initial'])
+
+      const now = Date.now()
+      const row = {
+        id: 'checkpoint-session',
+        slug,
+        status: 'completed' as const,
+        command: 'cmd',
+        mode: 'task',
+        repo: cwd,
+        branch: 'minion/checkpoint-slug',
+        bare_dir: null,
+        pr_url: null,
+        parent_id: null,
+        variant_group_id: null,
+        claude_session_id: null,
+        workspace_root: root,
+        created_at: now,
+        updated_at: now,
+        needs_attention: false,
+        attention_reasons: [],
+        quick_actions: [],
+        conversation: [],
+        quota_sleep_until: null,
+        quota_retry_count: 0,
+        metadata: {},
+        pipeline_advancing: false,
+        stage: null,
+        coordinator_children: [],
+      }
+      prepared.insertSession(testDb, row)
+      writeFileSync(path.join(cwd, 'tracked.txt'), 'checkpoint\n')
+      const checkpoint = await createSessionCheckpoint({
+        db: testDb,
+        session: row,
+        turn: 1,
+        kind: 'turn',
+        label: 'Turn 1',
+      })
+      writeFileSync(path.join(cwd, 'tracked.txt'), 'later\n')
+
+      const app = makeApp(testDb)
+      const listRes = await app.fetch(new Request(`http://localhost/api/sessions/${slug}/checkpoints`))
+      expect(listRes.status).toBe(200)
+      const listBody = await json<{ data: SessionCheckpoint[] }>(listRes)
+      expect(listBody.data.map((item) => item.id)).toEqual([checkpoint.id])
+
+      const restoreRes = await app.fetch(new Request(
+        `http://localhost/api/sessions/${slug}/checkpoints/${checkpoint.id}/restore`,
+        { method: 'POST' },
+      ))
+      expect(restoreRes.status).toBe(200)
+      const restoreBody = await json<{ data: RestoreCheckpointResult }>(restoreRes)
+      expect(restoreBody.data.checkpoint.id).toBe(checkpoint.id)
+      expect(readFileSync(path.join(cwd, 'tracked.txt'), 'utf8')).toBe('checkpoint\n')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 

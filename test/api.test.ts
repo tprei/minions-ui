@@ -156,6 +156,29 @@ describe('ApiClient', () => {
     expect(url).toContain('/transcript?after=5')
   })
 
+  it('listCheckpoints fetches session checkpoints', async () => {
+    const fetchMock = mockFetch({ data: [] })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.listCheckpoints('sess/1')
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(`${BASE_URL}/api/sessions/sess%2F1/checkpoints`)
+  })
+
+  it('restoreCheckpoint posts to the checkpoint restore endpoint', async () => {
+    const fetchMock = mockFetch({ data: { checkpoint: null, session: null } })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.restoreCheckpoint('sess-1', 'cp/1')
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE_URL}/api/sessions/sess-1/checkpoints/cp%2F1/restore`)
+    expect(init.method).toBe('POST')
+  })
+
   it('openEventStream delivers transcript_event via onEvent', () => {
     vi.stubGlobal('fetch', mockFetch({ data: [] }))
 

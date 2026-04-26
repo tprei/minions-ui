@@ -6,6 +6,7 @@ import { readdirSync, readFileSync } from 'fs'
 type SessionStatus = 'pending' | 'running' | 'waiting_input' | 'completed' | 'failed'
 type DagStatus = 'pending' | 'running' | 'completed' | 'failed'
 type DagNodeStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'ci-pending' | 'ci-failed' | 'landed'
+type SessionCheckpointKind = 'turn' | 'completion' | 'manual'
 
 export interface SessionRow {
   id: string
@@ -81,6 +82,20 @@ interface SessionEventDbRow {
   payload: string
 }
 
+export interface SessionCheckpointRow {
+  id: string
+  session_id: string
+  turn: number
+  kind: SessionCheckpointKind
+  label: string
+  sha: string
+  base_sha: string
+  branch: string | null
+  dag_id: string | null
+  dag_node_id: string | null
+  created_at: number
+}
+
 interface DagRow {
   id: string
   root_task_id: string
@@ -125,6 +140,9 @@ type StmtCache = {
   listSessions?: ReturnType<Database['prepare']>
   deleteSession?: ReturnType<Database['prepare']>
   insertEvent?: ReturnType<Database['prepare']>
+  insertSessionCheckpoint?: ReturnType<Database['prepare']>
+  listSessionCheckpoints?: ReturnType<Database['prepare']>
+  getSessionCheckpoint?: ReturnType<Database['prepare']>
   insertDag?: ReturnType<Database['prepare']>
   updateDag?: ReturnType<Database['prepare']>
   getDag?: ReturnType<Database['prepare']>
@@ -403,6 +421,49 @@ export const prepared = {
       )
       .get(sessionId)
     return (row?.max_seq ?? 0) + 1
+  },
+
+  insertSessionCheckpoint(db: Database, row: SessionCheckpointRow): void {
+    const c = stmts(db)
+    if (!c.insertSessionCheckpoint) {
+      c.insertSessionCheckpoint = db.prepare(
+        `INSERT INTO session_checkpoints (id, session_id, turn, kind, label, sha, base_sha, branch, dag_id, dag_node_id, created_at)
+         VALUES ($id, $session_id, $turn, $kind, $label, $sha, $base_sha, $branch, $dag_id, $dag_node_id, $created_at)`,
+      )
+    }
+    c.insertSessionCheckpoint.run({
+      $id: row.id,
+      $session_id: row.session_id,
+      $turn: row.turn,
+      $kind: row.kind,
+      $label: row.label,
+      $sha: row.sha,
+      $base_sha: row.base_sha,
+      $branch: row.branch,
+      $dag_id: row.dag_id,
+      $dag_node_id: row.dag_node_id,
+      $created_at: row.created_at,
+    })
+  },
+
+  listSessionCheckpoints(db: Database, sessionId: string): SessionCheckpointRow[] {
+    const c = stmts(db)
+    if (!c.listSessionCheckpoints) {
+      c.listSessionCheckpoints = db.prepare<SessionCheckpointRow, [string]>(
+        'SELECT * FROM session_checkpoints WHERE session_id = ? ORDER BY created_at DESC',
+      )
+    }
+    return c.listSessionCheckpoints.all(sessionId) as SessionCheckpointRow[]
+  },
+
+  getSessionCheckpoint(db: Database, id: string): SessionCheckpointRow | null {
+    const c = stmts(db)
+    if (!c.getSessionCheckpoint) {
+      c.getSessionCheckpoint = db.prepare<SessionCheckpointRow, [string]>(
+        'SELECT * FROM session_checkpoints WHERE id = ?',
+      )
+    }
+    return c.getSessionCheckpoint.get(id) as SessionCheckpointRow | null
   },
 
   insertDag(db: Database, row: DagRow): void {

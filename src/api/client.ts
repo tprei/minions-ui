@@ -15,8 +15,10 @@ import type {
   PushSubscriptionJSON,
   ResourceSnapshot,
   ReviewMemoryRequest,
+  RestoreCheckpointResult,
   RuntimeConfigResponse,
   RuntimeOverrides,
+  SessionCheckpoint,
   ScreenshotList,
   TranscriptSnapshot,
   UpdateMemoryRequest,
@@ -49,6 +51,8 @@ export interface ApiClient {
   createSessionVariants(req: CreateSessionVariantsRequest): Promise<CreateSessionVariantsResult>
   getPr(sessionId: string): Promise<PrPreview>
   getReadiness(sessionId: string): Promise<MergeReadiness>
+  listCheckpoints(sessionId: string): Promise<SessionCheckpoint[]>
+  restoreCheckpoint(sessionId: string, checkpointId: string): Promise<RestoreCheckpointResult>
   getDiff(sessionId: string): Promise<WorkspaceDiff>
   getTranscript(slug: string, afterSeq?: number): Promise<TranscriptSnapshot>
   listScreenshots(sessionId: string): Promise<ScreenshotList>
@@ -177,6 +181,17 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
 
     getReadiness(sessionId: string) {
       return get<MergeReadiness>(`/api/sessions/${encodeURIComponent(sessionId)}/readiness`)
+    },
+
+    listCheckpoints(sessionId: string) {
+      return get<SessionCheckpoint[]>(`/api/sessions/${encodeURIComponent(sessionId)}/checkpoints`)
+    },
+
+    restoreCheckpoint(sessionId: string, checkpointId: string) {
+      return post<RestoreCheckpointResult>(
+        `/api/sessions/${encodeURIComponent(sessionId)}/checkpoints/${encodeURIComponent(checkpointId)}/restore`,
+        {},
+      )
     },
 
     async getDiff(sessionId: string): Promise<WorkspaceDiff> {

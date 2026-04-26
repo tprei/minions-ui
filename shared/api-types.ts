@@ -108,6 +108,27 @@ export interface MergeReadiness {
   checks: MergeReadinessCheck[]
 }
 
+export type SessionCheckpointKind = 'turn' | 'completion' | 'manual'
+
+export interface SessionCheckpoint {
+  id: string
+  sessionId: string
+  turn: number
+  kind: SessionCheckpointKind
+  label: string
+  sha: string
+  baseSha: string
+  branch?: string
+  dagId?: string
+  dagNodeId?: string
+  createdAt: string
+}
+
+export interface RestoreCheckpointResult {
+  checkpoint: SessionCheckpoint
+  session: ApiSession
+}
+
 export type SseEvent =
   | { type: 'session_created'; session: ApiSession }
   | { type: 'session_updated'; session: ApiSession }

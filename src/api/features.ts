@@ -15,6 +15,7 @@ export type FeatureName =
   | 'resource-metrics'
   | 'runtime-config'
   | 'merge-readiness'
+  | 'session-checkpoints'
   | 'ship-coordinator'
   | 'memory'
 

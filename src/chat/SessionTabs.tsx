@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact'
 
-export type SessionTabId = 'chat' | 'diff' | 'screenshots'
+export type SessionTabId = 'chat' | 'diff' | 'screenshots' | 'checkpoints'
 
 export interface SessionTabDef {
   id: SessionTabId

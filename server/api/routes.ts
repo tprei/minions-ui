@@ -13,7 +13,9 @@ import type {
   OverrideField,
   MergeReadiness,
   ResourceSnapshot,
+  RestoreCheckpointResult,
   RuntimeConfigResponse,
+  SessionCheckpoint,
   ScreenshotList,
   TranscriptSnapshot,
   VersionInfo,
@@ -54,6 +56,10 @@ import { handleDoctorCommand } from '../commands/doctor'
 import { getProvider } from '../session/providers/index'
 import { buildMergeReadiness } from '../readiness/merge-readiness'
 import {
+  checkpointRowToApi,
+  restoreSessionCheckpoint,
+} from '../checkpoints/session-checkpoints'
+import {
   countPendingMemories,
   deleteMemory,
   getMemory,
@@ -84,6 +90,7 @@ const FEATURES = [
   'resource-metrics',
   'runtime-config',
   'merge-readiness',
+  'session-checkpoints',
   'memory',
 ]
 
@@ -963,6 +970,38 @@ export function registerApiRoutes(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)
+    }
+  })
+
+  app.get('/api/sessions/:slug/checkpoints', (c) => {
+    const { slug } = c.req.param()
+    const db = resolveDb()
+    const row = findSessionRow(slug, db)
+    if (!row) return c.json({ data: null, error: 'Session not found' }, 404)
+    const checkpoints = prepared.listSessionCheckpoints(db, row.id).map(checkpointRowToApi)
+    return c.json({ data: checkpoints } satisfies ApiResponse<SessionCheckpoint[]>)
+  })
+
+  app.post('/api/sessions/:slug/checkpoints/:checkpointId/restore', async (c) => {
+    const { slug, checkpointId } = c.req.param()
+    const db = resolveDb()
+    const row = findSessionRow(slug, db)
+    if (!row) return c.json({ data: null, error: 'Session not found' }, 404)
+    if (!row.workspace_root) return c.json({ error: 'Session has no workspace' }, 422)
+    if (row.status === 'running' || row.status === 'pending' || row.status === 'waiting_input' || registry.get(row.id)?.running) {
+      return c.json({ error: 'Stop the session before restoring a checkpoint' }, 409)
+    }
+
+    try {
+      const checkpoint = await restoreSessionCheckpoint({ db, session: row, checkpointId })
+      const updated = prepared.getSession(db, row.id)
+      const session = sessionRowToApi(updated ?? row)
+      getEventBus().emit({ kind: 'session.snapshot', session })
+      return c.json({ data: { checkpoint, session } satisfies RestoreCheckpointResult })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      const status = message === 'Checkpoint not found' ? 404 : 500
+      return c.json({ error: message }, status)
     }
   })
 
