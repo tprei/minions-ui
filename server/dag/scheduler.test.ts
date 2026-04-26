@@ -130,6 +130,11 @@ describe("DagScheduler", () => {
       db,
       bus,
       workspace: "/tmp",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
       updateStackComment: async () => { stackCommentCallCount++ },
     })
   }
@@ -530,5 +535,102 @@ describe("DagScheduler", () => {
 
     const after = scheduler.status("dag-resume-noop")
     expect(after.nodes[0]?.status).toBe("running")
+  })
+})
+
+describe("DagScheduler restack integration", () => {
+  it("defers restack when node is running", async () => {
+    const db = makeTestDb()
+    const bus = new EngineEventBus()
+    const sessions: ApiSession[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`sess-${sessions.length}`, db)
+      sessions.push(session)
+      return { session, runtime: {} as never }
+    })
+    const scheduler = createDagScheduler({
+      registry,
+      db,
+      bus,
+      workspace: "/tmp/workspace",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
+    })
+
+    const graph = buildDag("dag-deferred-restack", [
+      { id: "a", title: "Task A", description: "First", dependsOn: [] },
+      { id: "b", title: "Task B", description: "Second", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    await scheduler.start("dag-deferred-restack")
+
+    graph.nodes[0]!.status = "running"
+    graph.nodes[0]!.sessionId = sessions[0]!.id
+    saveDag(graph, db)
+
+    bus.emit({
+      kind: "dag.node.pushed",
+      dagId: "dag-deferred-restack",
+      nodeId: "a",
+      parentSha: "old-sha",
+      newSha: "new-sha",
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    await scheduler.onSessionCompleted(sessions[0]!.id, "completed")
+  })
+
+  it("processes deferred restacks on session completion", async () => {
+    const db = makeTestDb()
+    const bus = new EngineEventBus()
+    const events: unknown[] = []
+    bus.on((ev) => events.push(ev))
+
+    const sessions: ApiSession[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`sess-${sessions.length}`, db)
+      sessions.push(session)
+      return { session, runtime: {} as never }
+    })
+    const scheduler = createDagScheduler({
+      registry,
+      db,
+      bus,
+      workspace: "/tmp/workspace",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
+    })
+
+    const graph = buildDag("dag-deferred-drain", [
+      { id: "a", title: "Task A", description: "First", dependsOn: [] },
+      { id: "b", title: "Task B", description: "Second", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    graph.nodes[0]!.branch = "minion/test-a"
+    graph.nodes[1]!.branch = "minion/test-b"
+    saveDag(graph, db)
+
+    await scheduler.start("dag-deferred-drain")
+
+    graph.nodes[0]!.status = "running"
+    graph.nodes[0]!.sessionId = sessions[0]!.id
+    saveDag(graph, db)
+
+    bus.emit({
+      kind: "dag.node.pushed",
+      dagId: "dag-deferred-drain",
+      nodeId: "a",
+      parentSha: "old-sha",
+      newSha: "new-sha",
+    })
+
+    await scheduler.onSessionCompleted(sessions[0]!.id, "completed")
   })
 })

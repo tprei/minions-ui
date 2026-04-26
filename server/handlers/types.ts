@@ -85,6 +85,7 @@ export interface SessionMetaRow {
 
 export interface SessionMetadata {
   loopId?: string
+  dagId?: string
   dagNodeId?: string
   parentThreadId?: string
   pendingFeedback?: string[]
