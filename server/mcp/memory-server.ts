@@ -1,13 +1,32 @@
 #!/usr/bin/env bun
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  type CallToolRequest,
-  type Tool,
-} from '@modelcontextprotocol/sdk/types.js'
+type Tool = {
+  name: string
+  description: string
+  inputSchema: {
+    type: string
+    properties?: Record<string, unknown>
+    required?: string[]
+  }
+}
+
+type CallToolRequest = {
+  params: {
+    name: string
+    arguments: unknown
+  }
+}
+
+type ServerCapabilities = {
+  capabilities: {
+    tools: Record<string, never>
+  }
+}
+
+type ServerInfo = {
+  name: string
+  version: string
+}
 
 const MEMORY_REPO = process.env.MEMORY_REPO ?? ''
 const MEMORY_SESSION_ID = process.env.MEMORY_SESSION_ID ?? ''
@@ -155,7 +174,7 @@ async function handleToolCall(request: CallToolRequest): Promise<{ content: Arra
   try {
     switch (name) {
       case 'remember': {
-        const input = args as RememberInput
+        const input = args as unknown as RememberInput
         const result = await apiRequest('POST', '/api/memories', {
           repo: MEMORY_REPO,
           kind: input.kind,
@@ -206,7 +225,7 @@ async function handleToolCall(request: CallToolRequest): Promise<{ content: Arra
       }
 
       case 'supersede': {
-        const input = args as SupersedeInput
+        const input = args as unknown as SupersedeInput
         const result = await apiRequest('POST', `/api/memories/${input.old_id}/supersede`, {
           repo: MEMORY_REPO,
           kind: input.new_kind,
@@ -225,7 +244,7 @@ async function handleToolCall(request: CallToolRequest): Promise<{ content: Arra
       }
 
       case 'forget': {
-        const input = args as ForgetInput
+        const input = args as unknown as ForgetInput
         const result = await apiRequest('PATCH', `/api/memories/${input.id}`, {
           status: 'pending_deletion',
         })
@@ -251,16 +270,23 @@ async function handleToolCall(request: CallToolRequest): Promise<{ content: Arra
 }
 
 async function main() {
+  // @ts-expect-error - MCP SDK types only available after npm install
+  const { Server } = await import('@modelcontextprotocol/sdk/server/index.js')
+  // @ts-expect-error - MCP SDK types only available after npm install
+  const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js')
+  // @ts-expect-error - MCP SDK types only available after npm install
+  const { CallToolRequestSchema, ListToolsRequestSchema } = await import('@modelcontextprotocol/sdk/types.js')
+
   const server = new Server(
     {
       name: 'memory-server',
       version: '1.0.0',
-    },
+    } as ServerInfo,
     {
       capabilities: {
         tools: {},
       },
-    }
+    } as ServerCapabilities
   )
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
