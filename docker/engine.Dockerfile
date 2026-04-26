@@ -46,6 +46,8 @@ RUN npm install -g \
       github-mcp-server \
       repomix
 
+RUN npx --yes playwright@latest install-deps chromium
+
 COPY --from=devtools /opt/devtools /opt/devtools
 COPY --from=uv-base /opt/uv-python /opt/uv-python
 COPY --from=uv-base /opt/uv-tools /opt/uv-tools
