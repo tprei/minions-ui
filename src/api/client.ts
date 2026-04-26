@@ -3,6 +3,8 @@ import type {
   ApiResponse,
   ApiSession,
   CommandResult,
+  CreateExternalTaskRequest,
+  ExternalTaskResult,
   CreateMemoryRequest,
   CreateSessionRequest,
   CreateSessionVariantsRequest,
@@ -49,6 +51,7 @@ export interface ApiClient {
   sendMessage(text: string, sessionId?: string, images?: Array<{ mediaType: string; dataBase64: string }>): Promise<{ ok: true; sessionId: string | null }>
   createSession(req: CreateSessionRequest): Promise<ApiSession>
   createSessionVariants(req: CreateSessionVariantsRequest): Promise<CreateSessionVariantsResult>
+  createExternalTask(req: CreateExternalTaskRequest): Promise<ExternalTaskResult>
   getPr(sessionId: string): Promise<PrPreview>
   getReadiness(sessionId: string): Promise<MergeReadiness>
   listCheckpoints(sessionId: string): Promise<SessionCheckpoint[]>
@@ -173,6 +176,10 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
 
     createSessionVariants(req: CreateSessionVariantsRequest) {
       return post<CreateSessionVariantsResult>('/api/sessions/variants', req)
+    },
+
+    createExternalTask(req: CreateExternalTaskRequest) {
+      return post<ExternalTaskResult>('/api/entrypoints', req)
     },
 
     getPr(sessionId: string) {

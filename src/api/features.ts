@@ -16,6 +16,7 @@ export type FeatureName =
   | 'runtime-config'
   | 'merge-readiness'
   | 'session-checkpoints'
+  | 'external-entrypoints'
   | 'ship-coordinator'
   | 'memory'
 

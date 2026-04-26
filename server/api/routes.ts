@@ -7,7 +7,9 @@ import type {
   ApiResponse,
   ApiSession,
   CommandResult,
+  CreateExternalTaskRequest,
   CreateSessionVariantsResult,
+  ExternalTaskResult,
   MemoryEntry,
   MinionCommand,
   OverrideField,
@@ -60,6 +62,11 @@ import {
   restoreSessionCheckpoint,
 } from '../checkpoints/session-checkpoints'
 import {
+  buildExternalTaskMetadata,
+  externalTaskRowToApi,
+  insertExternalTask,
+} from '../intake/external-tasks'
+import {
   countPendingMemories,
   deleteMemory,
   getMemory,
@@ -91,6 +98,7 @@ const FEATURES = [
   'runtime-config',
   'merge-readiness',
   'session-checkpoints',
+  'external-entrypoints',
   'memory',
 ]
 
@@ -142,6 +150,18 @@ const MessageSchema = z.object({
   text: z.string().min(1),
   sessionId: z.string().optional(),
   images: z.array(ImageSchema).optional(),
+})
+
+const ExternalTaskSchema = z.object({
+  source: z.enum(['github_issue', 'github_pr_comment', 'linear_issue', 'slack_thread']),
+  externalId: z.string().min(1),
+  prompt: z.string().min(1),
+  repo: z.string().min(1).optional(),
+  mode: z.enum(['task', 'plan', 'think', 'review', 'ship']).default('task'),
+  title: z.string().min(1).optional(),
+  url: z.string().url().optional(),
+  author: z.string().min(1).optional(),
+  metadata: z.record(z.unknown()).optional(),
 })
 
 const CreateMemorySchema = z.object({
@@ -298,6 +318,46 @@ export function registerApiRoutes(
         data: session,
       }
       return c.json(body, 201)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  app.post('/api/entrypoints', async (c) => {
+    const raw = await c.req.json().catch(() => null)
+    const parsed = ExternalTaskSchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: formatZod(parsed.error.issues) }, 400)
+    }
+
+    const req = parsed.data satisfies CreateExternalTaskRequest
+    const db = resolveDb()
+    const existing = prepared.getExternalTaskByKey(db, req.source, req.externalId)
+    if (existing) {
+      const row = prepared.getSession(db, existing.session_id)
+      if (!row) return c.json({ error: 'External task session not found' }, 409)
+      return c.json({
+        data: {
+          task: externalTaskRowToApi(existing),
+          session: sessionRowToApi(row),
+          existing: true,
+        } satisfies ExternalTaskResult,
+      })
+    }
+
+    const repo = req.repo ?? process.env['DEFAULT_REPO']
+    if (!repo) return c.json({ error: 'repo is required (or set DEFAULT_REPO on the engine)' }, 400)
+
+    try {
+      const { session } = await registry.create({
+        mode: req.mode,
+        prompt: req.prompt,
+        repo,
+        metadata: buildExternalTaskMetadata(req),
+      })
+      const task = insertExternalTask(db, req, session.id, repo)
+      return c.json({ data: { task, session, existing: false } satisfies ExternalTaskResult }, 201)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return c.json({ error: message }, 500)

@@ -7,6 +7,8 @@ type SessionStatus = 'pending' | 'running' | 'waiting_input' | 'completed' | 'fa
 type DagStatus = 'pending' | 'running' | 'completed' | 'failed'
 type DagNodeStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'ci-pending' | 'ci-failed' | 'landed'
 type SessionCheckpointKind = 'turn' | 'completion' | 'manual'
+type ExternalTaskSource = 'github_issue' | 'github_pr_comment' | 'linear_issue' | 'slack_thread'
+type ExternalTaskStatus = 'started' | 'failed'
 
 export interface SessionRow {
   id: string
@@ -82,6 +84,38 @@ interface SessionEventDbRow {
   payload: string
 }
 
+export interface ExternalTaskRow {
+  id: string
+  source: ExternalTaskSource
+  external_id: string
+  session_id: string
+  status: ExternalTaskStatus
+  repo: string | null
+  mode: string
+  title: string | null
+  url: string | null
+  author: string | null
+  metadata: Record<string, unknown>
+  created_at: number
+  updated_at: number
+}
+
+interface ExternalTaskDbRow {
+  id: string
+  source: ExternalTaskSource
+  external_id: string
+  session_id: string
+  status: ExternalTaskStatus
+  repo: string | null
+  mode: string
+  title: string | null
+  url: string | null
+  author: string | null
+  metadata: string
+  created_at: number
+  updated_at: number
+}
+
 export interface SessionCheckpointRow {
   id: string
   session_id: string
@@ -140,6 +174,9 @@ type StmtCache = {
   listSessions?: ReturnType<Database['prepare']>
   deleteSession?: ReturnType<Database['prepare']>
   insertEvent?: ReturnType<Database['prepare']>
+  insertExternalTask?: ReturnType<Database['prepare']>
+  getExternalTaskByKey?: ReturnType<Database['prepare']>
+  listExternalTasks?: ReturnType<Database['prepare']>
   insertSessionCheckpoint?: ReturnType<Database['prepare']>
   listSessionCheckpoints?: ReturnType<Database['prepare']>
   getSessionCheckpoint?: ReturnType<Database['prepare']>
@@ -180,6 +217,13 @@ function mapEventRow(row: SessionEventDbRow): SessionEventRow {
   return {
     ...row,
     payload: JSON.parse(row.payload) as Record<string, unknown>,
+  }
+}
+
+function mapExternalTaskRow(row: ExternalTaskDbRow): ExternalTaskRow {
+  return {
+    ...row,
+    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
   }
 }
 
@@ -421,6 +465,53 @@ export const prepared = {
       )
       .get(sessionId)
     return (row?.max_seq ?? 0) + 1
+  },
+
+  insertExternalTask(db: Database, row: ExternalTaskRow): void {
+    const c = stmts(db)
+    if (!c.insertExternalTask) {
+      c.insertExternalTask = db.prepare(
+        `INSERT INTO external_tasks (id, source, external_id, session_id, status, repo, mode, title, url, author, metadata, created_at, updated_at)
+         VALUES ($id, $source, $external_id, $session_id, $status, $repo, $mode, $title, $url, $author, $metadata, $created_at, $updated_at)`,
+      )
+    }
+    c.insertExternalTask.run({
+      $id: row.id,
+      $source: row.source,
+      $external_id: row.external_id,
+      $session_id: row.session_id,
+      $status: row.status,
+      $repo: row.repo,
+      $mode: row.mode,
+      $title: row.title,
+      $url: row.url,
+      $author: row.author,
+      $metadata: JSON.stringify(row.metadata),
+      $created_at: row.created_at,
+      $updated_at: row.updated_at,
+    })
+  },
+
+  getExternalTaskByKey(db: Database, source: ExternalTaskSource, externalId: string): ExternalTaskRow | null {
+    const c = stmts(db)
+    if (!c.getExternalTaskByKey) {
+      c.getExternalTaskByKey = db.prepare<ExternalTaskDbRow, [ExternalTaskSource, string]>(
+        'SELECT * FROM external_tasks WHERE source = ? AND external_id = ?',
+      )
+    }
+    const row = c.getExternalTaskByKey.get(source, externalId) as ExternalTaskDbRow | null
+    return row ? mapExternalTaskRow(row) : null
+  },
+
+  listExternalTasks(db: Database): ExternalTaskRow[] {
+    const c = stmts(db)
+    if (!c.listExternalTasks) {
+      c.listExternalTasks = db.prepare<ExternalTaskDbRow, []>(
+        'SELECT * FROM external_tasks ORDER BY updated_at DESC',
+      )
+    }
+    const rows = c.listExternalTasks.all() as ExternalTaskDbRow[]
+    return rows.map(mapExternalTaskRow)
   },
 
   insertSessionCheckpoint(db: Database, row: SessionCheckpointRow): void {

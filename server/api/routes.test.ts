@@ -12,7 +12,7 @@ import { registerSseRoute } from './sse'
 import { runGit } from '../workspace/git'
 import { createSessionCheckpoint } from '../checkpoints/session-checkpoints'
 import type { SpawnFn, SubprocessHandle } from '../session/runtime'
-import type { MergeReadiness, QualityReport, RestoreCheckpointResult, SessionCheckpoint } from '../../shared/api-types'
+import type { ExternalTaskResult, MergeReadiness, QualityReport, RestoreCheckpointResult, SessionCheckpoint } from '../../shared/api-types'
 
 function setupTestDb(): Database {
   const db = new Database(':memory:')
@@ -70,6 +70,15 @@ async function json<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>
 }
 
+async function waitForCondition(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error('Timed out waiting for condition')
+}
+
 let testDb: Database
 let originalToken: string | undefined
 let originalDefaultRepo: string | undefined
@@ -114,6 +123,7 @@ describe('GET /api/version', () => {
     expect(features).toContain('ship-coordinator')
     expect(features).toContain('merge-readiness')
     expect(features).toContain('session-checkpoints')
+    expect(features).toContain('external-entrypoints')
     expect(features).toContain('web-push')
     expect(features).toContain('transcript')
     expect(features).toContain('auth')
@@ -215,6 +225,88 @@ describe('POST /api/sessions', () => {
       }),
     )
     expect(res.status).toBe(500)
+  })
+})
+
+describe('POST /api/entrypoints', () => {
+  test('creates a source-linked session and returns the existing session on retry', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'entrypoint-api-'))
+    const repo = path.join(root, 'repo')
+    const workspaceRoot = path.join(root, 'workspaces')
+    const previousWorkspaceRoot = process.env['WORKSPACE_ROOT']
+    mkdirSync(repo, { recursive: true })
+
+    try {
+      process.env['WORKSPACE_ROOT'] = workspaceRoot
+      await runGit(repo, ['init', '-b', 'main'])
+      await runGit(repo, ['config', 'user.email', 'minions@example.test'])
+      await runGit(repo, ['config', 'user.name', 'Minions Test'])
+      writeFileSync(path.join(repo, 'README.txt'), 'base\n')
+      await runGit(repo, ['add', 'README.txt'])
+      await runGit(repo, ['commit', '-m', 'initial'])
+
+      const app = makeApp(testDb)
+      const body = {
+        source: 'github_issue',
+        externalId: 'acme/widgets#123',
+        repo,
+        prompt: 'Fix issue 123',
+        title: 'Bug in widget flow',
+        url: 'https://github.com/acme/widgets/issues/123',
+        author: 'octocat',
+      }
+
+      const first = await app.fetch(new Request('http://localhost/api/entrypoints', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }))
+      expect(first.status).toBe(201)
+      const firstBody = await json<{ data: ExternalTaskResult }>(first)
+      expect(firstBody.data.existing).toBe(false)
+      expect(firstBody.data.task.source).toBe('github_issue')
+
+      const row = prepared.getSession(testDb, firstBody.data.session.id)
+      expect(row?.metadata.entrypoint).toMatchObject({
+        source: 'github_issue',
+        externalId: 'acme/widgets#123',
+        title: 'Bug in widget flow',
+      })
+      await waitForCondition(() =>
+        prepared.listSessionCheckpoints(testDb, firstBody.data.session.id).some((checkpoint) => checkpoint.kind === 'completion'),
+      )
+
+      const second = await app.fetch(new Request('http://localhost/api/entrypoints', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }))
+      expect(second.status).toBe(200)
+      const secondBody = await json<{ data: ExternalTaskResult }>(second)
+      expect(secondBody.data.existing).toBe(true)
+      expect(secondBody.data.session.id).toBe(firstBody.data.session.id)
+    } finally {
+      if (previousWorkspaceRoot !== undefined) {
+        process.env['WORKSPACE_ROOT'] = previousWorkspaceRoot
+      } else {
+        delete process.env['WORKSPACE_ROOT']
+      }
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('requires a repo when DEFAULT_REPO is unset', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(new Request('http://localhost/api/entrypoints', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: 'slack_thread',
+        externalId: 'C1:123.45',
+        prompt: 'Investigate the alert',
+      }),
+    }))
+    expect(res.status).toBe(400)
   })
 })
 

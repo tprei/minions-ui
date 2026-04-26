@@ -129,6 +129,43 @@ export interface RestoreCheckpointResult {
   session: ApiSession
 }
 
+export type ExternalTaskSource = 'github_issue' | 'github_pr_comment' | 'linear_issue' | 'slack_thread'
+export type ExternalTaskStatus = 'started' | 'failed'
+
+export interface CreateExternalTaskRequest {
+  source: ExternalTaskSource
+  externalId: string
+  prompt: string
+  repo?: string
+  mode?: Extract<CreateSessionMode, 'task' | 'plan' | 'think' | 'review' | 'ship'>
+  title?: string
+  url?: string
+  author?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface ExternalTask {
+  id: string
+  source: ExternalTaskSource
+  externalId: string
+  sessionId: string
+  status: ExternalTaskStatus
+  repo?: string
+  mode: string
+  title?: string
+  url?: string
+  author?: string
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ExternalTaskResult {
+  task: ExternalTask
+  session: ApiSession
+  existing: boolean
+}
+
 export type SseEvent =
   | { type: 'session_created'; session: ApiSession }
   | { type: 'session_updated'; session: ApiSession }

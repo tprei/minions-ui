@@ -97,6 +97,26 @@ describe('ApiClient', () => {
     expect(body.text).toBe('/task hi')
   })
 
+  it('createExternalTask POSTs source task payloads', async () => {
+    const fetchMock = mockFetch({ data: { task: null, session: null, existing: false } })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.createExternalTask({
+      source: 'linear_issue',
+      externalId: 'LIN-123',
+      prompt: 'Fix LIN-123',
+      repo: 'https://github.com/acme/widgets',
+    })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE_URL}/api/entrypoints`)
+    expect(init.method).toBe('POST')
+    const body = JSON.parse(init.body as string) as { source: string; externalId: string }
+    expect(body.source).toBe('linear_issue')
+    expect(body.externalId).toBe('LIN-123')
+  })
+
   it('openEventStream uses ?token= query param', () => {
     vi.stubGlobal('fetch', mockFetch({ data: [] as ApiDagGraph[] }))
 
