@@ -60,6 +60,16 @@ describe('StatusBadge', () => {
     expect(screen.getByText('Skipped')).toBeTruthy()
   })
 
+  it('renders rebasing status', () => {
+    render(<StatusBadge status="rebasing" />)
+    expect(screen.getByText('Rebasing')).toBeTruthy()
+  })
+
+  it('renders rebase-conflict status', () => {
+    render(<StatusBadge status="rebase-conflict" />)
+    expect(screen.getByText('Rebase Conflict')).toBeTruthy()
+  })
+
   it('renders emoji for each status', () => {
     for (const [status, config] of Object.entries(STATUS_CONFIG)) {
       cleanup()
@@ -177,7 +187,7 @@ describe('getStatusColors', () => {
 
   it('covers all statuses', () => {
     const colors = getStatusColors(false)
-    expect(Object.keys(colors)).toEqual(['pending', 'running', 'completed', 'failed', 'skipped', 'ci-pending', 'ci-failed', 'landed'])
+    expect(Object.keys(colors)).toEqual(['pending', 'running', 'completed', 'failed', 'skipped', 'ci-pending', 'ci-failed', 'landed', 'rebasing', 'rebase-conflict'])
   })
 
   it('each status has bg, border, and text', () => {
