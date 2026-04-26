@@ -18,6 +18,7 @@ import { qualityGateHandler } from './handlers/quality-gate-handler'
 import { digestHandler } from './handlers/digest-handler'
 import { ciBabysitHandler } from './handlers/ci-babysit-handler'
 import { parentNotifyHandler } from './handlers/parent-notify-handler'
+import { restackResolverHandler } from './handlers/restack-resolver-handler'
 import {
   createRealCIBabysitter,
   createRealQualityGates,
@@ -75,14 +76,7 @@ const reconciled = reconciledRows?.count ?? 0
 console.log(`[minion] engine on :${PORT}, ${reconciled} sessions resumed`)
 
 const ciBabysitter = createRealCIBabysitter(registry, db)
-
-const scheduler = createDagScheduler({
-  registry,
-  db,
-  bus,
-  workspace: WORKSPACE_ROOT,
-  ciBabysitter,
-})
+const scheduler = createDagScheduler({ registry, db, bus, workspace: WORKSPACE_ROOT, ciBabysitter })
 await scheduler.reconcileOnBoot()
 
 bus.onKind('session.resumed', (ev) => { void scheduler.onSessionResumed(ev.sessionId) })
@@ -138,6 +132,7 @@ dispatcher.register(loopCompletionHandler)
 dispatcher.register(taskCompletionHandler)
 dispatcher.register(qualityGateHandler)
 dispatcher.register(digestHandler)
+dispatcher.register(restackResolverHandler)
 dispatcher.register(ciBabysitHandler)
 dispatcher.register(parentNotifyHandler)
 

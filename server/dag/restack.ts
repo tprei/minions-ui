@@ -6,6 +6,7 @@ import { nodeIndex } from "./dag"
 import type { DagGraph, DagNode } from "./dag"
 import type { EngineEventBus } from "../events/bus"
 import type { ExecCall, ExecFn } from "./preflight"
+import type { SessionRegistry } from "../session/registry"
 
 const execFileP = promisify(execFileCb)
 
@@ -24,6 +25,7 @@ function worktreeDir(workspaceRoot: string, branch: string): string {
 export interface RestackManagerOpts {
   bus: EngineEventBus
   workspaceRoot: string
+  registry: SessionRegistry
   execFile?: ExecFn
 }
 
@@ -45,11 +47,12 @@ interface RestackContext {
 }
 
 export function createRestackManager(opts: RestackManagerOpts): RestackManager {
-  const { bus, workspaceRoot } = opts
+  const { bus, workspaceRoot, registry } = opts
   const run = opts.execFile ?? defaultExec
 
   const inflightRestacks = new Map<string, Promise<void>>()
   const lastRestackTime = new Map<string, number>()
+  const resolverAttempts = new Map<string, number>()
 
   async function getCurrentSha(cwd: string): Promise<string> {
     const result = await run({
@@ -58,6 +61,97 @@ export function createRestackManager(opts: RestackManagerOpts): RestackManager {
       opts: { cwd, timeout: 10_000, encoding: "utf-8" },
     })
     return result.stdout.trim()
+  }
+
+  async function getGitStatus(cwd: string): Promise<string> {
+    try {
+      const result = await run({
+        cmd: "git",
+        args: ["status"],
+        opts: { cwd, timeout: 10_000, encoding: "utf-8" },
+      })
+      return result.stdout
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err)
+    }
+  }
+
+  async function spawnResolver(
+    node: DagNode,
+    graph: DagGraph,
+    ctx: RestackContext,
+    cwd: string,
+  ): Promise<void> {
+    const attemptKey = `${graph.id}:${node.id}:${ctx.parentSha}`
+    const attempts = resolverAttempts.get(attemptKey) ?? 0
+
+    if (attempts >= 1) {
+      console.error(`[restack] max resolver attempts (1) reached for node ${node.id}`)
+      node.status = "rebase-conflict"
+      node.error = "Automatic conflict resolution failed"
+      bus.emit({
+        kind: "dag.node.restack.completed",
+        dagId: graph.id,
+        nodeId: node.id,
+        result: "conflict",
+        error: node.error,
+      })
+      return
+    }
+
+    resolverAttempts.set(attemptKey, attempts + 1)
+
+    const gitStatus = await getGitStatus(cwd)
+    const prompt = `Resolve the git rebase conflict in this workspace.
+
+Current git status:
+\`\`\`
+${gitStatus}
+\`\`\`
+
+Context:
+- Node: ${node.id} (${node.title})
+- Rebasing onto: ${ctx.parentBranch}
+- Parent SHA: ${ctx.parentSha}
+
+Steps:
+1. Examine the conflict markers in the affected files
+2. Understand the parent's intent by reviewing the diff
+3. Resolve conflicts appropriately
+4. Run: git rebase --continue
+5. Push changes: git push --force-with-lease
+
+If the conflict cannot be resolved automatically or requires human judgment, run: git rebase --abort`
+
+    try {
+      const slug = node.branch!.startsWith("minion/") ? node.branch!.slice("minion/".length) : node.branch!
+      await registry.create({
+        mode: "rebase-resolver",
+        prompt,
+        repo: graph.repoUrl ?? graph.repo,
+        slug,
+        workspaceRoot,
+        metadata: {
+          dagId: graph.id,
+          dagNodeId: node.id,
+          parentBranch: ctx.parentBranch,
+          parentSha: ctx.parentSha,
+          resolverAttemptKey: attemptKey,
+        },
+      })
+      console.log(`[restack] spawned resolver session for node ${node.id}`)
+    } catch (err) {
+      console.error(`[restack] failed to spawn resolver for node ${node.id}:`, err)
+      node.status = "rebase-conflict"
+      node.error = `Failed to spawn resolver: ${err instanceof Error ? err.message : String(err)}`
+      bus.emit({
+        kind: "dag.node.restack.completed",
+        dagId: graph.id,
+        nodeId: node.id,
+        result: "conflict",
+        error: node.error,
+      })
+    }
   }
 
   async function rebaseOntoParent(
@@ -145,6 +239,7 @@ export function createRestackManager(opts: RestackManagerOpts): RestackManager {
       console.error(`[restack] rebase failed for node ${node.id}:`, rebaseResult.error)
       node.status = "rebasing"
       node.error = rebaseResult.error
+      await spawnResolver(node, graph, ctx, cwd)
       return
     }
 

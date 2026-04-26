@@ -9,6 +9,8 @@ export const DEFAULT_THINK_PROMPT = 'You think carefully about the problem and r
 export const DEFAULT_REVIEW_PROMPT = 'You perform a thorough code review.'
 export const DEFAULT_SHIP_PROMPT = 'You coordinate a multi-stage ship workflow, progressing through think → plan → dag → verify stages.'
 export const DEFAULT_CI_FIX_PROMPT = 'You fix failing CI jobs. When all checks pass, announce success and exit.'
+export const DEFAULT_REBASE_RESOLVER_PROMPT =
+  'You resolve git rebase conflicts. Examine conflict markers, understand parent intent, resolve conflicts, then git rebase --continue and push. If resolution is impossible or requires human judgment, abort.'
 
 const READONLY_DISALLOWED_TOOLS = ['Edit', 'Write', 'NotebookEdit'] as const
 
@@ -67,6 +69,12 @@ export const CLAUDE_MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
     disallowedTools: [],
     autoExitOnComplete: true,
   },
+  'rebase-resolver': {
+    systemPrompt: DEFAULT_REBASE_RESOLVER_PROMPT,
+    model: envModel('CLAUDE_REBASE_RESOLVER_MODEL', 'claude-opus-4-1-20250805'),
+    disallowedTools: [],
+    autoExitOnComplete: true,
+  },
 }
 
 const CODEX_REASONING_EFFORT = envReasoningEffort('CODEX_REASONING_EFFORT', 'high')
@@ -117,6 +125,13 @@ export const CODEX_MODE_CONFIGS: Record<AllSessionMode, ModeConfig> = {
     model: envModel('CODEX_CI_FIX_MODEL', 'gpt-5.3-codex'),
     disallowedTools: [],
     autoExitOnComplete: true,
+  },
+  'rebase-resolver': {
+    systemPrompt: DEFAULT_REBASE_RESOLVER_PROMPT,
+    model: envModel('CODEX_REBASE_RESOLVER_MODEL', 'gpt-5.3-codex'),
+    disallowedTools: [],
+    autoExitOnComplete: true,
+    reasoningEffort: CODEX_REASONING_EFFORT,
   },
 }
 
