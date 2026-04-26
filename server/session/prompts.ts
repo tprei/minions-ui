@@ -1,4 +1,5 @@
 import type { CreateSessionMode } from '../../shared/api-types'
+import { readRepoConfig } from '../config/repo-config'
 import type { ModeConfig } from './providers/types'
 
 export type { ModeConfig }
@@ -142,4 +143,24 @@ const MODE_CONFIG_MAP: Record<'claude' | 'codex', Record<AllSessionMode, ModeCon
 
 export function getModeConfig(provider: 'claude' | 'codex', mode: AllSessionMode): ModeConfig {
   return MODE_CONFIG_MAP[provider][mode]
+}
+
+function mergeDisallowedTools(base: string[], extra: string[] | undefined): string[] {
+  if (!extra || extra.length === 0) return base
+  return Array.from(new Set([...base, ...extra]))
+}
+
+export function getResolvedModeConfig(provider: 'claude' | 'codex', mode: AllSessionMode, cwd: string): ModeConfig {
+  const base = getModeConfig(provider, mode)
+  const repoConfig = readRepoConfig(cwd)
+  const policy = repoConfig.config.agent.modes[mode]
+  if (!policy) return base
+
+  return {
+    ...base,
+    model: policy.model ?? base.model,
+    reasoningEffort: policy.reasoningEffort ?? base.reasoningEffort,
+    sandbox: policy.sandbox ?? base.sandbox,
+    disallowedTools: mergeDisallowedTools(base.disallowedTools, policy.disallowedTools),
+  }
 }

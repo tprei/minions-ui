@@ -5,7 +5,7 @@ import { getEventBus } from '../events/bus'
 import { getDb as defaultGetDb, prepared } from '../db/sqlite'
 import type { Database } from 'bun:sqlite'
 import { TranscriptTranslator } from './transcript'
-import { getModeConfig, type AllSessionMode } from './prompts'
+import { getResolvedModeConfig, type AllSessionMode } from './prompts'
 import { getProvider } from './providers/index'
 import type { AgentProvider, ParserState, SpawnArgsOpts } from './providers/types'
 import { buildMemoryPreamble } from './memory-preamble'
@@ -97,7 +97,7 @@ export class SessionRuntime {
 
   async start(): Promise<void> {
     const { sessionId, mode, cwd, initialPrompt, resumeSessionId, mcpConfig } = this.opts
-    const cfg = getModeConfig(this.provider.name, mode as AllSessionMode)
+    const cfg = getResolvedModeConfig(this.provider.name, mode as AllSessionMode, cwd)
 
     this.bus.emit({ kind: 'session.spawning', sessionId, mode, cwd })
 
@@ -282,7 +282,7 @@ export class SessionRuntime {
             this.bus.emit({ kind: 'session.idle', sessionId: this.opts.sessionId })
           }
 
-          const cfg = getModeConfig(this.provider.name, this.opts.mode as AllSessionMode)
+          const cfg = getResolvedModeConfig(this.provider.name, this.opts.mode as AllSessionMode, this.opts.cwd)
           if (cfg.autoExitOnComplete && this.state !== 'done') {
             if (!this.producedOutputThisTurn) {
               this.stoppedForEmptyTurn = true

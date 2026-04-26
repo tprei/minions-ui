@@ -20,14 +20,29 @@ export const MergePolicySchema = z.object({
   allowDraft: z.boolean().default(false),
 }).default({})
 
+export const AgentModeSchema = z.enum(['task', 'dag-task', 'plan', 'think', 'review', 'ship', 'ci-fix', 'rebase-resolver'])
+
+export const AgentModePolicySchema = z.object({
+  model: z.string().min(1).optional(),
+  reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high']).optional(),
+  sandbox: z.enum(['read-only', 'workspace-write']).optional(),
+  disallowedTools: z.array(z.string().min(1)).optional(),
+}).default({})
+
+export const AgentPolicySchema = z.object({
+  modes: z.record(AgentModeSchema, AgentModePolicySchema).default({}),
+}).default({ modes: {} })
+
 export const RepoConfigSchema = z.object({
   quality: z.object({
     gates: z.array(QualityGateSchema).default([]),
   }).default({ gates: [] }),
   merge: MergePolicySchema,
+  agent: AgentPolicySchema,
 }).default({})
 
 export type QualityGateConfig = z.infer<typeof QualityGateSchema>
+export type AgentModePolicyConfig = z.infer<typeof AgentModePolicySchema>
 export type RepoConfig = z.infer<typeof RepoConfigSchema>
 
 export interface RepoConfigResult {

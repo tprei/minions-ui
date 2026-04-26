@@ -1,5 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { getModeConfig, CLAUDE_MODE_CONFIGS, CODEX_MODE_CONFIGS } from './prompts'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { getModeConfig, getResolvedModeConfig, CLAUDE_MODE_CONFIGS, CODEX_MODE_CONFIGS } from './prompts'
 
 describe('getModeConfig', () => {
   describe('claude provider', () => {
@@ -95,5 +98,53 @@ describe('getModeConfig', () => {
         expect(getModeConfig('claude', mode).autoExitOnComplete).toBe(getModeConfig('codex', mode).autoExitOnComplete)
       })
     }
+  })
+
+  describe('repo agent policy', () => {
+    test('applies model, reasoning, sandbox, and additional tool policy from minions.json', () => {
+      const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'mode-policy-'))
+      try {
+        fs.writeFileSync(path.join(cwd, 'minions.json'), JSON.stringify({
+          agent: {
+            modes: {
+              task: {
+                model: 'gpt-5.5',
+                reasoningEffort: 'medium',
+                sandbox: 'workspace-write',
+                disallowedTools: ['WebFetch'],
+              },
+            },
+          },
+        }))
+        const cfg = getResolvedModeConfig('codex', 'task', cwd)
+        expect(cfg.model).toBe('gpt-5.5')
+        expect(cfg.reasoningEffort).toBe('medium')
+        expect(cfg.sandbox).toBe('workspace-write')
+        expect(cfg.disallowedTools).toContain('WebFetch')
+      } finally {
+        fs.rmSync(cwd, { recursive: true, force: true })
+      }
+    })
+
+    test('keeps built-in readonly tool restrictions when repo policy adds tools', () => {
+      const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'mode-policy-readonly-'))
+      try {
+        fs.writeFileSync(path.join(cwd, 'minions.json'), JSON.stringify({
+          agent: {
+            modes: {
+              plan: {
+                disallowedTools: ['WebFetch'],
+              },
+            },
+          },
+        }))
+        const cfg = getResolvedModeConfig('claude', 'plan', cwd)
+        expect(cfg.disallowedTools).toContain('Edit')
+        expect(cfg.disallowedTools).toContain('Write')
+        expect(cfg.disallowedTools).toContain('WebFetch')
+      } finally {
+        fs.rmSync(cwd, { recursive: true, force: true })
+      }
+    })
   })
 })
