@@ -121,13 +121,16 @@ export function MemoryDrawer({ store, onClose }: Props) {
   const borderColor = isDark ? 'border-gray-700' : 'border-gray-200'
 
   const filteredMemories = useMemo(() => {
+    const memories = memoryStore.memories.value
+    if (!Array.isArray(memories)) return []
+
     if (activeTab === 'inbox') {
-      return memoryStore.memories.value.filter((m) => m.status === 'pending')
+      return memories.filter((m) => m.status === 'pending')
     }
     if (activeTab === 'library') {
-      return memoryStore.memories.value.filter((m) => m.status === 'approved')
+      return memories.filter((m) => m.status === 'approved')
     }
-    return memoryStore.memories.value.filter(
+    return memories.filter(
       (m) => m.status === 'rejected' || m.status === 'superseded' || m.status === 'pending_deletion',
     )
   }, [memoryStore.memories.value, activeTab])
