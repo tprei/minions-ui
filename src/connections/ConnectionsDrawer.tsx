@@ -1,11 +1,12 @@
 import { useSignal } from '@preact/signals'
-import { useEffect, useCallback } from 'preact/hooks'
+import { useEffect, useCallback, useRef } from 'preact/hooks'
 import { connections, activeId, removeConnection, setActive } from './store'
 import { confirm } from '../hooks/useConfirm'
 import { ConnectionSettings } from './ConnectionSettings'
 import type { Connection } from './types'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useTheme } from '../hooks/useTheme'
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss'
 
 interface ConnectionsDrawerProps {
   onClose: () => void
@@ -19,6 +20,18 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const panel = useSignal<DrawerPanel>('list')
   const editingConn = useSignal<Connection | null>(null)
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const swipeRef = useSwipeToDismiss({
+    onDismiss: onClose,
+    threshold: 100,
+    enabled: !isDesktop.value,
+  })
+
+  useEffect(() => {
+    if (!isDesktop.value && drawerRef.current) {
+      swipeRef.current = drawerRef.current
+    }
+  }, [isDesktop.value, swipeRef])
 
   const handleClose = useCallback(() => {
     panel.value = 'list'
@@ -172,6 +185,7 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
         onClick={handleClose}
       />
       <div
+        ref={drawerRef}
         class={`absolute bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl flex flex-col border-t max-h-[85dvh] ${borderColor} ${panelBg}`}
       >
         <div class="flex justify-center pt-2 pb-1 shrink-0">
