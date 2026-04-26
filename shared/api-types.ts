@@ -108,6 +108,35 @@ export interface MergeReadiness {
   checks: MergeReadinessCheck[]
 }
 
+export interface ReadinessSummaryBucket {
+  key: string
+  count: number
+}
+
+export interface ReadinessSummary {
+  generatedAt: string
+  sessions: {
+    total: number
+    byStatus: ReadinessSummaryBucket[]
+    byMode: ReadinessSummaryBucket[]
+    byRepo: ReadinessSummaryBucket[]
+  }
+  pullRequests: {
+    withPr: number
+    withoutPr: number
+  }
+  quality: {
+    withReport: number
+    passed: number
+    failed: number
+    missing: number
+  }
+  checkpoints: {
+    total: number
+    sessionsWithCheckpoints: number
+  }
+}
+
 export type SessionCheckpointKind = 'turn' | 'completion' | 'manual'
 
 export interface SessionCheckpoint {

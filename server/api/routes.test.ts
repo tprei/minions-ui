@@ -12,7 +12,7 @@ import { registerSseRoute } from './sse'
 import { runGit } from '../workspace/git'
 import { createSessionCheckpoint } from '../checkpoints/session-checkpoints'
 import type { SpawnFn, SubprocessHandle } from '../session/runtime'
-import type { ExternalTaskResult, MergeReadiness, QualityReport, RestoreCheckpointResult, SessionCheckpoint } from '../../shared/api-types'
+import type { ExternalTaskResult, MergeReadiness, QualityReport, ReadinessSummary, RestoreCheckpointResult, SessionCheckpoint } from '../../shared/api-types'
 
 function setupTestDb(): Database {
   const db = new Database(':memory:')
@@ -122,6 +122,7 @@ describe('GET /api/version', () => {
     expect(features).toContain('sessions-variants')
     expect(features).toContain('ship-coordinator')
     expect(features).toContain('merge-readiness')
+    expect(features).toContain('readiness-analytics')
     expect(features).toContain('session-checkpoints')
     expect(features).toContain('external-entrypoints')
     expect(features).toContain('web-push')
@@ -139,6 +140,89 @@ describe('GET /api/sessions', () => {
     expect(res.status).toBe(200)
     const body = await json<{ data: unknown[] }>(res)
     expect(body.data).toEqual([])
+  })
+})
+
+describe('GET /api/readiness/summary', () => {
+  test('aggregates sessions, PRs, quality reports, and checkpoints', async () => {
+    const now = Date.now()
+    prepared.insertSession(testDb, {
+      id: 'summary-a',
+      slug: 'summary-a',
+      status: 'completed',
+      command: 'cmd',
+      mode: 'task',
+      repo: 'repo-a',
+      branch: null,
+      bare_dir: null,
+      pr_url: 'https://github.com/acme/widgets/pull/1',
+      parent_id: null,
+      variant_group_id: null,
+      claude_session_id: null,
+      workspace_root: null,
+      created_at: now,
+      updated_at: now,
+      needs_attention: false,
+      attention_reasons: [],
+      quick_actions: [],
+      conversation: [],
+      quota_sleep_until: null,
+      quota_retry_count: 0,
+      metadata: { qualityReport: { allPassed: true, results: [] } },
+      pipeline_advancing: false,
+      stage: null,
+      coordinator_children: [],
+    })
+    prepared.insertSession(testDb, {
+      id: 'summary-b',
+      slug: 'summary-b',
+      status: 'failed',
+      command: 'cmd',
+      mode: 'plan',
+      repo: null,
+      branch: null,
+      bare_dir: null,
+      pr_url: null,
+      parent_id: null,
+      variant_group_id: null,
+      claude_session_id: null,
+      workspace_root: null,
+      created_at: now,
+      updated_at: now,
+      needs_attention: false,
+      attention_reasons: [],
+      quick_actions: [],
+      conversation: [],
+      quota_sleep_until: null,
+      quota_retry_count: 0,
+      metadata: {},
+      pipeline_advancing: false,
+      stage: null,
+      coordinator_children: [],
+    })
+    prepared.insertSessionCheckpoint(testDb, {
+      id: 'cp-summary',
+      session_id: 'summary-a',
+      turn: 1,
+      kind: 'completion',
+      label: 'Session completed',
+      sha: 'abc',
+      base_sha: 'abc',
+      branch: null,
+      dag_id: null,
+      dag_node_id: null,
+      created_at: now,
+    })
+
+    const app = makeApp(testDb)
+    const res = await app.fetch(new Request('http://localhost/api/readiness/summary'))
+    expect(res.status).toBe(200)
+    const body = await json<{ data: ReadinessSummary }>(res)
+    expect(body.data.sessions.total).toBe(2)
+    expect(body.data.pullRequests.withPr).toBe(1)
+    expect(body.data.quality.passed).toBe(1)
+    expect(body.data.quality.missing).toBe(1)
+    expect(body.data.checkpoints.total).toBe(1)
   })
 })
 

@@ -15,6 +15,7 @@ import type {
   OverrideField,
   MergeReadiness,
   ResourceSnapshot,
+  ReadinessSummary,
   RestoreCheckpointResult,
   RuntimeConfigResponse,
   SessionCheckpoint,
@@ -57,6 +58,7 @@ import { handleDoneCommand } from '../commands/done'
 import { handleDoctorCommand } from '../commands/doctor'
 import { getProvider } from '../session/providers/index'
 import { buildMergeReadiness } from '../readiness/merge-readiness'
+import { buildReadinessSummary } from '../readiness/summary'
 import {
   checkpointRowToApi,
   restoreSessionCheckpoint,
@@ -97,6 +99,7 @@ const FEATURES = [
   'resource-metrics',
   'runtime-config',
   'merge-readiness',
+  'readiness-analytics',
   'session-checkpoints',
   'external-entrypoints',
   'memory',
@@ -279,6 +282,11 @@ export function registerApiRoutes(
   app.get('/api/health', (c) => c.json({ data: { status: 'ok' } }))
 
   app.use('/api/*', bearerAuth())
+
+  app.get('/api/readiness/summary', (c) => {
+    const summary = buildReadinessSummary(resolveDb())
+    return c.json({ data: summary } satisfies ApiResponse<ReadinessSummary>)
+  })
 
   app.get('/api/sessions', (c) => {
     const sessions = registry.list()

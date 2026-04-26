@@ -187,6 +187,17 @@ describe('ApiClient', () => {
     expect(url).toBe(`${BASE_URL}/api/sessions/sess%2F1/checkpoints`)
   })
 
+  it('getReadinessSummary fetches aggregate readiness metrics', async () => {
+    const fetchMock = mockFetch({ data: { sessions: { total: 0 } } })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.getReadinessSummary()
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(`${BASE_URL}/api/readiness/summary`)
+  })
+
   it('restoreCheckpoint posts to the checkpoint restore endpoint', async () => {
     const fetchMock = mockFetch({ data: { checkpoint: null, session: null } })
     vi.stubGlobal('fetch', fetchMock)

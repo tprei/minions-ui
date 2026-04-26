@@ -15,6 +15,7 @@ import type {
   PrPreview,
   PushSubscribeAck,
   PushSubscriptionJSON,
+  ReadinessSummary,
   ResourceSnapshot,
   ReviewMemoryRequest,
   RestoreCheckpointResult,
@@ -54,6 +55,7 @@ export interface ApiClient {
   createExternalTask(req: CreateExternalTaskRequest): Promise<ExternalTaskResult>
   getPr(sessionId: string): Promise<PrPreview>
   getReadiness(sessionId: string): Promise<MergeReadiness>
+  getReadinessSummary(): Promise<ReadinessSummary>
   listCheckpoints(sessionId: string): Promise<SessionCheckpoint[]>
   restoreCheckpoint(sessionId: string, checkpointId: string): Promise<RestoreCheckpointResult>
   getDiff(sessionId: string): Promise<WorkspaceDiff>
@@ -188,6 +190,10 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
 
     getReadiness(sessionId: string) {
       return get<MergeReadiness>(`/api/sessions/${encodeURIComponent(sessionId)}/readiness`)
+    },
+
+    getReadinessSummary() {
+      return get<ReadinessSummary>('/api/readiness/summary')
     },
 
     listCheckpoints(sessionId: string) {
