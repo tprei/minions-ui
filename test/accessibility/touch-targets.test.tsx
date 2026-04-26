@@ -24,8 +24,6 @@ beforeEach(() => {
   }
 })
 
-const MIN_TOUCH_TARGET = 44
-
 function assertMinTouchTarget(el: HTMLElement, name: string) {
   const classNames = el.className
   const hasMinHeight = classNames.includes('min-h-[44px]') || classNames.includes('min-h-11')

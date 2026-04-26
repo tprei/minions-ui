@@ -578,3 +578,53 @@ describe('NodeDetailPopup hierarchy metadata', () => {
     expect(document.querySelector('[data-testid="node-detail-rebase-error"]')).toBeFalsy()
   })
 })
+
+describe('NodeDetailPopup mobile bottom sheet', () => {
+  const originalMatchMedia = window.matchMedia
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(max-width: 767px)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+  })
+
+  afterEach(() => {
+    cleanup()
+    window.matchMedia = originalMatchMedia
+  })
+
+  it('renders as bottom sheet on mobile', () => {
+    const session = makeSession()
+    render(<NodeDetailPopup session={session} onClose={vi.fn()} />)
+    const sheet = document.querySelector('.absolute.bottom-0.left-0.right-0')
+    expect(sheet).toBeTruthy()
+    expect(sheet!.className).toContain('rounded-t-2xl')
+  })
+
+  it('shows drag handle on mobile', () => {
+    const session = makeSession()
+    render(<NodeDetailPopup session={session} onClose={vi.fn()} />)
+    const handle = document.querySelector('.w-10.h-1.rounded-full')
+    expect(handle).toBeTruthy()
+  })
+
+  it('renders as centered modal on desktop', () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query !== '(max-width: 767px)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+
+    const session = makeSession()
+    const { container } = render(<NodeDetailPopup session={session} onClose={vi.fn()} />)
+    const modal = container.querySelector('.flex.items-center.justify-center')
+    expect(modal).toBeTruthy()
+    const handle = container.querySelector('.w-10.h-1.rounded-full')
+    expect(handle).toBeFalsy()
+  })
+})
