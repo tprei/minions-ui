@@ -577,4 +577,52 @@ describe('NodeDetailPopup hierarchy metadata', () => {
     )
     expect(document.querySelector('[data-testid="node-detail-rebase-error"]')).toBeFalsy()
   })
+
+  it('renders drag handle on mobile', () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query) => ({
+        matches: query === '(max-width: 767px)',
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+
+    const session = makeSession()
+    render(
+      <NodeDetailPopup
+        session={session}
+        onClose={vi.fn()}
+      />
+    )
+    const dragHandle = document.querySelector('[data-testid="drag-handle"]')
+    expect(dragHandle).toBeTruthy()
+  })
+
+  it('does not render drag handle on desktop', () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query) => ({
+        matches: query === '(min-width: 768px)',
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+
+    const session = makeSession()
+    render(
+      <NodeDetailPopup
+        session={session}
+        onClose={vi.fn()}
+      />
+    )
+    const dragHandle = document.querySelector('[data-testid="drag-handle"]')
+    expect(dragHandle).toBeFalsy()
+  })
 })

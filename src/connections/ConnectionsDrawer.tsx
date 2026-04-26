@@ -6,6 +6,8 @@ import { ConnectionSettings } from './ConnectionSettings'
 import type { Connection } from './types'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useTheme } from '../hooks/useTheme'
+import { DragHandle } from '../components/DragHandle'
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss'
 
 interface ConnectionsDrawerProps {
   onClose: () => void
@@ -19,6 +21,10 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const panel = useSignal<DrawerPanel>('list')
   const editingConn = useSignal<Connection | null>(null)
+  const { containerRef, handlePointerDown, handlePointerMove, handlePointerUp } = useSwipeToDismiss({
+    onDismiss: onClose,
+    enabled: !isDesktop.value,
+  })
 
   const handleClose = useCallback(() => {
     panel.value = 'list'
@@ -172,11 +178,14 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
         onClick={handleClose}
       />
       <div
+        ref={containerRef}
         class={`absolute bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl flex flex-col border-t max-h-[85dvh] ${borderColor} ${panelBg}`}
       >
-        <div class="flex justify-center pt-2 pb-1 shrink-0">
-          <div class={`w-10 h-1 rounded-full ${isDark ? 'bg-gray-600' : 'bg-gray-300'}`} />
-        </div>
+        <DragHandle
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+        />
         {inner}
       </div>
     </div>

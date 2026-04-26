@@ -101,4 +101,22 @@ describe('ConnectionsDrawer', () => {
     fireEvent.click(screen.getByTestId('drawer-close-btn'))
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('renders drag handle on mobile', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query) => ({
+        matches: query === '(max-width: 767px)',
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+
+    await setup()
+    const dragHandle = screen.queryByTestId('drag-handle')
+    expect(dragHandle).toBeTruthy()
+  })
 })
