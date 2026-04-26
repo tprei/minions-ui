@@ -23,6 +23,7 @@ import { AttentionBar, filterSessionsByReason } from './components/AttentionBar'
 import { UniverseCanvas } from './components/UniverseCanvas'
 import { SessionLogsPopup } from './components/SessionLogsPopup'
 import { ShipPipelineView } from './components/ShipPipeline'
+import { MobileKanban } from './components/MobileKanban'
 import { hasFeature } from './api/features'
 import type { ConnectionStore } from './state/types'
 import { confirm } from './hooks/useConfirm'
@@ -47,7 +48,7 @@ import { MemoryDrawer } from './components/MemoryDrawer'
 import { DagStatusPill } from './components/DagStatusPill'
 import { ActivityFeed } from './activity/ActivityFeed'
 
-export type ViewMode = 'list' | 'canvas' | 'ship'
+export type ViewMode = 'list' | 'canvas' | 'ship' | 'kanban'
 
 const showSettings = signal(false)
 const showDrawer = signal(false)
@@ -55,7 +56,7 @@ const showRuntime = signal<RuntimeTab | null>(null)
 const showMemory = signal(false)
 export const viewMode = signal<ViewMode>('list')
 
-function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
+function ViewToggle({ mode, onChange, showKanban = false }: { mode: ViewMode; onChange: (m: ViewMode) => void; showKanban?: boolean }) {
   const tabClass = (active: boolean) =>
     `px-1.5 sm:px-2.5 py-1 text-xs font-medium transition-colors ${
       active
@@ -80,6 +81,19 @@ function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode
         <span class="sm:hidden" aria-hidden="true">☰</span>
         <span class="hidden sm:inline">List</span>
       </button>
+      {showKanban && (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'kanban'}
+          aria-label="Kanban"
+          onClick={() => onChange('kanban')}
+          class={`${tabClass(mode === 'kanban')} border-l border-slate-300 dark:border-slate-600`}
+          data-testid="view-toggle-kanban"
+        >
+          <span aria-hidden="true">📋</span>
+        </button>
+      )}
       <button
         type="button"
         role="tab"
@@ -755,7 +769,7 @@ function ActiveView() {
 
   const pullToRefresh = usePullToRefresh({
     onRefresh: () => store.refresh(),
-    enabled: !isDesktop.value && mode === 'list' && !isGroupRoute && !isActivityRoute,
+    enabled: !isDesktop.value && (mode === 'list' || mode === 'kanban') && !isGroupRoute && !isActivityRoute,
     threshold: 80,
   })
 
@@ -875,7 +889,8 @@ function ActiveView() {
             </button>
           </div>
         ) : (
-          <div class="ml-auto">
+          <div class="ml-auto flex items-center gap-1.5">
+            <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} showKanban />
             <HeaderMenu
               onMemory={hasFeature(store, 'memory') ? () => { showMemory.value = true } : undefined}
               onRuntimeConfig={hasFeature(store, 'runtime-config') ? () => { showRuntime.value = 'config' } : undefined}
@@ -1020,6 +1035,28 @@ function ActiveView() {
           </div>
           <div class="flex-1 min-h-0 flex flex-col">
             <ShipPipelineView dags={dags} onOpenChat={handleOpenChat} />
+          </div>
+        </div>
+      )}
+      {!isDesktop.value && mode === 'kanban' && (
+        <div
+          class="fixed inset-0 z-40 bg-slate-50 dark:bg-slate-900 flex flex-col"
+          data-testid="kanban-mobile-modal"
+        >
+          <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
+            <span class="text-sm font-medium text-slate-900 dark:text-slate-100">Kanban</span>
+            <button
+              type="button"
+              onClick={() => { viewMode.value = 'list' }}
+              class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+              data-testid="kanban-mobile-close"
+              aria-label="Close kanban view"
+            >
+              Close
+            </button>
+          </div>
+          <div class="flex-1 min-h-0 flex flex-col">
+            <MobileKanban sessions={sessions} dags={dags} onOpenChat={handleOpenChat} />
           </div>
         </div>
       )}
