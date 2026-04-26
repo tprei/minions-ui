@@ -130,6 +130,11 @@ describe("DagScheduler", () => {
       db,
       bus,
       workspace: "/tmp",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
       updateStackComment: async () => { stackCommentCallCount++ },
     })
   }
