@@ -68,6 +68,8 @@ export class SessionRuntime {
   private hardTimer: ReturnType<typeof setTimeout> | null = null
   private retriedForStall = false
   private stoppedForStall = false
+  private stoppedForEmptyTurn = false
+  private producedOutputThisTurn = false
   private stderrChunks: string[] = []
   private totalTokens: number | undefined
   private totalCostUsd: number | undefined
@@ -277,6 +279,16 @@ export class SessionRuntime {
 
           const cfg = getModeConfig(this.provider.name, this.opts.mode as AllSessionMode)
           if (cfg.autoExitOnComplete && this.state !== 'done') {
+            if (!this.producedOutputThisTurn) {
+              this.stoppedForEmptyTurn = true
+              this.persistAndEmit(
+                this.translator.status(
+                  'empty_turn',
+                  'agent produced no tool calls or assistant text before exiting; marked as errored',
+                  { severity: 'error' },
+                ),
+              )
+            }
             void this.stop('auto_exit')
           }
         }
@@ -332,6 +344,8 @@ export class SessionRuntime {
 
     if (this.stoppedForStall) {
       runState = 'stream_stalled'
+    } else if (this.stoppedForEmptyTurn) {
+      runState = 'errored'
     } else if (exitCode === 0) {
       runState = 'completed'
     } else if (this.provider.isQuotaError(stderrText)) {
@@ -360,6 +374,12 @@ export class SessionRuntime {
   }
 
   private persistAndEmit(event: TranscriptEvent): void {
+    if (event.type === 'turn_started') {
+      this.producedOutputThisTurn = false
+    } else if (event.type === 'assistant_text' || event.type === 'tool_call') {
+      this.producedOutputThisTurn = true
+    }
+
     const db = this.getDb()
     const payload: Record<string, unknown> = { ...event }
     prepared.insertEvent(db, {
