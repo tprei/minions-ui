@@ -3,18 +3,22 @@ import type {
   ApiResponse,
   ApiSession,
   CommandResult,
+  CreateMemoryRequest,
   CreateSessionRequest,
   CreateSessionVariantsRequest,
   CreateSessionVariantsResult,
+  MemoryEntry,
   MinionCommand,
   PrPreview,
   PushSubscribeAck,
   PushSubscriptionJSON,
   ResourceSnapshot,
+  ReviewMemoryRequest,
   RuntimeConfigResponse,
   RuntimeOverrides,
   ScreenshotList,
   TranscriptSnapshot,
+  UpdateMemoryRequest,
   VapidPublicKey,
   VersionInfo,
   WireWorkspaceDiff,
@@ -53,6 +57,11 @@ export interface ApiClient {
   getMetrics(): Promise<ResourceSnapshot>
   getRuntimeConfig(): Promise<RuntimeConfigResponse>
   patchRuntimeConfig(patch: RuntimeOverrides): Promise<RuntimeConfigResponse>
+  getMemories(query?: string, status?: string): Promise<MemoryEntry[]>
+  createMemory(req: CreateMemoryRequest): Promise<MemoryEntry>
+  updateMemory(id: number, req: UpdateMemoryRequest): Promise<MemoryEntry>
+  reviewMemory(id: number, req: ReviewMemoryRequest): Promise<MemoryEntry>
+  deleteMemory(id: number): Promise<{ ok: true }>
   openEventStream(handlers: SseHandlers): EventStreamHandle
   baseUrl: string
   token: string
@@ -217,6 +226,30 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
 
     patchRuntimeConfig(patchBody: RuntimeOverrides) {
       return patch<RuntimeConfigResponse>('/api/config/runtime', patchBody)
+    },
+
+    getMemories(query?: string, status?: string) {
+      const params = new URLSearchParams()
+      if (query) params.set('q', query)
+      if (status) params.set('status', status)
+      const qs = params.toString()
+      return get<MemoryEntry[]>(`/api/memories${qs ? `?${qs}` : ''}`)
+    },
+
+    createMemory(req: CreateMemoryRequest) {
+      return post<MemoryEntry>('/api/memories', req)
+    },
+
+    updateMemory(id: number, req: UpdateMemoryRequest) {
+      return patch<MemoryEntry>(`/api/memories/${id}`, req)
+    },
+
+    reviewMemory(id: number, req: ReviewMemoryRequest) {
+      return post<MemoryEntry>(`/api/memories/${id}/review`, req)
+    },
+
+    deleteMemory(id: number) {
+      return del<{ ok: true }>(`/api/memories/${id}`)
     },
 
     openEventStream(handlers: SseHandlers): EventStreamHandle {
