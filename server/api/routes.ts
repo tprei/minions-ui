@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Database } from 'bun:sqlite'
 import type {
+  ApiMemory,
   ApiResponse,
   ApiSession,
   CommandResult,
@@ -50,6 +51,16 @@ import { handleLoopsCommand } from '../commands/loops'
 import { handleDoneCommand } from '../commands/done'
 import { handleDoctorCommand } from '../commands/doctor'
 import { getProvider } from '../session/providers/index'
+import { randomUUID } from 'node:crypto'
+import {
+  createMemory,
+  updateMemory,
+  deleteMemory,
+  getMemory,
+  listMemories,
+  type MemoryRow,
+} from '../db/memories'
+import { getEventBus } from '../events/bus'
 
 const API_VERSION = '2.0.0'
 const LIBRARY_VERSION = '0.1.0'
@@ -69,6 +80,7 @@ const FEATURES = [
   'pr-preview',
   'resource-metrics',
   'runtime-config',
+  'memory',
 ]
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -1058,6 +1070,150 @@ export function registerApiRoutes(
       return c.json({ error: formatZod(parsed.error.issues) }, 400)
     }
     unsubscribe(parsed.data.endpoint, resolveDb)
+    return c.json({ data: { ok: true } })
+  })
+
+  function memoryRowToApi(row: MemoryRow): ApiMemory {
+    return {
+      id: row.id,
+      repo: row.repo,
+      sourceSessionId: row.source_session_id ?? undefined,
+      status: row.status,
+      type: row.type,
+      name: row.name,
+      description: row.description,
+      content: row.content,
+      createdAt: new Date(row.created_at).toISOString(),
+      updatedAt: new Date(row.updated_at).toISOString(),
+      reviewedAt: row.reviewed_at ? new Date(row.reviewed_at).toISOString() : undefined,
+    }
+  }
+
+  const CreateMemorySchema = z.object({
+    repo: z.string().min(1),
+    sourceSessionId: z.string().optional(),
+    type: z.enum(['user', 'feedback', 'project', 'reference']),
+    name: z.string().min(1),
+    description: z.string().min(1),
+    content: z.string().min(1),
+  })
+
+  const UpdateMemorySchema = z.object({
+    status: z.enum(['pending', 'approved', 'archived', 'pending_deletion']).optional(),
+    name: z.string().min(1).optional(),
+    description: z.string().min(1).optional(),
+    content: z.string().min(1).optional(),
+  })
+
+  app.get('/api/memories', (c) => {
+    const repo = c.req.query('repo')
+    if (!repo) {
+      return c.json({ error: 'repo query parameter is required' }, 400)
+    }
+    const statusParam = c.req.query('status')
+    const q = c.req.query('q')
+    const limitParam = c.req.query('limit')
+    const offsetParam = c.req.query('offset')
+
+    const limit = limitParam ? parseInt(limitParam, 10) : 100
+    const offset = offsetParam ? parseInt(offsetParam, 10) : 0
+
+    let status: MemoryRow['status'] | MemoryRow['status'][] | undefined
+    if (statusParam) {
+      if (statusParam.includes(',')) {
+        status = statusParam.split(',') as MemoryRow['status'][]
+      } else {
+        status = statusParam as MemoryRow['status']
+      }
+    }
+
+    const db = resolveDb()
+    const rows = listMemories(db, { repo, status, q, limit, offset })
+    const data = rows.map(memoryRowToApi)
+    return c.json({ data })
+  })
+
+  app.post('/api/memories', async (c) => {
+    const raw = await c.req.json().catch(() => null)
+    const parsed = CreateMemorySchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: formatZod(parsed.error.issues) }, 400)
+    }
+    const { repo, sourceSessionId, type, name, description, content } = parsed.data
+    const db = resolveDb()
+    const row = createMemory(db, {
+      id: randomUUID(),
+      repo,
+      source_session_id: sourceSessionId ?? null,
+      status: 'pending',
+      type,
+      name,
+      description,
+      content,
+    })
+    const bus = getEventBus()
+    bus.emit({ kind: 'memory.proposed', memory: memoryRowToApi(row) })
+    return c.json({ data: memoryRowToApi(row) }, 201)
+  })
+
+  app.get('/api/memories/:id', (c) => {
+    const { id } = c.req.param()
+    const db = resolveDb()
+    const row = getMemory(db, id)
+    if (!row) return c.json({ data: null, error: 'Memory not found' }, 404)
+    return c.json({ data: memoryRowToApi(row) })
+  })
+
+  app.patch('/api/memories/:id', async (c) => {
+    const { id } = c.req.param()
+    const raw = await c.req.json().catch(() => null)
+    const parsed = UpdateMemorySchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: formatZod(parsed.error.issues) }, 400)
+    }
+    const db = resolveDb()
+    const existing = getMemory(db, id)
+    if (!existing) return c.json({ data: null, error: 'Memory not found' }, 404)
+
+    const updates: {
+      id: string
+      status?: MemoryRow['status']
+      name?: string
+      description?: string
+      content?: string
+      reviewed_at?: number | null
+    } = { id }
+    if (parsed.data.status !== undefined) {
+      updates.status = parsed.data.status
+      if (parsed.data.status === 'approved' || parsed.data.status === 'archived') {
+        updates.reviewed_at = Date.now()
+      }
+    }
+    if (parsed.data.name !== undefined) updates.name = parsed.data.name
+    if (parsed.data.description !== undefined) updates.description = parsed.data.description
+    if (parsed.data.content !== undefined) updates.content = parsed.data.content
+
+    const row = updateMemory(db, updates)
+    if (!row) return c.json({ data: null, error: 'Memory not found' }, 404)
+
+    const bus = getEventBus()
+    const wasStatusChange = updates.status !== undefined && updates.status !== existing.status
+    if (wasStatusChange && (updates.status === 'approved' || updates.status === 'archived')) {
+      bus.emit({ kind: 'memory.reviewed', memory: memoryRowToApi(row) })
+    } else {
+      bus.emit({ kind: 'memory.updated', memory: memoryRowToApi(row) })
+    }
+
+    return c.json({ data: memoryRowToApi(row) })
+  })
+
+  app.delete('/api/memories/:id', (c) => {
+    const { id } = c.req.param()
+    const db = resolveDb()
+    const deleted = deleteMemory(db, id)
+    if (!deleted) return c.json({ data: null, error: 'Memory not found' }, 404)
+    const bus = getEventBus()
+    bus.emit({ kind: 'memory.deleted', memoryId: id })
     return c.json({ data: { ok: true } })
   })
 }

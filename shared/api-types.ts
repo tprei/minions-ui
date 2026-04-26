@@ -76,6 +76,10 @@ export type SseEvent =
       url: string
       capturedAt: string
     }
+  | { type: 'memory_proposed'; memory: ApiMemory }
+  | { type: 'memory_updated'; memory: ApiMemory }
+  | { type: 'memory_reviewed'; memory: ApiMemory }
+  | { type: 'memory_deleted'; memoryId: string }
 
 export type LimitSource = 'cgroup' | 'host'
 
@@ -468,4 +472,45 @@ export function isTranscriptEventOfType<T extends TranscriptEventType>(
   type: T,
 ): event is Extract<TranscriptEvent, { type: T }> {
   return event.type === type
+}
+
+export type MemoryStatus = 'pending' | 'approved' | 'archived' | 'pending_deletion'
+export type MemoryType = 'user' | 'feedback' | 'project' | 'reference'
+
+export interface ApiMemory {
+  id: string
+  repo: string
+  sourceSessionId?: string
+  status: MemoryStatus
+  type: MemoryType
+  name: string
+  description: string
+  content: string
+  createdAt: string
+  updatedAt: string
+  reviewedAt?: string
+}
+
+export interface CreateMemoryRequest {
+  repo: string
+  sourceSessionId?: string
+  type: MemoryType
+  name: string
+  description: string
+  content: string
+}
+
+export interface UpdateMemoryRequest {
+  status?: MemoryStatus
+  name?: string
+  description?: string
+  content?: string
+}
+
+export interface ListMemoriesQuery {
+  repo?: string
+  status?: MemoryStatus | MemoryStatus[]
+  q?: string
+  limit?: number
+  offset?: number
 }

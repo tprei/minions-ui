@@ -170,7 +170,12 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
     prepared.updateSession(db(), { id: sessionId, status: 'running', updated_at: Date.now() })
     emitSnapshot(sessionId)
 
-    const mcp = buildMcpConfig({})
+    const apiToken = process.env['MINION_API_TOKEN']
+    const mcp = buildMcpConfig({
+      memoryRepo: createOpts.repo,
+      memorySessionId: sessionId,
+      memoryApiToken: apiToken,
+    })
     const runtime = makeRuntime({
       sessionId,
       mode: createOpts.mode,
