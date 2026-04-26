@@ -13,6 +13,7 @@ export function DragHandle({ onPointerDown, onPointerMove, onPointerUp }: DragHa
   return (
     <div
       class="flex justify-center pt-2 pb-1 shrink-0 cursor-grab active:cursor-grabbing touch-none"
+      // @ts-expect-error - lowercase event handlers work at runtime but TS only types camelCase
       onpointerdown={onPointerDown}
       onpointermove={onPointerMove}
       onpointerup={onPointerUp}

@@ -37,7 +37,7 @@ export function TouchTarget({
 
   const Element = onClick || onPointerDown || onPointerUp ? 'button' : 'div'
 
-  const props = {
+  const baseProps = {
     class: `inline-flex items-center justify-center ${className}`,
     style,
     onClick,
@@ -46,10 +46,12 @@ export function TouchTarget({
     disabled: Element === 'button' ? disabled : undefined,
     'aria-label': ariaLabel,
     'aria-pressed': ariaPressed,
-    role: role || (Element === 'button' ? undefined : 'button'),
     type: Element === 'button' ? type : undefined,
     tabIndex: tabIndex ?? (disabled ? -1 : 0),
   }
 
-  return <Element {...props}>{children}</Element>
+  const roleValue = role || (Element === 'button' ? undefined : 'button')
+
+  // @ts-expect-error - role prop type mismatch between string and Preact Signal type
+  return <Element {...baseProps} role={roleValue}>{children}</Element>
 }

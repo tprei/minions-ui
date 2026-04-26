@@ -112,14 +112,14 @@ describe('QuickActionsBar', () => {
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
       }))
-      const manyActions: QuickAction[] = [
+      const manyActions = [
         { type: 'action1', label: 'Action 1', message: '/a1' },
         { type: 'action2', label: 'Action 2', message: '/a2' },
         { type: 'action3', label: 'Action 3', message: '/a3' },
         { type: 'action4', label: 'Action 4', message: '/a4' },
         { type: 'action5', label: 'Action 5', message: '/a5' },
         { type: 'action6', label: 'Action 6', message: '/a6' },
-      ]
+      ] as unknown as QuickAction[]
       const session = createSession({ quickActions: manyActions })
       render(<QuickActionsBar session={session} onAction={vi.fn().mockResolvedValue(undefined)} />)
       expect(screen.getByText('Action 1')).toBeTruthy()

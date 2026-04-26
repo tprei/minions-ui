@@ -7,7 +7,8 @@ export function vibrate(pattern: HapticPattern | number | number[]): void {
 
   if (typeof pattern === 'string') {
     const hapticValue = HAPTIC_PATTERNS[pattern]
-    navigator.vibrate(hapticValue)
+    const vibratePattern = (Array.isArray(hapticValue) ? [...hapticValue] : hapticValue) as VibratePattern
+    navigator.vibrate(vibratePattern)
   } else {
     navigator.vibrate(pattern)
   }

@@ -323,11 +323,16 @@ describe('ChatPanel', () => {
     const dag = {
       id: 'd1',
       rootTaskId: 's1',
+      status: 'running' as const,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
       nodes: {
         n1: {
           id: 'n1',
+          slug: 'n1',
           parentIds: [],
           dependencies: [],
+          dependents: [],
           status: 'running' as const,
           session: childSession,
         },
@@ -360,11 +365,16 @@ describe('ChatPanel', () => {
     const dag = {
       id: 'd1',
       rootTaskId: 's1',
+      status: 'running' as const,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
       nodes: {
         n1: {
           id: 'n1',
+          slug: 'n1',
           parentIds: [],
           dependencies: [],
+          dependents: [],
           status: 'running' as const,
           session: childSession,
         },
