@@ -5,6 +5,8 @@ import { clearSnapshot } from '../state/persist'
 import type { ConnectionStore } from '../state/types'
 import type { Connection, ConnectionsState, ActivityCounts } from './types'
 import { nextColor } from '../theme/colors'
+import { trackEvent } from '../activity/store'
+import type { SseEvent } from '../api/types'
 
 const STORAGE_KEY = 'minions-ui:connections:v1'
 
@@ -73,7 +75,9 @@ function getOrCreateStore(id: string): ConnectionStore {
   const conn = connections.value.find((c) => c.id === id)
   if (!conn) throw new Error(`Connection ${id} not found`)
   const client = createApiClient({ baseUrl: conn.baseUrl, token: conn.token })
-  const store = createConnectionStore(client, id)
+  const store = createConnectionStore(client, id, (event: SseEvent) => {
+    trackEvent(id, conn, event)
+  })
   storeCache.set(id, store)
   return store
 }

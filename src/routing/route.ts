@@ -5,11 +5,15 @@ export type Route =
   | { name: 'home' }
   | { name: 'session'; sessionSlug: string }
   | { name: 'group'; groupId: string }
+  | { name: 'activity' }
 
 export function parseHash(hash: string): Route {
   const raw = hash.replace(/^#?\/*/, '')
   if (!raw) return { name: 'home' }
   const segments = raw.split('/').filter(Boolean)
+  if (segments.length === 1 && segments[0] === 'activity') {
+    return { name: 'activity' }
+  }
   if (segments.length === 2 && segments[0] === 's') {
     return { name: 'session', sessionSlug: decodeURIComponent(segments[1]) }
   }
@@ -23,6 +27,8 @@ export function formatRoute(route: Route): string {
   switch (route.name) {
     case 'home':
       return '#/'
+    case 'activity':
+      return '#/activity'
     case 'session':
       return `#/s/${encodeURIComponent(route.sessionSlug)}`
     case 'group':

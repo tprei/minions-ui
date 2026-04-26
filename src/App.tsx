@@ -45,6 +45,7 @@ import type { ApiSession, AttentionReason, MinionCommand, QuickAction } from './
 import { HeaderMenu } from './components/HeaderMenu'
 import { MemoryDrawer } from './components/MemoryDrawer'
 import { DagStatusPill } from './components/DagStatusPill'
+import { ActivityFeed } from './activity/ActivityFeed'
 
 export type ViewMode = 'list' | 'canvas' | 'ship'
 
@@ -750,10 +751,11 @@ function ActiveView() {
 
   const selected = sessionId ? sessions.find((s) => s.id === sessionId) ?? null : null
   const isGroupRoute = route.name === 'group'
+  const isActivityRoute = route.name === 'activity'
 
   const pullToRefresh = usePullToRefresh({
     onRefresh: () => store.refresh(),
-    enabled: !isDesktop.value && mode === 'list' && !isGroupRoute,
+    enabled: !isDesktop.value && mode === 'list' && !isGroupRoute && !isActivityRoute,
     threshold: 80,
   })
 
@@ -797,6 +799,21 @@ function ActiveView() {
           <ResourceChip store={store} onOpen={() => { showRuntime.value = 'resources' }} />
         )}
         <RunningBadge store={store} onSelect={handleOpenChat} />
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== 'undefined') {
+              window.location.hash = '#/activity'
+            }
+          }}
+          class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 px-2 flex items-center gap-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700"
+          title="View activity feed"
+          aria-label="View activity feed"
+          data-testid="header-activity-btn"
+        >
+          <span aria-hidden="true">📊</span>
+          <span class="hidden sm:inline">Activity</span>
+        </button>
         {isDesktop.value ? (
           <div class="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
             <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />
@@ -880,7 +897,9 @@ function ActiveView() {
         </div>
       )}
       <NewTaskBar store={store} />
-      {isGroupRoute ? (
+      {isActivityRoute ? (
+        <ActivityFeed />
+      ) : isGroupRoute ? (
         <VariantGroupView store={store} groupId={route.groupId} />
       ) : isDesktop.value ? (
         mode === 'canvas' ? (

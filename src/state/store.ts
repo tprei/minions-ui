@@ -11,7 +11,11 @@ import type { ConnectionStore, DiffStats } from './types'
 import { loadSnapshot, saveSnapshot } from './persist'
 import { createTranscriptStore, type TranscriptStore } from './transcript'
 
-export function createConnectionStore(client: ApiClient, connectionId: string): ConnectionStore {
+export function createConnectionStore(
+  client: ApiClient,
+  connectionId: string,
+  onActivityEvent?: (event: SseEvent) => void
+): ConnectionStore {
   const sessions = signal<import('../api/types').ApiSession[]>([])
   const dags = signal<import('../api/types').ApiDagGraph[]>([])
   const status = signal<SseStatus>('connecting')
@@ -134,6 +138,7 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
   }
 
   function onEvent(event: SseEvent) {
+    onActivityEvent?.(event)
     switch (event.type) {
       case 'session_created':
         applySessionCreated(event.session)
