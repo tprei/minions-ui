@@ -33,6 +33,15 @@ export type EngineEvent =
   | { kind: 'dag.snapshot'; dag: ApiDagGraph }
   | { kind: 'dag.deleted'; dagId: string }
   | { kind: 'dag.node.landed'; dagId: string; nodeId: string }
+  | { kind: 'dag.node.pushed'; dagId: string; nodeId: string; parentSha: string; newSha: string }
+  | { kind: 'dag.node.restack.started'; dagId: string; nodeId: string; parentNodeId: string }
+  | {
+      kind: 'dag.node.restack.completed'
+      dagId: string
+      nodeId: string
+      result: 'resolved' | 'conflict'
+      error?: string
+    }
   | { kind: 'session.assistant_activity'; sessionId: string; toolName: string; toolUseId: string }
   | {
       kind: 'session.screenshot_captured'

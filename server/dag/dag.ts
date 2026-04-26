@@ -21,7 +21,7 @@ function childrenIndex(graph: DagGraph): Map<string, DagNode[]> {
   return children
 }
 
-export type DagNodeStatus = "pending" | "ready" | "running" | "done" | "failed" | "skipped" | "ci-pending" | "ci-failed" | "landed"
+export type DagNodeStatus = "pending" | "ready" | "running" | "done" | "failed" | "skipped" | "ci-pending" | "ci-failed" | "landed" | "rebasing" | "rebase-conflict"
 
 export interface DagNode {
   id: string
@@ -352,13 +352,17 @@ export function dagProgress(graph: DagGraph): {
   ciPending: number
   ciFailed: number
   landed: number
+  rebasing: number
+  rebaseConflict: number
 } {
-  const counts = { total: 0, done: 0, running: 0, ready: 0, pending: 0, failed: 0, skipped: 0, ciPending: 0, ciFailed: 0, landed: 0 }
+  const counts = { total: 0, done: 0, running: 0, ready: 0, pending: 0, failed: 0, skipped: 0, ciPending: 0, ciFailed: 0, landed: 0, rebasing: 0, rebaseConflict: 0 }
   for (const node of graph.nodes) {
     counts.total++
     if (node.status === "ci-pending") counts.ciPending++
     else if (node.status === "ci-failed") counts.ciFailed++
     else if (node.status === "landed") counts.landed++
+    else if (node.status === "rebasing") counts.rebasing++
+    else if (node.status === "rebase-conflict") counts.rebaseConflict++
     else counts[node.status]++
   }
   return counts
@@ -409,6 +413,8 @@ export function renderDagStatus(graph: DagGraph, isStack?: boolean): string {
     "ci-pending": "🔄",
     "ci-failed": "⚠️",
     landed: "🏁",
+    rebasing: "🔄",
+    "rebase-conflict": "⚠️",
   }
 
   const progress = dagProgress(graph)
@@ -483,6 +489,8 @@ const statusEmoji: Record<DagNodeStatus, string> = {
   "ci-pending": "🔄",
   "ci-failed": "⚠️",
   landed: "🏁",
+  rebasing: "🔄",
+  "rebase-conflict": "⚠️",
 }
 
 const statusLabel: Record<DagNodeStatus, string> = {
@@ -495,6 +503,8 @@ const statusLabel: Record<DagNodeStatus, string> = {
   "ci-pending": "CI Pending",
   "ci-failed": "CI Failed",
   landed: "Landed",
+  rebasing: "Rebasing",
+  "rebase-conflict": "Rebase Conflict",
 }
 
 function mermaidId(id: string): string {
