@@ -15,6 +15,7 @@ export type FeatureName =
   | 'resource-metrics'
   | 'runtime-config'
   | 'ship-coordinator'
+  | 'memory'
 
 export function hasFeature(
   source: ConnectionStore | VersionInfo | null | undefined,

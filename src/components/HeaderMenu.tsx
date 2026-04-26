@@ -9,16 +9,22 @@ const menuOpen = signal(false)
 export { menuOpen }
 
 export function HeaderMenu({
+  onMemory,
   onRuntimeConfig,
   onClean,
   onRefresh,
+  showMemory,
+  memoryProposalsCount,
   showRuntimeConfig,
   showClean,
   cleaning,
 }: {
+  onMemory?: () => void
   onRuntimeConfig?: () => void
   onClean?: () => void
   onRefresh: () => void
+  showMemory: boolean
+  memoryProposalsCount?: number
   showRuntimeConfig: boolean
   showClean: boolean
   cleaning: boolean
@@ -103,6 +109,31 @@ export function HeaderMenu({
             <span class="text-sm text-slate-700 dark:text-slate-200">Theme</span>
             <ThemeToggle />
           </div>
+          {showMemory && onMemory && (
+            <>
+              <div class="border-t border-slate-200 dark:border-slate-700 my-1" />
+              <button
+                type="button"
+                onClick={() => {
+                  onMemory()
+                  closeMenu()
+                }}
+                class="w-full flex items-center gap-3 px-3 py-2 text-sm text-left text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
+                data-testid="menu-memory"
+              >
+                <span aria-hidden="true">🧠</span>
+                <span>Memory</span>
+                {memoryProposalsCount !== undefined && memoryProposalsCount > 0 && (
+                  <span
+                    class="ml-auto rounded-full bg-indigo-600 text-white text-xs font-medium px-2 py-0.5"
+                    data-testid="menu-memory-badge"
+                  >
+                    {memoryProposalsCount}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
           {showRuntimeConfig && onRuntimeConfig && (
             <>
               <div class="border-t border-slate-200 dark:border-slate-700 my-1" />
