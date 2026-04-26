@@ -1,11 +1,12 @@
 import { useSignal } from '@preact/signals'
-import { useEffect, useCallback } from 'preact/hooks'
+import { useEffect, useCallback, useRef } from 'preact/hooks'
 import { connections, activeId, removeConnection, setActive } from './store'
 import { confirm } from '../hooks/useConfirm'
 import { ConnectionSettings } from './ConnectionSettings'
 import type { Connection } from './types'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useTheme } from '../hooks/useTheme'
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss'
 
 interface ConnectionsDrawerProps {
   onClose: () => void
@@ -19,6 +20,18 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const panel = useSignal<DrawerPanel>('list')
   const editingConn = useSignal<Connection | null>(null)
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const swipeRef = useSwipeToDismiss({
+    onDismiss: onClose,
+    threshold: 100,
+    enabled: !isDesktop.value,
+  })
+
+  useEffect(() => {
+    if (!isDesktop.value && drawerRef.current) {
+      swipeRef.current = drawerRef.current
+    }
+  }, [isDesktop.value, swipeRef])
 
   const handleClose = useCallback(() => {
     panel.value = 'list'
@@ -72,7 +85,7 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
           <button
             data-testid="drawer-back-btn"
             onClick={() => { panel.value = 'list'; editingConn.value = null }}
-            class={`mr-1 text-sm ${isDark ? 'text-gray-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}
+            class={`mr-1 text-lg min-w-[44px] min-h-[44px] flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}
           >
             ←
           </button>
@@ -83,7 +96,7 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
         <button
           data-testid="drawer-close-btn"
           onClick={handleClose}
-          class={`w-7 h-7 flex items-center justify-center rounded-full transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-slate-500'}`}
+          class={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-slate-500'}`}
           aria-label="Close drawer"
         >
           <span class="text-lg leading-none">&times;</span>
@@ -111,14 +124,14 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
                   <button
                     data-testid={`drawer-edit-${conn.id}`}
                     onClick={() => handleEdit(conn)}
-                    class={`text-xs px-2 py-1 rounded transition-colors ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-slate-600 hover:bg-slate-100'}`}
+                    class={`text-xs px-3 py-2.5 rounded transition-colors min-h-[44px] ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-slate-600 hover:bg-slate-100'}`}
                   >
                     Edit
                   </button>
                   <button
                     data-testid={`drawer-delete-${conn.id}`}
                     onClick={() => void handleDelete(conn)}
-                    class="text-xs px-2 py-1 rounded transition-colors text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                    class="text-xs px-3 py-2.5 rounded transition-colors text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 min-h-[44px]"
                   >
                     Delete
                   </button>
@@ -172,6 +185,7 @@ export function ConnectionsDrawer({ onClose }: ConnectionsDrawerProps) {
         onClick={handleClose}
       />
       <div
+        ref={drawerRef}
         class={`absolute bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl flex flex-col border-t max-h-[85dvh] ${borderColor} ${panelBg}`}
       >
         <div class="flex justify-center pt-2 pb-1 shrink-0">

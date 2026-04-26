@@ -79,6 +79,27 @@ build-time flag means notifications never render in dev unless you've
 deliberately opted in (e.g., behind `https://localhost` via `mkcert` or a
 reverse proxy that terminates TLS).
 
+## Production deployment
+
+For Cloudflare Pages or other hosting platforms, set the environment variable:
+
+```
+VITE_ENABLE_PUSH=1
+```
+
+In Cloudflare Pages:
+1. Go to Settings → Environment variables
+2. Add `VITE_ENABLE_PUSH` with value `1` for both Production and Preview
+3. Redeploy
+
+The server also needs `PWA_ORIGIN` set in `docker/.env`:
+
+```
+PWA_ORIGIN=https://your-app.pages.dev
+```
+
+This ensures push notification payloads include the correct clickable URL.
+
 ## Testing
 
 Unit tests live in `test/pwa/push.test.ts` and cover the URL-base64 conversion,
