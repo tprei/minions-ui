@@ -4,6 +4,7 @@ import type { ConnectionStore } from '../state/types'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { useImageAttachments, type ImageAttachment } from './ImageAttachments'
 import { hasFeature } from '../api/features'
+import { useHaptics } from '../hooks/useHaptics'
 
 const PLACEHOLDER = 'Send instructions to the agent — Enter to send, Shift+Enter for newline'
 
@@ -24,6 +25,7 @@ export function MessageInput({ store, value, onValueChange, onSend }: MessageInp
   const baseTextRef = useRef('')
   const valueRef = useRef(value)
   valueRef.current = value
+  const { vibrate } = useHaptics()
 
   const { attachments, paperclipButton, attachmentsStrip, pasteHandler, clear } = useImageAttachments(sending)
 
@@ -81,6 +83,7 @@ export function MessageInput({ store, value, onValueChange, onSend }: MessageInp
         setErrorText('This engine does not advertise image support — needs sessions-create-images feature.')
         return
       }
+      vibrate('light')
       pendingRef.current = { text: trimmed, images: currentAttachments }
       setErrorText(null)
       setSending(true)
@@ -102,7 +105,7 @@ export function MessageInput({ store, value, onValueChange, onSend }: MessageInp
         setSending(false)
       }
     },
-    [sending, onSend, onValueChange, clear, imagesSupported],
+    [sending, onSend, onValueChange, clear, imagesSupported, vibrate],
   )
 
   const handleKeyDown = useCallback(

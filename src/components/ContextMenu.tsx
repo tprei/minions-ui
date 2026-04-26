@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'preact/hooks'
 import type { ApiSession, QuickAction } from '../api/types'
 import { useTheme } from '../hooks/useTheme'
 import { ConfirmDialog, ReplyDialog } from './ConfirmDialog'
+import { useHaptics } from '../hooks/useHaptics'
 
 export interface ContextMenuPosition {
   x: number
@@ -324,6 +325,7 @@ export function useLongPress(
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const touchPosRef = useRef<ContextMenuPosition | null>(null)
   const triggeredRef = useRef(false)
+  const { vibrate } = useHaptics()
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -341,14 +343,12 @@ export function useLongPress(
         if (touchPosRef.current) {
           triggeredRef.current = true
           e.preventDefault()
-          if (navigator.vibrate) {
-            navigator.vibrate(50)
-          }
+          vibrate('heavy')
           onLongPress(touchPosRef.current)
         }
       }, LONG_PRESS_DURATION)
     },
-    [onLongPress]
+    [onLongPress, vibrate]
   )
 
   const handleTouchEnd = useCallback(() => {

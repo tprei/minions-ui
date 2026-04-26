@@ -144,6 +144,36 @@ describe('MessageInput', () => {
     expect(placeholder.toLowerCase()).not.toContain('telegram')
     expect(placeholder).toContain('agent')
   })
+
+  it('triggers haptic feedback when send button is clicked', async () => {
+    const vibrateSpy = vi.fn()
+    Object.defineProperty(navigator, 'vibrate', {
+      writable: true,
+      configurable: true,
+      value: vibrateSpy,
+    })
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    render(<Controlled onSend={onSend} />)
+    fireEvent.input(getTextarea(), { target: { value: 'test message' } })
+    fireEvent.click(getSendBtn())
+    expect(vibrateSpy).toHaveBeenCalledWith(10)
+    await waitFor(() => expect(onSend).toHaveBeenCalled())
+  })
+
+  it('triggers haptic feedback when Enter is pressed', async () => {
+    const vibrateSpy = vi.fn()
+    Object.defineProperty(navigator, 'vibrate', {
+      writable: true,
+      configurable: true,
+      value: vibrateSpy,
+    })
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    render(<Controlled onSend={onSend} />)
+    fireEvent.input(getTextarea(), { target: { value: 'enter message' } })
+    fireEvent.keyDown(getTextarea(), { key: 'Enter', shiftKey: false })
+    expect(vibrateSpy).toHaveBeenCalledWith(10)
+    await waitFor(() => expect(onSend).toHaveBeenCalled())
+  })
 })
 
 describe('MessageInput · voice input', () => {
