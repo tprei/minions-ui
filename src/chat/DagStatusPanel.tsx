@@ -143,7 +143,7 @@ export function DagStatusPanel({ session, store, onSelect, onLand }: DagStatusPa
 
   return (
     <div
-      class={`border-b ${graphTone} bg-white dark:bg-slate-800 shrink-0`}
+      class={`border-b ${graphTone} bg-white dark:bg-slate-800 shrink-0 max-h-48 md:max-h-none overflow-y-auto`}
       data-testid="dag-status-panel"
     >
       <div class="flex items-stretch">

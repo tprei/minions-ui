@@ -313,7 +313,7 @@ export function PrPreviewCard({ sessionId, prUrl, client, readinessAvailable = f
 
   return (
     <section
-      class="mx-3 mt-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden"
+      class="mx-3 mt-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden shrink-0 max-h-64 md:max-h-none overflow-y-auto"
       data-testid="pr-preview-card"
     >
       <header class="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-700">
