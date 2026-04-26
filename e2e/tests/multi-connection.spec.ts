@@ -49,7 +49,8 @@ test.describe('multi-connection', () => {
       await expect(page.getByTestId('session-item-a-session')).toBeVisible({ timeout: 8_000 })
 
       await page.getByTestId('connection-picker-trigger').click()
-      await expect(page.getByTestId('connection-picker-dropdown')).toBeVisible()
+      const pickerPopup = page.getByTestId('connection-picker-dropdown').or(page.getByTestId('connection-picker-sheet'))
+      await expect(pickerPopup).toBeVisible()
 
       await page.getByTestId('picker-manage-btn').click()
 
@@ -70,11 +71,10 @@ test.describe('multi-connection', () => {
       await expect(page.getByTestId('session-item-a-session')).not.toBeVisible()
 
       await page.getByTestId('connection-picker-trigger').click()
-      const dropdown = page.getByTestId('connection-picker-dropdown')
-      await expect(dropdown).toBeVisible()
+      const pickerPopup2 = page.getByTestId('connection-picker-dropdown').or(page.getByTestId('connection-picker-sheet'))
+      await expect(pickerPopup2).toBeVisible()
 
-      const options = dropdown.getByRole('option')
-      const alphaOption = options.filter({ hasText: 'Minion Alpha' })
+      const alphaOption = pickerPopup2.getByRole('option').filter({ hasText: 'Minion Alpha' })
       await alphaOption.click()
 
       await expect(page.getByTestId('connection-picker-trigger')).toContainText('Minion Alpha')
