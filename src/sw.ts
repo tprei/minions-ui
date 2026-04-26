@@ -14,6 +14,11 @@ interface PushPayload {
   renotify?: boolean
   urgency?: 'very-low' | 'low' | 'normal' | 'high'
   data?: Record<string, unknown>
+  actions?: Array<{
+    action: string
+    title: string
+    icon?: string
+  }>
 }
 
 const DEFAULT_TITLE = 'Minion update'
@@ -48,21 +53,84 @@ self.addEventListener('push', (event) => {
   const payload = parsePushPayload(event)
   const title = payload.title?.trim() || DEFAULT_TITLE
   const requireInteraction = payload.urgency === 'high'
-  const options: NotificationOptions & { renotify?: boolean } = {
+  const baseOptions = {
     body: payload.body ?? '',
     tag: payload.tag,
     icon: payload.icon ?? DEFAULT_ICON,
     badge: payload.badge ?? DEFAULT_BADGE,
     data: { url: payload.url ?? '/', ...payload.data },
-    renotify: payload.tag ? (payload.renotify ?? true) : undefined,
     requireInteraction,
     silent: false,
+    actions: payload.actions ?? [],
   }
-  event.waitUntil(self.registration.showNotification(title, options))
+  const options = payload.tag && (payload.renotify ?? true)
+    ? { ...baseOptions, renotify: true }
+    : baseOptions
+  event.waitUntil(self.registration.showNotification(title, options as NotificationOptions))
 })
+
+export async function handleNotificationAction(event: NotificationEvent): Promise<void> {
+  const action = event.action
+  const data = event.notification.data as {
+    url?: string
+    baseUrl?: string
+    token?: string
+    sessionId?: string
+    slug?: string
+  } | undefined
+
+  if (!action) return
+
+  const baseUrl = data?.baseUrl
+  const token = data?.token
+
+  if (!baseUrl || !token) {
+    return
+  }
+
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  }
+
+  if (action === 'approve') {
+    const sessionId = data?.sessionId
+    if (sessionId) {
+      await fetch(`${baseUrl}/api/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ text: '/approve', sessionId }),
+      })
+    }
+  } else if (action === 'reject') {
+    const sessionId = data?.sessionId
+    if (sessionId) {
+      await fetch(`${baseUrl}/api/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ text: '/reject', sessionId }),
+      })
+    }
+  } else if (action === 'continue') {
+    const sessionId = data?.sessionId
+    if (sessionId) {
+      await fetch(`${baseUrl}/api/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ text: '/continue', sessionId }),
+      })
+    }
+  }
+}
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
+
+  if (event.action) {
+    event.waitUntil(handleNotificationAction(event))
+    return
+  }
+
   const target = (event.notification.data as { url?: string } | undefined)?.url ?? '/'
   event.waitUntil(
     self.clients

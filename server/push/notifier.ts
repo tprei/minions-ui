@@ -10,6 +10,11 @@ interface NotifyPayload {
   tag?: string
   urgency?: 'very-low' | 'low' | 'normal' | 'high'
   data?: Record<string, unknown>
+  actions?: Array<{
+    action: string
+    title: string
+    icon?: string
+  }>
 }
 
 function determineUrgency(reasons: string[]): 'high' | 'normal' {
@@ -41,11 +46,25 @@ async function sendToOne(
   }
 }
 
-export function startPushNotifier(bus: EngineEventBus, pwaOrigin?: string): () => void {
+function determineActions(reasons: string[]): Array<{ action: string; title: string; icon?: string }> {
+  const actions: Array<{ action: string; title: string; icon?: string }> = []
+
+  if (reasons.includes('waiting_for_feedback')) {
+    actions.push({ action: 'approve', title: 'Approve' })
+    actions.push({ action: 'reject', title: 'Reject' })
+  } else if (reasons.includes('interrupted')) {
+    actions.push({ action: 'continue', title: 'Continue' })
+  }
+
+  return actions.slice(0, 2)
+}
+
+export function startPushNotifier(bus: EngineEventBus, pwaOrigin?: string, apiBaseUrl?: string): () => void {
   const keys = ensureVapidKeys()
   webpush.setVapidDetails(keys.subject, keys.publicKey, keys.privateKey)
 
   const origin = pwaOrigin ?? process.env['PWA_ORIGIN'] ?? ''
+  const apiBase = apiBaseUrl ?? process.env['API_BASE_URL'] ?? origin
 
   return bus.onKind('session.snapshot', (event) => {
     if (!event.session.needsAttention) return
@@ -54,16 +73,21 @@ export function startPushNotifier(bus: EngineEventBus, pwaOrigin?: string): () =
 
     const reason = reasons[0] ?? 'needs attention'
     const urgency = determineUrgency(reasons)
+    const actions = determineActions(reasons)
+
     const payload: NotifyPayload = {
       title: 'Minion needs attention',
       body: String(reason).replace(/_/g, ' '),
       url: `${origin}/sessions/${event.session.slug}`,
       tag: `session-${event.session.id}`,
       urgency,
+      actions,
       data: {
         sessionId: event.session.id,
         slug: event.session.slug,
         attentionReasons: reasons,
+        baseUrl: apiBase,
+        token: process.env['MINION_API_TOKEN'] ?? '',
       },
     }
 

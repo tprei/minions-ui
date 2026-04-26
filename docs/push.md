@@ -61,7 +61,17 @@ The service worker (`src/sw.ts`) treats the push payload as JSON:
   "tag":   "session:abc-123",
   "url":   "/#/s/fluffy-otter",
   "icon":  "/icons/icon-192.png",
-  "badge": "/icons/icon-192.png"
+  "badge": "/icons/icon-192.png",
+  "actions": [
+    { "action": "approve", "title": "Approve" },
+    { "action": "reject", "title": "Reject" }
+  ],
+  "data": {
+    "sessionId": "abc-123",
+    "slug": "fluffy-otter",
+    "baseUrl": "https://api.example.com",
+    "token": "bearer-token"
+  }
 }
 ```
 
@@ -69,6 +79,18 @@ The service worker (`src/sw.ts`) treats the push payload as JSON:
 the default app icon. `url` controls where `notificationclick` focuses or opens
 the app — open windows pointing at the same URL are reused, then re-navigated,
 then opened fresh as a last resort.
+
+### Interactive action buttons
+
+Notifications can include up to 2 action buttons that send commands directly to
+the minion without opening the app:
+
+- **Approve/Reject** — shown for `waiting_for_feedback` attention reason. Clicking sends `/approve` or `/reject` to the session.
+- **Continue** — shown for `interrupted` attention reason. Clicking sends `/continue` to the session.
+
+Action handlers require `baseUrl`, `token`, and `sessionId` in the notification
+`data` object. The service worker makes an authenticated `POST /api/messages`
+request with the corresponding command text.
 
 ## Why HTTPS only?
 

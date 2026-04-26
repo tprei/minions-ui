@@ -8,6 +8,12 @@ interface NotifyPayload {
   url: string
   tag?: string
   urgency?: 'very-low' | 'low' | 'normal' | 'high'
+  data?: Record<string, unknown>
+  actions?: Array<{
+    action: string
+    title: string
+    icon?: string
+  }>
 }
 
 async function sendToOne(
