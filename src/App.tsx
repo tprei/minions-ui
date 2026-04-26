@@ -694,6 +694,19 @@ function ActiveView() {
     setLogsSessionId(sid)
   }, [])
 
+  const handleRetryRebase = useCallback(
+    async (dagId: string, nodeId: string) => {
+      if (!store) return
+      setIsActionLoading(true)
+      try {
+        await store.sendCommand({ action: 'retry_rebase', dagId, nodeId })
+      } finally {
+        setIsActionLoading(false)
+      }
+    },
+    [store]
+  )
+
   const [cleaning, setCleaning] = useState(false)
   const handleClean = useCallback(async () => {
     if (!store) return
@@ -749,6 +762,7 @@ function ActiveView() {
     onOpenThread: () => {},
     onOpenChat: handleOpenChat,
     onViewLogs: handleOpenLogs,
+    onRetryRebase: handleRetryRebase,
     isActionLoading,
     accentColor: conn.color,
   }

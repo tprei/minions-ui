@@ -439,4 +439,142 @@ describe('NodeDetailPopup hierarchy metadata', () => {
     expect(hierarchy.innerHTML).toContain('Workers')
     expect(hierarchy.innerHTML).not.toContain('Child')
   })
+
+  it('renders rebase conflict error message when DAG node status is rebase-conflict', () => {
+    const session = makeSession({ id: 'sess-1', slug: 'conflict-session', status: 'running' })
+    const dag = makeDag({
+      nodes: {
+        'node-a': {
+          id: 'node-a',
+          slug: 'conflict-session',
+          status: 'rebase-conflict',
+          dependencies: [],
+          dependents: [],
+          session,
+          error: 'Rebase failed: merge conflict in src/app.ts',
+        },
+      },
+    })
+    render(
+      <NodeDetailPopup
+        session={session}
+        onClose={vi.fn()}
+        sessions={[session]}
+        dags={[dag]}
+      />
+    )
+    const errorBox = document.querySelector('[data-testid="node-detail-rebase-error"]')
+    expect(errorBox).toBeTruthy()
+    expect(errorBox!.textContent).toContain('Rebase Conflict')
+    expect(errorBox!.textContent).toContain('Rebase failed: merge conflict in src/app.ts')
+  })
+
+  it('renders retry rebase button when DAG node status is rebase-conflict', () => {
+    const session = makeSession({ id: 'sess-1', slug: 'conflict-session', status: 'running' })
+    const dag = makeDag({
+      nodes: {
+        'node-a': {
+          id: 'node-a',
+          slug: 'conflict-session',
+          status: 'rebase-conflict',
+          dependencies: [],
+          dependents: [],
+          session,
+          error: 'Rebase conflict detected',
+        },
+      },
+    })
+    const onRetryRebase = vi.fn()
+    render(
+      <NodeDetailPopup
+        session={session}
+        onClose={vi.fn()}
+        sessions={[session]}
+        dags={[dag]}
+        onRetryRebase={onRetryRebase}
+      />
+    )
+    const retryBtn = document.querySelector('[data-testid="node-detail-retry-rebase-btn"]') as HTMLButtonElement | null
+    expect(retryBtn).toBeTruthy()
+    fireEvent.click(retryBtn!)
+    expect(onRetryRebase).toHaveBeenCalledWith('dag-xyz', 'node-a')
+  })
+
+  it('does not render retry button when onRetryRebase is not provided', () => {
+    const session = makeSession({ id: 'sess-1', slug: 'conflict-session', status: 'running' })
+    const dag = makeDag({
+      nodes: {
+        'node-a': {
+          id: 'node-a',
+          slug: 'conflict-session',
+          status: 'rebase-conflict',
+          dependencies: [],
+          dependents: [],
+          session,
+          error: 'Rebase conflict detected',
+        },
+      },
+    })
+    render(
+      <NodeDetailPopup
+        session={session}
+        onClose={vi.fn()}
+        sessions={[session]}
+        dags={[dag]}
+      />
+    )
+    expect(document.querySelector('[data-testid="node-detail-retry-rebase-btn"]')).toBeFalsy()
+  })
+
+  it('renders rebasing status indicator when DAG node status is rebasing', () => {
+    const session = makeSession({ id: 'sess-1', slug: 'rebasing-session', status: 'running' })
+    const dag = makeDag({
+      nodes: {
+        'node-a': {
+          id: 'node-a',
+          slug: 'rebasing-session',
+          status: 'rebasing',
+          dependencies: [],
+          dependents: [],
+          session,
+        },
+      },
+    })
+    render(
+      <NodeDetailPopup
+        session={session}
+        onClose={vi.fn()}
+        sessions={[session]}
+        dags={[dag]}
+      />
+    )
+    const rebasingBox = document.querySelector('[data-testid="node-detail-rebasing-status"]')
+    expect(rebasingBox).toBeTruthy()
+    expect(rebasingBox!.textContent).toContain('Rebasing in progress')
+  })
+
+  it('does not render rebase error when no error is present', () => {
+    const session = makeSession({ id: 'sess-1', slug: 'conflict-session', status: 'running' })
+    const dag = makeDag({
+      nodes: {
+        'node-a': {
+          id: 'node-a',
+          slug: 'conflict-session',
+          status: 'rebase-conflict',
+          dependencies: [],
+          dependents: [],
+          session,
+        },
+      },
+    })
+    render(
+      <NodeDetailPopup
+        session={session}
+        onClose={vi.fn()}
+        sessions={[session]}
+        dags={[dag]}
+      />
+    )
+    expect(document.querySelector('[data-testid="node-detail-rebase-error"]')).toBeFalsy()
+  })
 })

@@ -12,6 +12,7 @@ interface NodeDetailPopupProps {
   sessions?: ApiSession[]
   dags?: ApiDagGraph[]
   onSelectSession?: (session: ApiSession) => void
+  onRetryRebase?: (dagId: string, nodeId: string) => Promise<void>
 }
 
 function MetaRow({ label, children, isDark }: { label: string; children: preact.ComponentChildren; isDark: boolean }) {
@@ -76,6 +77,7 @@ export function NodeDetailPopup({
   sessions,
   dags,
   onSelectSession,
+  onRetryRebase,
 }: NodeDetailPopupProps) {
   const theme = useTheme()
   const isDark = theme.value === 'dark'
@@ -109,7 +111,10 @@ export function NodeDetailPopup({
 
   const dagMatch = useMemo(() => findOwningDag(session.id, dags), [session.id, dags])
   const dagNodeStatus = dagMatch?.node.status
+  const dagNodeError = dagMatch?.node.error
   const showDagStatus = dagNodeStatus && dagNodeStatus !== session.status
+  const isRebaseConflict = dagNodeStatus === 'rebase-conflict'
+  const isRebasing = dagNodeStatus === 'rebasing'
 
   const isShipCoordinator = session.mode === 'ship'
 
@@ -240,6 +245,34 @@ export function NodeDetailPopup({
           </div>
         )}
 
+        {isRebaseConflict && dagNodeError && (
+          <div
+            class={`mx-4 mt-3 mb-3 px-3 py-2.5 rounded-lg border ${isDark ? 'bg-amber-900/20 border-amber-700/50' : 'bg-amber-50 border-amber-200'}`}
+            data-testid="node-detail-rebase-error"
+          >
+            <div class={`text-xs font-medium mb-1 ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>
+              Rebase Conflict
+            </div>
+            <div class={`text-xs leading-relaxed ${isDark ? 'text-amber-200/90' : 'text-amber-900/90'}`}>
+              {dagNodeError}
+            </div>
+          </div>
+        )}
+
+        {isRebasing && (
+          <div
+            class={`mx-4 mt-3 mb-3 px-3 py-2.5 rounded-lg border ${isDark ? 'bg-indigo-900/20 border-indigo-700/50' : 'bg-indigo-50 border-indigo-200'}`}
+            data-testid="node-detail-rebasing-status"
+          >
+            <div class="flex items-center gap-2">
+              <span class="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              <span class={`text-xs font-medium ${isDark ? 'text-indigo-300' : 'text-indigo-800'}`}>
+                Rebasing in progress...
+              </span>
+            </div>
+          </div>
+        )}
+
         <div class={`px-4 py-3 border-b ${borderColor} flex flex-col gap-2`}>
           {session.repo && (
             <MetaRow label="Repo" isDark={isDark}>
@@ -272,6 +305,15 @@ export function NodeDetailPopup({
         </div>
 
         <div class="px-4 py-3 flex flex-wrap gap-2">
+          {isRebaseConflict && onRetryRebase && dagMatch && (
+            <button
+              onClick={() => onRetryRebase!(dagMatch.dag.id, dagMatch.node.id)}
+              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isDark ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}
+              data-testid="node-detail-retry-rebase-btn"
+            >
+              <span>Retry Rebase</span>
+            </button>
+          )}
           {hasChatAction && (
             <button
               onClick={() => onOpenChat!(session.id)}
@@ -297,7 +339,7 @@ export function NodeDetailPopup({
               <span>View PR</span>
             </button>
           )}
-          {!hasChatAction && !hasLogsAction && !session.prUrl && (
+          {!isRebaseConflict && !hasChatAction && !hasLogsAction && !session.prUrl && (
             <div class={`flex-1 text-center text-sm py-2 ${mutedText}`}>
               No actions available
             </div>

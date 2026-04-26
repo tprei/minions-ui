@@ -58,6 +58,7 @@ export function sessionRowToApi(row: SessionRow): ApiSession {
 export function dagToApi(dag: DagRow, nodes: DagNodeRow[], sessionMap: Map<string, ApiSession>): ApiDagGraph {
   const nodeRecords: Record<string, ApiDagNode> = {}
   for (const node of nodes) {
+    const error = typeof node.payload.error === 'string' ? node.payload.error : undefined
     nodeRecords[node.id] = {
       id: node.id,
       slug: node.slug,
@@ -65,6 +66,7 @@ export function dagToApi(dag: DagRow, nodes: DagNodeRow[], sessionMap: Map<strin
       dependencies: node.dependencies,
       dependents: node.dependents,
       session: node.session_id !== null ? sessionMap.get(node.session_id) : undefined,
+      error,
     }
   }
   return {

@@ -124,6 +124,7 @@ const CommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('close'), sessionId: z.string() }),
   z.object({ action: z.literal('plan_action'), sessionId: z.string(), planAction: z.enum(['execute', 'split', 'stack', 'dag']), markdown: z.string().optional() }),
   z.object({ action: z.literal('land'), dagId: z.string(), nodeId: z.string() }),
+  z.object({ action: z.literal('retry_rebase'), dagId: z.string(), nodeId: z.string() }),
   z.object({ action: z.literal('ship_advance'), sessionId: z.string(), to: z.enum(['think', 'plan', 'dag', 'verify', 'done']).optional() }),
 ])
 
@@ -394,6 +395,21 @@ export function registerApiRoutes(
           data: result.ok ? { success: true } : { success: false, error: result.error ?? 'land failed' },
         }
         return c.json(body)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ data: { success: false, error: message } } satisfies ApiResponse<CommandResult>)
+      }
+    }
+
+    if (command.action === 'retry_rebase') {
+      if (!scheduler?.retryNode) {
+        return c.json({
+          data: { success: false, error: 'no scheduler configured' },
+        } satisfies ApiResponse<CommandResult>)
+      }
+      try {
+        await scheduler.retryNode(command.nodeId, command.dagId)
+        return c.json({ data: { success: true } } satisfies ApiResponse<CommandResult>)
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         return c.json({ data: { success: false, error: message } } satisfies ApiResponse<CommandResult>)
