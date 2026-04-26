@@ -308,6 +308,11 @@ export class SessionRuntime {
     this.clearTimers()
     this.state = 'done'
 
+    const flushed = this.translator.flushAllBuffers()
+    for (const evt of flushed) {
+      this.persistAndEmit(evt)
+    }
+
     const closeEvt = this.translator.closeTurn(undefined, undefined, true)
     if (closeEvt) {
       this.persistAndEmit(closeEvt)
