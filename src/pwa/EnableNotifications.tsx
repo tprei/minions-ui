@@ -40,6 +40,7 @@ export function EnableNotifications({ client, hasFeature }: Props) {
   const subscribed = useSignal<boolean>(false)
   const checking = useSignal<boolean>(true)
   const busy = useSignal<boolean>(false)
+  const testing = useSignal<boolean>(false)
   const error = useSignal<string | null>(null)
   const status = useSignal<string | null>(null)
 
@@ -125,19 +126,44 @@ export function EnableNotifications({ client, hasFeature }: Props) {
     }
   }
 
+  const handleTest = async () => {
+    testing.value = true
+    error.value = null
+    status.value = null
+    try {
+      await client.sendTestNotification()
+      status.value = 'Test notification sent. Check your device.'
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to send test notification'
+    } finally {
+      testing.value = false
+    }
+  }
+
   return (
     <div class="flex flex-col gap-2" data-testid="push-controls">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         {subscribed.value ? (
-          <button
-            type="button"
-            onClick={() => void handleDisable()}
-            disabled={busy.value || checking.value}
-            data-testid="push-disable-btn"
-            class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
-          >
-            {busy.value ? 'Disabling…' : 'Disable notifications'}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => void handleDisable()}
+              disabled={busy.value || checking.value}
+              data-testid="push-disable-btn"
+              class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
+            >
+              {busy.value ? 'Disabling…' : 'Disable notifications'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleTest()}
+              disabled={testing.value || checking.value}
+              data-testid="push-test-btn"
+              class="rounded-lg border border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-50"
+            >
+              {testing.value ? 'Sending…' : 'Send test'}
+            </button>
+          </>
         ) : (
           <button
             type="button"

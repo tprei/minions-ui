@@ -50,6 +50,7 @@ function makeStore(opts: {
     resourceSnapshot: signal(null),
     runtimeConfig: signal(null),
     memoryProposalsCount: signal(0),
+    attentionSessionIds: signal(new Set<string>()),
     loadDiffStats: opts.loadDiffStats ?? (async () => {}),
     refresh: async () => {},
     sendCommand: async () => ({ success: true }),

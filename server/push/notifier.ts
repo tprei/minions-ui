@@ -7,6 +7,14 @@ interface NotifyPayload {
   title: string
   body: string
   url: string
+  tag?: string
+  urgency?: 'very-low' | 'low' | 'normal' | 'high'
+  data?: Record<string, unknown>
+}
+
+function determineUrgency(reasons: string[]): 'high' | 'normal' {
+  if (reasons.includes('failed') || reasons.includes('ci_fix')) return 'high'
+  return 'normal'
 }
 
 async function sendToOne(
@@ -21,6 +29,9 @@ async function sendToOne(
         keys: sub.keys,
       },
       JSON.stringify(payload),
+      {
+        urgency: payload.urgency ?? 'normal',
+      },
     )
   } catch (err) {
     const status = (err as { statusCode?: number }).statusCode
@@ -42,10 +53,18 @@ export function startPushNotifier(bus: EngineEventBus, pwaOrigin?: string): () =
     if (reasons.length === 0) return
 
     const reason = reasons[0] ?? 'needs attention'
+    const urgency = determineUrgency(reasons)
     const payload: NotifyPayload = {
       title: 'Minion needs attention',
       body: String(reason).replace(/_/g, ' '),
       url: `${origin}/sessions/${event.session.slug}`,
+      tag: `session-${event.session.id}`,
+      urgency,
+      data: {
+        sessionId: event.session.id,
+        slug: event.session.slug,
+        attentionReasons: reasons,
+      },
     }
 
     const subs = list()

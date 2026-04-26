@@ -24,6 +24,7 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
   const resourceSnapshot = signal<ResourceSnapshot | null>(null)
   const runtimeConfig = signal<RuntimeConfigResponse | null>(null)
   const memoryProposalsCount = signal<number>(0)
+  const attentionSessionIds = signal<Set<string>>(new Set())
 
   function getTranscript(sessionId: string): TranscriptStore | null {
     const existing = transcripts.get(sessionId)
@@ -150,6 +151,13 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
         if (diffStatsBySessionId.value.has(event.session.id)) {
           void loadDiffStats(event.session.id)
         }
+        const next = new Set(attentionSessionIds.value)
+        if (event.session.needsAttention) {
+          next.add(event.session.id)
+        } else {
+          next.delete(event.session.id)
+        }
+        attentionSessionIds.value = next
         break
       }
       case 'session_deleted': {
@@ -269,6 +277,7 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     resourceSnapshot,
     runtimeConfig,
     memoryProposalsCount,
+    attentionSessionIds,
     loadDiffStats,
     refresh,
     async sendCommand(cmd) {

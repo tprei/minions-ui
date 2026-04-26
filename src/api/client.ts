@@ -67,6 +67,7 @@ export interface ApiClient {
   getVapidKey(): Promise<VapidPublicKey>
   subscribePush(sub: PushSubscriptionJSON): Promise<PushSubscribeAck>
   unsubscribePush(endpoint: string): Promise<{ ok: true }>
+  sendTestNotification(): Promise<{ ok: true; sent: boolean }>
   getMetrics(): Promise<ResourceSnapshot>
   getRuntimeConfig(): Promise<RuntimeConfigResponse>
   patchRuntimeConfig(patch: RuntimeOverrides): Promise<RuntimeConfigResponse>
@@ -255,6 +256,10 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
 
     unsubscribePush(endpoint: string) {
       return del<{ ok: true }>('/api/push-subscribe', { endpoint })
+    },
+
+    sendTestNotification() {
+      return post<{ ok: true; sent: boolean }>('/api/push/test', {})
     },
 
     getMetrics() {

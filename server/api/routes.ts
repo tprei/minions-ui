@@ -1288,6 +1288,17 @@ export function registerApiRoutes(
     return c.json({ data: { ok: true } })
   })
 
+  app.post('/api/push/test', async (c) => {
+    try {
+      const { sendTestNotification } = await import('../push/test-notification')
+      const origin = process.env['PWA_ORIGIN'] ?? ''
+      await sendTestNotification(origin)
+      return c.json({ data: { ok: true, sent: true } })
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500)
+    }
+  })
+
   app.get('/api/memories', (c) => {
     const db = resolveDb()
     const repo = c.req.query('repo')

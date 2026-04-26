@@ -12,6 +12,8 @@ interface PushPayload {
   icon?: string
   badge?: string
   renotify?: boolean
+  urgency?: 'very-low' | 'low' | 'normal' | 'high'
+  data?: Record<string, unknown>
 }
 
 const DEFAULT_TITLE = 'Minion update'
@@ -45,13 +47,16 @@ self.addEventListener('message', (event) => {
 self.addEventListener('push', (event) => {
   const payload = parsePushPayload(event)
   const title = payload.title?.trim() || DEFAULT_TITLE
+  const requireInteraction = payload.urgency === 'high'
   const options: NotificationOptions & { renotify?: boolean } = {
     body: payload.body ?? '',
     tag: payload.tag,
     icon: payload.icon ?? DEFAULT_ICON,
     badge: payload.badge ?? DEFAULT_BADGE,
-    data: { url: payload.url ?? '/' },
+    data: { url: payload.url ?? '/', ...payload.data },
     renotify: payload.tag ? (payload.renotify ?? true) : undefined,
+    requireInteraction,
+    silent: false,
   }
   event.waitUntil(self.registration.showNotification(title, options))
 })

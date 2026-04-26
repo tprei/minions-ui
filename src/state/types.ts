@@ -36,6 +36,7 @@ export interface ConnectionStore {
   resourceSnapshot: ReadonlySignal<ResourceSnapshot | null>
   runtimeConfig: ReadonlySignal<RuntimeConfigResponse | null>
   memoryProposalsCount: ReadonlySignal<number>
+  attentionSessionIds: ReadonlySignal<Set<string>>
   loadDiffStats(sessionId: string): Promise<void>
   refresh(): Promise<void>
   sendCommand(cmd: MinionCommand): Promise<CommandResult>

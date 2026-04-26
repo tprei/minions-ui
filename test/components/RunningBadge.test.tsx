@@ -37,6 +37,7 @@ function makeStore(sessions: ApiSession[]): ConnectionStore {
     resourceSnapshot: signal(null),
     runtimeConfig: signal(null),
     memoryProposalsCount: signal(0),
+    attentionSessionIds: signal(new Set<string>()),
     loadDiffStats: vi.fn(async () => {}),
     refresh: vi.fn(async () => {}),
     sendCommand: vi.fn(async () => ({ success: true })),
