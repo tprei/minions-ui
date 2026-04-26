@@ -3,6 +3,43 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('idb-keyval', () => ({ del: vi.fn(), get: vi.fn(), set: vi.fn() }))
 
+const mockQrStart = vi.fn().mockResolvedValue(undefined)
+const mockQrStop = vi.fn()
+const mockQrDestroy = vi.fn()
+
+let currentQrScanner: MockQrScanner | null = null
+
+class MockQrScanner {
+  static SCAN_PERIOD = 250
+  onDecode: ((result: { data: string }) => void) | null = null
+
+  constructor(
+    _video: HTMLVideoElement,
+    onDecode: (result: { data: string }) => void,
+    _options?: unknown
+  ) {
+    this.onDecode = onDecode
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    currentQrScanner = this
+  }
+
+  async start() {
+    await mockQrStart()
+  }
+
+  stop() {
+    mockQrStop()
+  }
+
+  destroy() {
+    mockQrDestroy()
+  }
+}
+
+vi.mock('qr-scanner', () => ({
+  default: MockQrScanner,
+}))
+
 const addConnectionMock = vi.fn().mockReturnValue({ id: 'new1', label: 'Test', baseUrl: 'https://t.example.com', token: '', color: '#3b82f6' })
 const updateConnectionMock = vi.fn()
 const setActiveMock = vi.fn()
@@ -37,6 +74,8 @@ function setInputValue(input: HTMLInputElement, value: string) {
 describe('ConnectionSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockQrStart.mockResolvedValue(undefined)
+    currentQrScanner = null
   })
 
   async function renderSettings(props: Record<string, unknown> = {}) {
@@ -187,5 +226,80 @@ describe('ConnectionSettings', () => {
     // mock returns no provider — badge must not appear
     await act(async () => { await new Promise((r) => setTimeout(r, 50)) })
     expect(screen.queryByTestId('backend-badge')).toBeNull()
+  })
+
+  it('shows QR scan button for new connection', async () => {
+    await renderSettings()
+    expect(screen.getByTestId('scan-qr-btn')).toBeTruthy()
+  })
+
+  it('hides QR scan button for existing connection', async () => {
+    await renderSettings({
+      existing: { id: 'e1', label: 'Old', baseUrl: 'https://old.example.com', token: 'tok', color: '#10b981' },
+    })
+    expect(screen.queryByTestId('scan-qr-btn')).toBeNull()
+  })
+
+  it('shows QR scanner when scan button is clicked', async () => {
+    await renderSettings()
+    const scanBtn = screen.getByTestId('scan-qr-btn')
+    fireEvent.click(scanBtn)
+    await waitFor(() => expect(screen.getByTestId('qr-video')).toBeTruthy())
+  })
+
+  it('auto-fills form when valid QR code is scanned', async () => {
+    await renderSettings()
+    const scanBtn = screen.getByTestId('scan-qr-btn')
+    fireEvent.click(scanBtn)
+
+    await waitFor(() => expect(mockQrStart).toHaveBeenCalled())
+
+    const validData = JSON.stringify({
+      baseUrl: 'https://scanned.example.com',
+      token: 'scanned-token-123',
+      label: 'Scanned Connection',
+    })
+
+    currentQrScanner?.onDecode?.({ data: validData })
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('qr-video')).toBeNull()
+    })
+
+    const labelInput = screen.getByPlaceholderText('My minion') as HTMLInputElement
+    const urlInput = screen.getByPlaceholderText('https://your-minion.fly.dev') as HTMLInputElement
+
+    expect(labelInput.value).toBe('Scanned Connection')
+    expect(urlInput.value).toBe('https://scanned.example.com')
+  })
+
+  it('shows error when invalid QR code is scanned', async () => {
+    await renderSettings()
+    const scanBtn = screen.getByTestId('scan-qr-btn')
+    fireEvent.click(scanBtn)
+
+    await waitFor(() => expect(mockQrStart).toHaveBeenCalled())
+
+    currentQrScanner?.onDecode?.({ data: 'invalid-json' })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('qr-error')).toBeTruthy()
+    })
+  })
+
+  it('allows switching back to manual entry from QR scanner', async () => {
+    await renderSettings()
+    const scanBtn = screen.getByTestId('scan-qr-btn')
+    fireEvent.click(scanBtn)
+
+    await waitFor(() => expect(screen.getByText('Scan QR Code')).toBeTruthy())
+
+    const manualBtn = screen.getByText('Enter manually')
+    fireEvent.click(manualBtn)
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('qr-video')).toBeNull()
+      expect(screen.getByTestId('scan-qr-btn')).toBeTruthy()
+    })
   })
 })
