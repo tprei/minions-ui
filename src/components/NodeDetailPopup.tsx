@@ -155,7 +155,7 @@ export function NodeDetailPopup({
             </h3>
             <button
               onClick={onClose}
-              class={`shrink-0 w-7 h-7 flex items-center justify-center rounded-full transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
+              class={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
               aria-label="Close"
             >
               <span class="text-lg leading-none">&times;</span>
@@ -308,7 +308,7 @@ export function NodeDetailPopup({
           {isRebaseConflict && onRetryRebase && dagMatch && (
             <button
               onClick={() => onRetryRebase!(dagMatch.dag.id, dagMatch.node.id)}
-              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isDark ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}
+              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-3 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${isDark ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}
               data-testid="node-detail-retry-rebase-btn"
             >
               <span>Retry Rebase</span>
@@ -317,7 +317,7 @@ export function NodeDetailPopup({
           {hasChatAction && (
             <button
               onClick={() => onOpenChat!(session.id)}
-              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
+              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-3 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
             >
               <span>Open Chat</span>
             </button>
@@ -325,7 +325,7 @@ export function NodeDetailPopup({
           {hasLogsAction && (
             <button
               onClick={() => onViewLogs!(session.id)}
-              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isDark ? 'bg-slate-700 hover:bg-slate-600 text-slate-100' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}`}
+              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-3 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${isDark ? 'bg-slate-700 hover:bg-slate-600 text-slate-100' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}`}
               data-testid="node-detail-view-logs-btn"
             >
               <span>View Logs</span>
@@ -334,7 +334,7 @@ export function NodeDetailPopup({
           {session.prUrl && (
             <button
               onClick={() => window.open(session.prUrl!, '_blank', 'noopener,noreferrer')}
-              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-800'}`}
+              class={`flex-1 min-w-[8rem] flex items-center justify-center gap-2 px-3 py-3 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-800'}`}
             >
               <span>View PR</span>
             </button>

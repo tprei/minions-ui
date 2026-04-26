@@ -71,7 +71,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
         onClick={handleToggle}
         aria-haspopup="listbox"
         aria-expanded={open.value}
-        class="w-full flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 sm:px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors min-w-0"
+        class="w-full flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 sm:px-4 py-2.5 text-sm font-medium text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors min-w-0 min-h-[44px]"
       >
         {activeConn ? (
           <>
@@ -107,7 +107,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
                   tabIndex={0}
                   data-testid={`picker-option-${conn.id}`}
                   onClick={() => handleSelect(conn.id)}
-                  class={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-700 ${conn.id === activeId.value ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
+                  class={`w-full flex items-center gap-2 px-3 py-3 text-sm text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-700 min-h-[44px] ${conn.id === activeId.value ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
                 >
                   <span
                     class="h-2.5 w-2.5 rounded-full shrink-0"
@@ -122,7 +122,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
             <button
               data-testid="picker-manage-btn"
               onClick={handleManage}
-              class="w-full px-3 py-2 text-sm text-left text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+              class="w-full px-3 py-3 text-sm text-left text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors min-h-[44px]"
             >
               Manage connections
             </button>

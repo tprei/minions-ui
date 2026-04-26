@@ -114,7 +114,7 @@ export function useImageAttachments(disabled: boolean) {
         disabled={disabled}
         aria-label="Attach image"
         title="Attach image"
-        class="shrink-0 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors border shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600"
+        class="shrink-0 rounded-lg px-3 py-3 text-sm font-medium transition-colors border shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600 min-h-[44px]"
         data-testid="attach-btn"
       >
         <PaperclipIcon />
@@ -134,7 +134,7 @@ export function useImageAttachments(disabled: boolean) {
             <button
               type="button"
               onClick={() => removeAttachment(idx)}
-              class="absolute top-0 right-0 w-5 h-5 flex items-center justify-center bg-black/60 text-white text-[10px] rounded-bl"
+              class="absolute top-0 right-0 min-w-[32px] min-h-[32px] flex items-center justify-center bg-black/60 text-white text-sm rounded-bl"
               aria-label={`Remove attachment ${idx + 1}`}
               data-testid={`remove-attachment-${idx}`}
             >

@@ -177,16 +177,20 @@ export function ConnectionSettings({ onClose, existing, embedded }: Props) {
                 type="button"
                 data-testid={`swatch-${c}`}
                 onClick={() => { color.value = c; customHex.value = '' }}
-                class="h-6 w-6 rounded-full border-2 transition-transform focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500"
-                style={{
-                  backgroundColor: c,
-                  borderColor: color.value === c ? 'white' : 'transparent',
-                  boxShadow: color.value === c ? `0 0 0 2px ${c}` : undefined,
-                  transform: color.value === c ? 'scale(1.15)' : undefined,
-                }}
+                class="min-h-[44px] min-w-[44px] rounded-full border-2 transition-transform focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 flex items-center justify-center"
                 aria-label={`Color ${c}`}
                 aria-pressed={color.value === c}
-              />
+              >
+                <span
+                  class="h-6 w-6 rounded-full block"
+                  style={{
+                    backgroundColor: c,
+                    border: color.value === c ? `2px solid white` : undefined,
+                    boxShadow: color.value === c ? `0 0 0 2px ${c}` : undefined,
+                    transform: color.value === c ? 'scale(1.15)' : undefined,
+                  }}
+                />
+              </button>
             ))}
           </div>
           <div class="flex items-center gap-2">
@@ -250,14 +254,14 @@ export function ConnectionSettings({ onClose, existing, embedded }: Props) {
           <button
             type="button"
             onClick={onClose}
-            class="flex-1 rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+            class="flex-1 rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 min-h-[44px]"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={loading.value}
-            class="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            class="flex-1 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed min-h-[44px]"
           >
             {loading.value ? 'Connecting…' : existing ? 'Save' : 'Connect'}
           </button>
