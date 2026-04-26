@@ -27,3 +27,4 @@ playwright.config.js
 docker/.env
 .home/
 .claude/
+.fixme/
