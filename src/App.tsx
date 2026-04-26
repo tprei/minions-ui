@@ -42,12 +42,14 @@ import { formatRoute } from './routing/route'
 import { VariantGroupView } from './groups/VariantGroupView'
 import type { ApiSession, AttentionReason, MinionCommand, QuickAction } from './api/types'
 import { HeaderMenu } from './components/HeaderMenu'
+import { MemoryDrawer } from './components/MemoryDrawer'
 
 export type ViewMode = 'list' | 'canvas' | 'ship'
 
 const showSettings = signal(false)
 const showDrawer = signal(false)
 const showRuntime = signal<RuntimeTab | null>(null)
+const showMemory = signal(false)
 export const viewMode = signal<ViewMode>('list')
 
 function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
@@ -769,6 +771,26 @@ function ActiveView() {
           <div class="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
             <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} />
             <ThemeToggle />
+            {hasFeature(store, 'memory') && (
+              <button
+                type="button"
+                onClick={() => { showMemory.value = true }}
+                class="relative rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 h-7 w-7 flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+                title="Memory proposals"
+                aria-label="Open memory drawer"
+                data-testid="header-memory-btn"
+              >
+                <span aria-hidden="true">🧠</span>
+                {store.memoryProposalsCount.value > 0 && (
+                  <span
+                    class="absolute -top-1 -right-1 rounded-full bg-indigo-600 text-white text-[10px] font-medium px-1 min-w-[16px] h-4 flex items-center justify-center"
+                    data-testid="memory-proposals-badge"
+                  >
+                    {store.memoryProposalsCount.value}
+                  </span>
+                )}
+              </button>
+            )}
             {hasFeature(store, 'runtime-config') && (
               <button
                 type="button"
@@ -808,9 +830,12 @@ function ActiveView() {
         ) : (
           <div class="ml-auto">
             <HeaderMenu
+              onMemory={hasFeature(store, 'memory') ? () => { showMemory.value = true } : undefined}
               onRuntimeConfig={hasFeature(store, 'runtime-config') ? () => { showRuntime.value = 'config' } : undefined}
               onClean={hasFeature(store, 'messages') ? handleClean : undefined}
               onRefresh={() => void store.refresh()}
+              showMemory={hasFeature(store, 'memory')}
+              memoryProposalsCount={store.memoryProposalsCount.value}
               showRuntimeConfig={hasFeature(store, 'runtime-config')}
               showClean={hasFeature(store, 'messages')}
               cleaning={cleaning}
@@ -957,6 +982,12 @@ function ActiveView() {
           store={store}
           initialTab={showRuntime.value}
           onClose={() => { showRuntime.value = null }}
+        />
+      )}
+      {showMemory.value && (
+        <MemoryDrawer
+          store={store}
+          onClose={() => { showMemory.value = false }}
         />
       )}
       {logsSessionId !== null && (() => {

@@ -41,4 +41,13 @@ describe('hasFeature', () => {
     expect(hasFeature(v, 'web-push')).toBe(true)
     expect(hasFeature(v, 'diff')).toBe(false)
   })
+
+  it('recognizes memory feature', () => {
+    const store = makeStore({
+      apiVersion: '1',
+      libraryVersion: '1.110.0',
+      features: ['memory', 'messages'],
+    })
+    expect(hasFeature(store, 'memory')).toBe(true)
+  })
 })
