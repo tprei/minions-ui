@@ -4,10 +4,13 @@
 
 | Role | Model | Typical agents |
 |---|---|---|
-| Planning, architecture, research, implementation | `opus` | `planner`, `explorer`, `technical-architect`, `general-purpose`, `ci-fix` |
+| Planning, architecture, research | `opus` | `planner`, `explorer`, `technical-architect` |
+| Implementation | `sonnet` | `general-purpose` for feature work, `ci-fix` for CI |
 | Commits, mechanical chores | `haiku` | `git-commit-specialist` |
 
 Always set the `model` parameter explicitly when spawning via the `Agent` tool.
+
+If an implementation agent encounters ambiguity, unresolved design questions, or an architectural decision — **stop implementing** and return to the planning loop with an opus-tier agent. Do not guess inline.
 
 ## Plan/Think mode is read-only
 
@@ -49,8 +52,8 @@ Configured in your `~/.claude/CLAUDE.md`:
 | `planner` (opus) | Break down ambiguous features into ordered implementation steps |
 | `explorer` (opus) | Read-only codebase exploration, call chains, data flow |
 | `technical-architect` (opus) | Cross-cutting system design, performance, refactors |
-| `general-purpose` (opus) | Feature implementation, bug fixes |
-| `ci-fix` (opus) | Fix CI failures on an existing PR branch |
+| `general-purpose` (sonnet) | Feature implementation, bug fixes |
+| `ci-fix` (sonnet) | Fix CI failures on an existing PR branch |
 | `git-commit-specialist` (haiku) | Commits, pushes, PRs |
 | `Explore` (built-in) | Fast codebase exploration |
 | `claude-code-guide` | Questions about the Claude Code CLI, Agent SDK, or Anthropic API |
