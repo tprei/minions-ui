@@ -269,12 +269,15 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
       return patch<RuntimeConfigResponse>('/api/config/runtime', patchBody)
     },
 
-    getMemories(query?: string, status?: string) {
+    async getMemories(query?: string, status?: string) {
       const params = new URLSearchParams()
       if (query) params.set('q', query)
       if (status) params.set('status', status)
       const qs = params.toString()
-      return get<MemoryEntry[]>(`/api/memories${qs ? `?${qs}` : ''}`)
+      const result = await get<{ memories: MemoryEntry[]; pendingCount: number }>(
+        `/api/memories${qs ? `?${qs}` : ''}`,
+      )
+      return result.memories
     },
 
     createMemory(req: CreateMemoryRequest) {
