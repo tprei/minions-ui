@@ -24,8 +24,6 @@ beforeEach(() => {
   }
 })
 
-const MIN_TOUCH_TARGET = 44
-
 function assertMinTouchTarget(el: HTMLElement, name: string) {
   const classNames = el.className
   const hasMinHeight = classNames.includes('min-h-[44px]') || classNames.includes('min-h-11')
@@ -119,9 +117,9 @@ describe('Touch Target Accessibility', () => {
       needsAttention: false,
       attentionReasons: [],
       quickActions: [
-        { type: 'approve', label: 'Approve', message: '/approve' },
-        { type: 'reject', label: 'Reject', message: '/reject' },
-      ] as QuickAction[],
+        { type: 'retry', label: 'Retry', message: '/retry' },
+        { type: 'resume', label: 'Resume', message: '/resume' },
+      ] satisfies QuickAction[],
       mode: 'task',
       conversation: [],
     }
