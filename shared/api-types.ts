@@ -347,7 +347,7 @@ export type MinionCommand =
   | { action: 'reply'; sessionId: string; message: string }
   | { action: 'stop'; sessionId: string }
   | { action: 'close'; sessionId: string }
-  | { action: 'plan_action'; sessionId: string; planAction: PlanActionType; markdown?: string }
+  | { action: 'plan_action'; sessionId: string; planAction: PlanActionType; markdown?: string; message?: string }
   | { action: 'ship_advance'; sessionId: string; to?: ShipStage }
   | { action: 'land'; dagId: string; nodeId: string }
   | { action: 'retry_rebase'; dagId: string; nodeId: string }

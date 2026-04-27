@@ -148,7 +148,7 @@ const CommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('reply'), sessionId: z.string(), message: z.string() }),
   z.object({ action: z.literal('stop'), sessionId: z.string() }),
   z.object({ action: z.literal('close'), sessionId: z.string() }),
-  z.object({ action: z.literal('plan_action'), sessionId: z.string(), planAction: z.enum(['execute', 'split', 'stack', 'dag']), markdown: z.string().optional() }),
+  z.object({ action: z.literal('plan_action'), sessionId: z.string(), planAction: z.enum(['execute', 'split', 'stack', 'dag']), markdown: z.string().optional(), message: z.string().optional() }),
   z.object({ action: z.literal('land'), dagId: z.string(), nodeId: z.string() }),
   z.object({ action: z.literal('retry_rebase'), dagId: z.string(), nodeId: z.string() }),
   z.object({ action: z.literal('ship_advance'), sessionId: z.string(), to: z.enum(['think', 'plan', 'dag', 'verify', 'done']).optional() }),
@@ -468,7 +468,7 @@ export function registerApiRoutes(
       try {
         let result
         if (command.planAction === 'execute') {
-          result = await handleExecute(command.sessionId, planCtx)
+          result = await handleExecute(command.sessionId, planCtx, command.message)
         } else if (command.planAction === 'split') {
           result = await handleSplit(command.sessionId, planCtx)
         } else if (command.planAction === 'stack') {
@@ -638,7 +638,7 @@ export function registerApiRoutes(
         try {
           let result
           if (command === 'execute') {
-            result = await handleExecute(sessionId, planCtx)
+            result = await handleExecute(sessionId, planCtx, rest)
           } else if (command === 'split') {
             result = await handleSplit(sessionId, planCtx)
           } else if (command === 'stack') {

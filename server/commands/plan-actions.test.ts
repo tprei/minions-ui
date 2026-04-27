@@ -208,6 +208,156 @@ describe("plan-actions gating", () => {
     expect(createCalls[0]?.prompt).toContain("research/analysis, not a concrete implementation plan")
   })
 
+  it("uses the guided directive when userContext is provided in think mode (overrides item-picking)", async () => {
+    const sessionId = insertSession(db, { mode: "think" })
+    prepared.insertEvent(db, {
+      session_id: sessionId,
+      seq: 1,
+      turn: 1,
+      type: "assistant_text",
+      timestamp: Date.now(),
+      payload: { text: "Option 1: Foo. Option 2: Bar.", final: true, blockId: "block-1" },
+    })
+    const createCalls: Array<{ mode: string; prompt: string }> = []
+    const mockRuntime: Partial<SessionRuntime> = {
+      running: false,
+      currentProviderSessionId: undefined,
+      start: async () => {},
+      injectInput: async () => false,
+      stop: async () => {},
+    }
+    const registry: SessionRegistry = {
+      ...makeRegistry([]),
+      create: async (opts) => {
+        createCalls.push({ mode: opts.mode, prompt: opts.prompt })
+        return {
+          session: { id: "child-guided" } as ApiSession,
+          runtime: mockRuntime as SessionRuntime,
+        }
+      },
+    }
+    const ctx: PlanActionCtx = {
+      db,
+      registry,
+      scheduler: makeScheduler([]),
+    }
+
+    const result = await handleExecute(sessionId, ctx, "do option 1")
+
+    expect(result.ok).toBe(true)
+    expect(createCalls[0]?.prompt).toContain("Option 1: Foo. Option 2: Bar.")
+    expect(createCalls[0]?.prompt).toContain("<user_direction>")
+    expect(createCalls[0]?.prompt).toContain("do option 1")
+    expect(createCalls[0]?.prompt).toContain("</user_direction>")
+    expect(createCalls[0]?.prompt).not.toContain("Pick the SINGLE highest-leverage item")
+    expect(createCalls[0]?.prompt).not.toContain("research/analysis, not a concrete implementation plan")
+  })
+
+  it("uses the guided directive when userContext is provided in plan mode", async () => {
+    const sessionId = insertSession(db, { mode: "plan" })
+    prepared.insertEvent(db, {
+      session_id: sessionId,
+      seq: 1,
+      turn: 1,
+      type: "assistant_text",
+      timestamp: Date.now(),
+      payload: { text: "Plan steps here.", final: true, blockId: "block-1" },
+    })
+    const createCalls: Array<{ prompt: string }> = []
+    const mockRuntime: Partial<SessionRuntime> = {
+      running: false,
+      currentProviderSessionId: undefined,
+      start: async () => {},
+      injectInput: async () => false,
+      stop: async () => {},
+    }
+    const registry: SessionRegistry = {
+      ...makeRegistry([]),
+      create: async (opts) => {
+        createCalls.push({ prompt: opts.prompt })
+        return {
+          session: { id: "child" } as ApiSession,
+          runtime: mockRuntime as SessionRuntime,
+        }
+      },
+    }
+    const ctx: PlanActionCtx = {
+      db,
+      registry,
+      scheduler: makeScheduler([]),
+    }
+
+    await handleExecute(sessionId, ctx, "skip step 3")
+
+    expect(createCalls[0]?.prompt).toContain("<user_direction>")
+    expect(createCalls[0]?.prompt).toContain("skip step 3")
+    expect(createCalls[0]?.prompt).not.toContain("Implement your plan now")
+  })
+
+  it("ignores empty/whitespace userContext and falls back to default directive", async () => {
+    const sessionId = insertSession(db, { mode: "think" })
+    prepared.insertEvent(db, {
+      session_id: sessionId,
+      seq: 1,
+      turn: 1,
+      type: "assistant_text",
+      timestamp: Date.now(),
+      payload: { text: "Analysis here.", final: true, blockId: "block-1" },
+    })
+    const createCalls: Array<{ prompt: string }> = []
+    const mockRuntime: Partial<SessionRuntime> = {
+      running: false,
+      currentProviderSessionId: undefined,
+      start: async () => {},
+      injectInput: async () => false,
+      stop: async () => {},
+    }
+    const registry: SessionRegistry = {
+      ...makeRegistry([]),
+      create: async (opts) => {
+        createCalls.push({ prompt: opts.prompt })
+        return {
+          session: { id: "child" } as ApiSession,
+          runtime: mockRuntime as SessionRuntime,
+        }
+      },
+    }
+    const ctx: PlanActionCtx = {
+      db,
+      registry,
+      scheduler: makeScheduler([]),
+    }
+
+    await handleExecute(sessionId, ctx, "   ")
+
+    expect(createCalls[0]?.prompt).toContain("Pick the SINGLE highest-leverage item")
+    expect(createCalls[0]?.prompt).not.toContain("<user_direction>")
+  })
+
+  it("injects guided directive (not default) into task-mode session when userContext is provided", async () => {
+    const sessionId = insertSession(db, { mode: "task" })
+    const replyCalls: Array<{ sessionId: string; text: string }> = []
+    const registry = {
+      ...makeRegistry([]),
+      reply: async (sid: string, text: string) => {
+        replyCalls.push({ sessionId: sid, text })
+        return true
+      },
+    }
+    const ctx: PlanActionCtx = {
+      db,
+      registry,
+      scheduler: makeScheduler([]),
+    }
+
+    const result = await handleExecute(sessionId, ctx, "focus on auth refactor")
+
+    expect(result.ok).toBe(true)
+    expect(replyCalls[0]?.text).toContain("<user_direction>")
+    expect(replyCalls[0]?.text).toContain("focus on auth refactor")
+    expect(replyCalls[0]?.text).not.toContain("Implement your plan now")
+  })
+
   it("uses the plain implementation directive for plan/review modes (not the think variant)", async () => {
     const sessionId = insertSession(db, { mode: "plan" })
     prepared.insertEvent(db, {

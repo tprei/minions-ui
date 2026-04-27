@@ -155,12 +155,39 @@ const EXECUTE_DIRECTIVE_THINK = [
   "If blocked, end with `BLOCKED: <one-line reason>` instead of stopping silently.",
 ].join("\n")
 
-export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Promise<PlanActionResult> {
+function buildGuidedDirective(userContext: string): string {
+  return [
+    "The user has given explicit direction for this execution. Their guidance OVERRIDES any default \"pick the highest-leverage item\" instinct — follow exactly what they said:",
+    "",
+    "<user_direction>",
+    userContext,
+    "</user_direction>",
+    "",
+    "Implement the user's direction now, in this session — do NOT wait for another turn, do NOT ask for clarification, and do NOT substitute a different item from the analysis above.",
+    "",
+    "1. State in one sentence what you are implementing based on the user's direction.",
+    "2. Write the code.",
+    "3. Run the unit/integration tests (NOT e2e or browser tests — too expensive).",
+    "4. `git add -A && git commit -m \"<descriptive message>\"`.",
+    "5. `git push -u origin HEAD`. Auth is preconfigured via GIT_ASKPASS.",
+    "6. `gh pr create` targeting `main` (no --draft, no --no-verify). Include a short summary and a test plan.",
+    "7. End your turn with a single trailing line: `PR: <url>` — so the orchestrator can link the PR.",
+    "",
+    "If blocked, end with `BLOCKED: <one-line reason>` instead of stopping silently.",
+  ].join("\n")
+}
+
+export async function handleExecute(
+  sessionId: string,
+  ctx: PlanActionCtx,
+  userContext?: string,
+): Promise<PlanActionResult> {
   const rejection = await gate(sessionId, ctx)
   if (rejection) return { ok: false, reason: rejection }
 
   const row = prepared.getSession(ctx.db, sessionId)
   const mode = row?.mode
+  const trimmedContext = userContext?.trim() ?? ""
 
   if (mode === "ship") {
     return { ok: false, reason: "use /dag to schedule a ship plan" }
@@ -176,7 +203,11 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
         return { ok: false, reason: "no plan/analysis to execute" }
       }
 
-      const directive = mode === "think" ? EXECUTE_DIRECTIVE_THINK : EXECUTE_DIRECTIVE_PLAN
+      const directive = trimmedContext
+        ? buildGuidedDirective(trimmedContext)
+        : mode === "think"
+          ? EXECUTE_DIRECTIVE_THINK
+          : EXECUTE_DIRECTIVE_PLAN
       const prompt = [plan, "", directive].join("\n")
 
       const { session } = await ctx.registry.create({
@@ -196,7 +227,10 @@ export async function handleExecute(sessionId: string, ctx: PlanActionCtx): Prom
 
   if (mode === "task" || mode === "dag-task" || mode === "ship-verify") {
     try {
-      const ok = await ctx.registry.reply(sessionId, EXECUTE_DIRECTIVE_PLAN)
+      const directive = trimmedContext
+        ? buildGuidedDirective(trimmedContext)
+        : EXECUTE_DIRECTIVE_PLAN
+      const ok = await ctx.registry.reply(sessionId, directive)
       if (!ok) return { ok: false, reason: "could not inject execute directive into session" }
       return { ok: true }
     } catch (err) {

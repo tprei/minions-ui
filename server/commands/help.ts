@@ -17,7 +17,7 @@ const HELP_TEXT = `**Task / Plan / Think / Review**
   /dag [markdown]      Build and run a DAG from markdown or last assistant message
   /split               Split plan into parallel tasks and run them
   /stack               Stack plan into sequential tasks and run them
-  /execute             Extract and execute plan from current session
+  /execute [direction] Execute plan from session; optional direction overrides default item-picking
   /judge [markdown]    Run judge orchestrator on the session conversation
   /retry <nodeId> <dagId>       Retry a failed DAG node
   /force <nodeId> <dagId>       Force a DAG node to landed state
