@@ -1,8 +1,11 @@
-import { signal } from '@preact/signals'
+import { signal, useComputed } from '@preact/signals'
 import { useEffect, useRef } from 'preact/hooks'
 import { ThemeToggle } from '../chat/ThemeToggle'
 import type { ViewMode } from '../App'
 import { viewMode } from '../App'
+import { connections } from '../connections/store'
+import { inboxSignal } from '../state/inbox'
+import { NotificationsToggle } from '../pwa/NotificationsToggle'
 
 const menuOpen = signal(false)
 
@@ -13,6 +16,7 @@ export function HeaderMenu({
   onRuntimeConfig,
   onClean,
   onRefresh,
+  onInbox,
   showMemory,
   memoryProposalsCount,
   showRuntimeConfig,
@@ -23,6 +27,7 @@ export function HeaderMenu({
   onRuntimeConfig?: () => void
   onClean?: () => void
   onRefresh: () => void
+  onInbox?: () => void
   showMemory: boolean
   memoryProposalsCount?: number
   showRuntimeConfig: boolean
@@ -30,6 +35,14 @@ export function HeaderMenu({
   cleaning: boolean
 }) {
   const menuRef = useRef<HTMLDivElement>(null)
+
+  const totalUnseen = useComputed(() => {
+    let total = 0
+    for (const conn of connections.value) {
+      total += inboxSignal(conn.id).value.unseenCount
+    }
+    return total
+  })
 
   useEffect(() => {
     if (!menuOpen.value) return
@@ -131,6 +144,32 @@ export function HeaderMenu({
             <span class="text-sm text-slate-700 dark:text-slate-200">Theme</span>
             <ThemeToggle />
           </div>
+          {onInbox && (
+            <>
+              <div class="border-t border-slate-200 dark:border-slate-700 my-1" />
+              <button
+                type="button"
+                onClick={() => {
+                  onInbox()
+                  closeMenu()
+                }}
+                class="w-full flex items-center gap-3 px-3 py-2 text-sm text-left text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
+                data-testid="menu-inbox"
+              >
+                <span aria-hidden="true">📥</span>
+                <span>Activity</span>
+                {totalUnseen.value > 0 && (
+                  <span
+                    class="ml-auto rounded-full bg-indigo-600 text-white text-xs font-medium px-2 py-0.5"
+                    data-testid="menu-inbox-badge"
+                  >
+                    {totalUnseen.value}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
+          <NotificationsToggle variant="menu" />
           {showMemory && onMemory && (
             <>
               <div class="border-t border-slate-200 dark:border-slate-700 my-1" />

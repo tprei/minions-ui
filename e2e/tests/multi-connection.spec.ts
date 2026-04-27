@@ -61,7 +61,7 @@ test.describe('multi-connection', () => {
       await page.getByPlaceholder('My minion').fill('Minion Beta')
       await page.getByPlaceholder('https://your-minion.fly.dev').fill(mockB.url)
       await page.getByPlaceholder('bearer token').fill(mockB.token)
-      await page.getByRole('button', { name: 'Connect' }).click()
+      await page.getByTestId('connections-drawer').getByRole('button', { name: 'Connect', exact: true }).click()
 
       await page.getByTestId('drawer-close-btn').click()
 

@@ -1,6 +1,7 @@
 import { signal } from '@preact/signals'
 import type { ApiClient } from '../api/client'
 import type {
+  ApiSession,
   ResourceSnapshot,
   RuntimeConfigResponse,
   RuntimeOverrides,
@@ -10,8 +11,21 @@ import type { SseStatus } from '../api/sse'
 import type { ConnectionStore, DiffStats } from './types'
 import { loadSnapshot, saveSnapshot } from './persist'
 import { createTranscriptStore, type TranscriptStore } from './transcript'
+import { markInboxSeen, recordInboxEvent, type InboxEventKind } from './inbox'
+import { showLocalNotification } from '../pwa/local-notifications'
 
-export function createConnectionStore(client: ApiClient, connectionId: string): ConnectionStore {
+interface ConnectionStoreOptions {
+  isActive?: () => boolean
+}
+
+export function createConnectionStore(
+  client: ApiClient,
+  connectionId: string,
+  options: ConnectionStoreOptions = {},
+): ConnectionStore {
+  const isActive = options.isActive ?? (() => false)
+  const isDocumentVisible = () =>
+    typeof document === 'undefined' ? true : document.visibilityState === 'visible'
   const sessions = signal<import('../api/types').ApiSession[]>([])
   const dags = signal<import('../api/types').ApiDagGraph[]>([])
   const status = signal<SseStatus>('connecting')
@@ -97,8 +111,51 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     }
   }
 
+  function detectInboxEventKind(prev: ApiSession | null, next: ApiSession): InboxEventKind | null {
+    if (!prev) return null
+    if (next.status !== prev.status) {
+      if (next.status === 'completed') return 'completed'
+      if (next.status === 'failed') return 'failed'
+    }
+    if (!prev.needsAttention && next.needsAttention) return 'attention'
+    if (!prev.prUrl && next.prUrl) return 'landed'
+    return null
+  }
+
+  function recordTransition(prev: ApiSession | null, next: ApiSession): void {
+    const kind = detectInboxEventKind(prev, next)
+    if (!kind) return
+    const ts = Date.now()
+    recordInboxEvent(connectionId, {
+      id: `${next.id}:${kind}:${ts}`,
+      sessionId: next.id,
+      sessionSlug: next.slug,
+      label: next.command || next.slug,
+      kind,
+      ts,
+    })
+    const visible = isDocumentVisible()
+    if (isActive() && visible) {
+      markInboxSeen(connectionId)
+    }
+    if (!visible) {
+      const titles: Record<InboxEventKind, string> = {
+        completed: 'Session completed',
+        failed: 'Session failed',
+        attention: 'Session needs attention',
+        landed: 'Pull request opened',
+      }
+      showLocalNotification({
+        title: titles[kind],
+        body: next.slug,
+        tag: `${connectionId}:${next.id}:${kind}`,
+      })
+    }
+  }
+
   function applySessionCreated(session: import('../api/types').ApiSession) {
     const idx = sessions.value.findIndex((s) => s.id === session.id)
+    const previous = idx !== -1 ? sessions.value[idx] : null
     if (idx !== -1) {
       const updated = [...sessions.value]
       updated[idx] = session
@@ -106,6 +163,7 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     } else {
       sessions.value = [...sessions.value, session]
     }
+    recordTransition(previous, session)
     scheduleSnapshot()
   }
 
@@ -139,6 +197,7 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
         break
       case 'session_updated': {
         const idx = sessions.value.findIndex((s) => s.id === event.session.id)
+        const previous = idx !== -1 ? sessions.value[idx] : null
         if (idx !== -1) {
           const updated = [...sessions.value]
           updated[idx] = event.session
@@ -146,6 +205,7 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
         } else {
           sessions.value = [...sessions.value, event.session]
         }
+        recordTransition(previous, event.session)
         scheduleSnapshot()
         if (diffStatsBySessionId.value.has(event.session.id)) {
           void loadDiffStats(event.session.id)
@@ -229,6 +289,9 @@ export function createConnectionStore(client: ApiClient, connectionId: string): 
     if (document.visibilityState === 'hidden') {
       hiddenSince = Date.now()
       return
+    }
+    if (isActive()) {
+      markInboxSeen(connectionId)
     }
     const since = hiddenSince
     hiddenSince = null

@@ -40,6 +40,10 @@ import { HeaderMenu } from './components/HeaderMenu'
 import { MemoryDrawer } from './components/MemoryDrawer'
 import { KanbanView } from './components/KanbanView'
 import { TimelineView } from './components/TimelineView'
+import { InboxButton } from './components/InboxButton'
+import { InboxSheet } from './components/InboxPanel'
+import { NotificationsToggle } from './pwa/NotificationsToggle'
+import type { InboxEvent } from './state/inbox'
 
 export type ViewMode = 'list' | 'canvas' | 'ship' | 'kanban' | 'timeline'
 
@@ -49,6 +53,7 @@ const showRuntime = signal<RuntimeTab | null>(null)
 const showMemory = signal(false)
 const showPalette = signal(false)
 const showShortcutsHelp = signal(false)
+const showInboxSheet = signal(false)
 export const viewMode = signal<ViewMode>('list')
 
 function ViewToggle({ mode, onChange, showKanban }: { mode: ViewMode; onChange: (m: ViewMode) => void; showKanban?: boolean }) {
@@ -492,6 +497,13 @@ function ActiveView() {
     viewMode.value = 'list'
   }, [selectSession])
 
+  const handleInboxSelect = useCallback(
+    (_connectionId: string, event: InboxEvent) => {
+      handleOpenChat(event.sessionId)
+    },
+    [handleOpenChat],
+  )
+
   const handleOpenLogs = useCallback((sid: string) => {
     setLogsSessionId(sid)
   }, [])
@@ -608,6 +620,8 @@ function ActiveView() {
           <div class="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
             <ViewToggle mode={mode} onChange={(m) => { viewMode.value = m }} showKanban={false} />
             <ThemeToggle />
+            <InboxButton onSelectEvent={handleInboxSelect} />
+            <NotificationsToggle variant="header" />
             {hasFeature(store, 'memory') && (
               <button
                 type="button"
@@ -671,6 +685,7 @@ function ActiveView() {
               onRuntimeConfig={hasFeature(store, 'runtime-config') ? () => { showRuntime.value = 'config' } : undefined}
               onClean={hasFeature(store, 'messages') ? handleClean : undefined}
               onRefresh={() => void store.refresh()}
+              onInbox={() => { showInboxSheet.value = true }}
               showMemory={hasFeature(store, 'memory')}
               memoryProposalsCount={store.memoryProposalsCount.value}
               showRuntimeConfig={hasFeature(store, 'runtime-config')}
@@ -919,6 +934,13 @@ function ActiveView() {
         open={showShortcutsHelp.value}
         onClose={() => { showShortcutsHelp.value = false }}
       />
+      {showInboxSheet.value && id && (
+        <InboxSheet
+          connectionId={id}
+          onClose={() => { showInboxSheet.value = false }}
+          onSelect={(event) => handleInboxSelect(id, event)}
+        />
+      )}
       {logsSessionId !== null && (() => {
         const logsSession = sessions.find((s) => s.id === logsSessionId)
         const transcript = logsSession ? store.getTranscript(logsSession.id) : null
