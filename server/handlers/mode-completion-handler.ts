@@ -1,4 +1,4 @@
-import type { CompletionHandler, HandlerCtx, SessionCompletedEvent } from './types'
+import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent } from './types'
 
 export const modeCompletionHandler: CompletionHandler = {
   name: 'mode-completion',
@@ -8,12 +8,12 @@ export const modeCompletionHandler: CompletionHandler = {
     return true
   },
 
-  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<void> {
+  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<HandlerResult> {
     const row = ctx.db
       .query<{ mode: string }, [string]>('SELECT mode FROM sessions WHERE id = ?')
       .get(ev.sessionId)
 
-    if (!row) return
+    if (!row) return { handled: false, reason: 'session_not_found' }
 
     ctx.bus.emit({
       kind: 'session.mode_completed',
@@ -22,5 +22,6 @@ export const modeCompletionHandler: CompletionHandler = {
       state: ev.state,
       durationMs: ev.durationMs,
     })
+    return { handled: true }
   },
 }

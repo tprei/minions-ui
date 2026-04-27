@@ -75,7 +75,7 @@ describe('modeCompletionHandler', () => {
       state: 'completed',
       durationMs: 500,
     }
-    await modeCompletionHandler.handle(ev, ctx)
+    const result = await modeCompletionHandler.handle(ev, ctx)
 
     const modeEv = emitted.find((e) => e.kind === 'session.mode_completed')
     expect(modeEv).toBeDefined()
@@ -85,6 +85,7 @@ describe('modeCompletionHandler', () => {
       expect(modeEv.state).toBe('completed')
       expect(modeEv.durationMs).toBe(500)
     }
+    expect(result.handled).toBe(true)
   })
 
   test('does nothing when session does not exist', async () => {
@@ -93,8 +94,10 @@ describe('modeCompletionHandler', () => {
     bus.on((e) => emitted.push(e))
 
     const ev: SessionCompletedEvent = { kind: 'session.completed', sessionId: 'ghost', state: 'completed', durationMs: 0 }
-    await modeCompletionHandler.handle(ev, ctx)
+    const result = await modeCompletionHandler.handle(ev, ctx)
 
     expect(emitted.filter((e) => e.kind === 'session.mode_completed')).toHaveLength(0)
+    expect(result.handled).toBe(false)
+    expect(result.reason).toBe('session_not_found')
   })
 })

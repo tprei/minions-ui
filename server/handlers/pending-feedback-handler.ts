@@ -1,4 +1,4 @@
-import type { CompletionHandler, HandlerCtx, SessionCompletedEvent, SessionMetadata } from './types'
+import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent, SessionMetadata } from './types'
 
 export const pendingFeedbackHandler: CompletionHandler = {
   name: 'pending-feedback',
@@ -8,18 +8,18 @@ export const pendingFeedbackHandler: CompletionHandler = {
     return true
   },
 
-  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<void> {
+  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<HandlerResult> {
     const row = ctx.db
       .query<{ metadata: string }, [string]>('SELECT metadata FROM sessions WHERE id = ?')
       .get(ev.sessionId)
 
-    if (!row) return
+    if (!row) return { handled: false, reason: 'session_not_found' }
 
     const meta = JSON.parse(row.metadata) as SessionMetadata
     const queue = ctx.replyQueue.forSession(ev.sessionId)
     const pending = await queue.drain()
 
-    if (pending.length === 0) return
+    if (pending.length === 0) return { handled: false, reason: 'no_pending_feedback' }
 
     const existing: string[] = Array.isArray(meta.pendingFeedback) ? meta.pendingFeedback : []
     const updatedMeta: SessionMetadata = { ...meta, pendingFeedback: [...existing, ...pending] }
@@ -28,5 +28,6 @@ export const pendingFeedbackHandler: CompletionHandler = {
       'UPDATE sessions SET metadata = ?, updated_at = ? WHERE id = ?',
       [JSON.stringify(updatedMeta), Date.now(), ev.sessionId],
     )
+    return { handled: true }
   },
 }

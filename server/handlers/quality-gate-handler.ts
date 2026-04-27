@@ -1,4 +1,4 @@
-import type { CompletionHandler, HandlerCtx, SessionCompletedEvent, SessionMetadata } from './types'
+import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent, SessionMetadata } from './types'
 
 export const qualityGateHandler: CompletionHandler = {
   name: 'quality-gate',
@@ -8,14 +8,15 @@ export const qualityGateHandler: CompletionHandler = {
     return true
   },
 
-  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<void> {
+  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<HandlerResult> {
     const row = ctx.db
       .query<{ metadata: string; workspace_root: string | null; slug: string }, [string]>(
         'SELECT metadata, workspace_root, slug FROM sessions WHERE id = ?',
       )
       .get(ev.sessionId)
 
-    if (!row || !row.workspace_root) return
+    if (!row) return { handled: false, reason: 'session_not_found' }
+    if (!row.workspace_root) return { handled: false, reason: 'no_workspace_root' }
 
     const cwd = `${row.workspace_root}/${row.slug}`
     const report = await ctx.qualityGates.run(cwd)
@@ -51,5 +52,6 @@ export const qualityGateHandler: CompletionHandler = {
         [JSON.stringify(failedMeta), Date.now(), ev.sessionId],
       )
     }
+    return { handled: true, reason: report.allPassed ? 'gates_passed' : 'gates_failed' }
   },
 }

@@ -1,4 +1,4 @@
-import type { CompletionHandler, HandlerCtx, SessionCompletedEvent, SessionMetadata } from './types'
+import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent, SessionMetadata } from './types'
 import { prepared } from '../db/sqlite'
 import { execFile as execFileCb } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -15,14 +15,14 @@ export const ciBabysitHandler: CompletionHandler = {
     return true
   },
 
-  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<void> {
+  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<HandlerResult> {
     const row = ctx.db
       .query<{ pr_url: string | null; metadata: string; workspace_root: string | null }, [string]>(
         'SELECT pr_url, metadata, workspace_root FROM sessions WHERE id = ?',
       )
       .get(ev.sessionId)
 
-    if (!row?.pr_url) return
+    if (!row?.pr_url) return { handled: false, reason: 'no_pr_url' }
 
     let meta: SessionMetadata
     try {
@@ -37,7 +37,7 @@ export const ciBabysitHandler: CompletionHandler = {
       })
     }
 
-    if (meta.ciBabysitStartedAt) return
+    if (meta.ciBabysitStartedAt) return { handled: false, reason: 'already_babysat' }
 
     const now = Date.now()
     meta.ciBabysitStartedAt = now
@@ -50,9 +50,10 @@ export const ciBabysitHandler: CompletionHandler = {
 
     if (meta.parentThreadId) {
       await ctx.ciBabysitter.queueDeferredBabysit(ev.sessionId, meta.parentThreadId)
-    } else {
-      await ctx.ciBabysitter.babysitPR(ev.sessionId, row.pr_url)
+      return { handled: true, reason: 'deferred_babysit_queued' }
     }
+    await ctx.ciBabysitter.babysitPR(ev.sessionId, row.pr_url)
+    return { handled: true, reason: 'babysit_started' }
   },
 }
 
