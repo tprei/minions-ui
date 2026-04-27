@@ -1,8 +1,10 @@
 import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent } from './types'
+import { HANDLER_PRIORITIES } from './priorities'
+
 
 export const modeCompletionHandler: CompletionHandler = {
   name: 'mode-completion',
-  priority: 40,
+  priority: HANDLER_PRIORITIES.EMIT_MODE,
 
   matches(): boolean {
     return true

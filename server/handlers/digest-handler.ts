@@ -1,9 +1,11 @@
 import { spawnSync } from 'node:child_process'
 import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent } from './types'
+import { HANDLER_PRIORITIES } from './priorities'
+
 
 export const digestHandler: CompletionHandler = {
   name: 'digest',
-  priority: 0,
+  priority: HANDLER_PRIORITIES.OBSERVE,
 
   matches(): boolean {
     return true

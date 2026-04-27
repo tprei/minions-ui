@@ -2,10 +2,11 @@ import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEven
 import { qualityGateHandler } from './quality-gate-handler'
 import { digestHandler } from './digest-handler'
 import { ciBabysitHandler } from './ci-babysit-handler'
+import { HANDLER_PRIORITIES } from './priorities'
 
 export const taskCompletionHandler: CompletionHandler = {
   name: 'task-completion',
-  priority: 60,
+  priority: HANDLER_PRIORITIES.TASK,
 
   matches(): boolean {
     return true

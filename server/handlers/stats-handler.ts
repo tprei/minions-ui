@@ -1,8 +1,10 @@
 import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent } from './types'
+import { HANDLER_PRIORITIES } from './priorities'
+
 
 export const statsHandler: CompletionHandler = {
   name: 'stats',
-  priority: 10,
+  priority: HANDLER_PRIORITIES.RECORD,
 
   matches(): boolean {
     return true

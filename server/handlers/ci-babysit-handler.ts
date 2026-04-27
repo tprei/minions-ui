@@ -4,12 +4,13 @@ import { execFile as execFileCb } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import { loadDag } from '../dag/store'
+import { HANDLER_PRIORITIES } from './priorities'
 
 const execFileP = promisify(execFileCb)
 
 export const ciBabysitHandler: CompletionHandler = {
   name: 'ci-babysit',
-  priority: 0,
+  priority: HANDLER_PRIORITIES.OBSERVE,
 
   matches(): boolean {
     return true

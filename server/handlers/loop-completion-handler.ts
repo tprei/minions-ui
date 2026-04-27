@@ -1,8 +1,10 @@
 import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent, SessionMetadata } from './types'
+import { HANDLER_PRIORITIES } from './priorities'
+
 
 export const loopCompletionHandler: CompletionHandler = {
   name: 'loop-completion',
-  priority: 50,
+  priority: HANDLER_PRIORITIES.LOOP,
 
   matches(): boolean {
     return true

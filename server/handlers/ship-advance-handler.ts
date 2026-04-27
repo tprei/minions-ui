@@ -1,11 +1,12 @@
 import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent } from './types'
 import { handleExecute } from '../commands/plan-actions'
+import { HANDLER_PRIORITIES } from './priorities'
 
 const SHIP_ADVANCE_MODES = new Set(['ship-think', 'ship-plan'])
 
 export const shipAdvanceHandler: CompletionHandler = {
   name: 'ship-advance',
-  priority: 30,
+  priority: HANDLER_PRIORITIES.ADVANCE,
 
   matches(ev: SessionCompletedEvent): boolean {
     return ev.state === 'completed'

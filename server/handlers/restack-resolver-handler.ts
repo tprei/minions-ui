@@ -3,12 +3,13 @@ import { execFile as execFileCb } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import { loadDag } from '../dag/store'
+import { HANDLER_PRIORITIES } from './priorities'
 
 const execFileP = promisify(execFileCb)
 
 export const restackResolverHandler: CompletionHandler = {
   name: 'restack-resolver',
-  priority: 10,
+  priority: HANDLER_PRIORITIES.RECORD,
 
   matches(ev: SessionCompletedEvent): boolean {
     return ev.sessionId !== undefined
