@@ -126,7 +126,7 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
         >
           <button
             onClick={handleMoreClick}
-            class={`text-xs font-medium px-3.5 py-2 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
+            class={`text-xs font-medium px-3 py-1 rounded-full border transition-colors ${btnClass}`}
             data-testid="quick-actions-trigger"
             aria-haspopup="dialog"
             aria-expanded={open.value}

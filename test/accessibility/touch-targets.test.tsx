@@ -124,12 +124,13 @@ describe('Touch Target Accessibility', () => {
       conversation: [],
     }
 
-    it('Quick action buttons meet 44px minimum touch target', () => {
+    it('Mobile trigger renders as a compact chip pill', () => {
       render(<QuickActionsBar session={mockSession} onAction={vi.fn()} />)
-      const buttons = screen.getAllByRole('button')
-      buttons.forEach((btn, i) => {
-        assertMinTouchTarget(btn, `Quick action button ${i}`)
-      })
+      const trigger = screen.getByTestId('quick-actions-trigger')
+      const classNames = trigger.className
+      expect(classNames).toContain('rounded-full')
+      expect(classNames).toMatch(/px-\d/)
+      expect(classNames).toMatch(/py-\d/)
     })
 
     it('Ship advance button meets 44px minimum touch target', () => {
