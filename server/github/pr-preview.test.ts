@@ -30,7 +30,7 @@ describe("fetchPrPreview", () => {
       updatedAt: "2024-01-01T00:00:00Z",
     })
     const checksPayload = JSON.stringify([
-      { name: "ci/test", status: "completed", conclusion: "success", link: "https://ci.example.com/1" },
+      { name: "ci/test", status: "COMPLETED", conclusion: "SUCCESS", link: "https://ci.example.com/1" },
     ])
 
     const exec = makeExec([{ stdout: viewPayload }, { stdout: checksPayload }])
@@ -47,6 +47,47 @@ describe("fetchPrPreview", () => {
     expect(result.checks[0]!.name).toBe("ci/test")
     expect(result.checks[0]!.conclusion).toBe("success")
     expect(result.checks[0]!.status).toBe("success")
+  })
+
+  test("normalizes uppercase status/conclusion from gh GraphQL output", async () => {
+    const viewPayload = JSON.stringify({
+      number: 6001,
+      url: "https://github.com/org/repo/pull/6001",
+      title: "Mixed checks",
+      body: "",
+      state: "OPEN",
+      isDraft: false,
+      mergeable: "MERGEABLE",
+      headRefName: "feature",
+      baseRefName: "main",
+      author: { login: "octocat" },
+      updatedAt: "2024-01-01T00:00:00Z",
+    })
+    const checksPayload = JSON.stringify([
+      { name: "lint", status: "COMPLETED", conclusion: "SUCCESS" },
+      { name: "test", status: "COMPLETED", conclusion: "FAILURE" },
+      { name: "build", status: "IN_PROGRESS", conclusion: null },
+      { name: "deploy", status: "QUEUED", conclusion: null },
+      { name: "audit", status: "COMPLETED", conclusion: "SKIPPED" },
+    ])
+
+    const exec = makeExec([{ stdout: viewPayload }, { stdout: checksPayload }])
+    const result = await fetchPrPreview("https://github.com/org/repo/pull/6001", exec)
+
+    expect(result.checks.map((c) => c.status)).toEqual([
+      "success",
+      "failure",
+      "in_progress",
+      "queued",
+      "skipped",
+    ])
+    expect(result.checks.map((c) => c.conclusion)).toEqual([
+      "success",
+      "failure",
+      undefined,
+      undefined,
+      "skipped",
+    ])
   })
 
   test("checks result is empty array when gh pr checks fails without stdout", async () => {
@@ -86,7 +127,7 @@ describe("fetchPrPreview", () => {
       updatedAt: "2024-01-01T00:00:00Z",
     })
     const checksPayload = JSON.stringify([
-      { name: "ci/test", status: "completed", conclusion: "failure", link: "https://ci.example.com/1" },
+      { name: "ci/test", status: "COMPLETED", conclusion: "FAILURE", link: "https://ci.example.com/1" },
     ])
 
     const errorWithStdout = Object.assign(new Error("exit code 8"), { stdout: checksPayload })

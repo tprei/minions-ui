@@ -36,17 +36,20 @@ function builtinExec(): ExecFn {
 }
 
 function normalizeCheckStatus(status: string, conclusion: string | null): PrCheckStatus {
-  if (conclusion === "success") return "success"
-  if (conclusion === "failure") return "failure"
-  if (conclusion === "neutral") return "neutral"
-  if (conclusion === "skipped") return "skipped"
-  if (conclusion === "cancelled") return "cancelled"
-  if (conclusion === "action_required") return "action_required"
-  if (conclusion === "timed_out") return "timed_out"
-  if (status === "queued") return "queued"
-  if (status === "in_progress") return "in_progress"
-  if (status === "pending") return "pending"
-  if (status === "completed") return conclusion === "success" ? "success" : "neutral"
+  const s = status.toLowerCase()
+  const c = conclusion?.toLowerCase() ?? null
+  if (c === "success") return "success"
+  if (c === "failure" || c === "startup_failure") return "failure"
+  if (c === "neutral") return "neutral"
+  if (c === "skipped") return "skipped"
+  if (c === "cancelled") return "cancelled"
+  if (c === "action_required") return "action_required"
+  if (c === "timed_out") return "timed_out"
+  if (c === "stale") return "stale"
+  if (s === "queued" || s === "requested" || s === "waiting") return "queued"
+  if (s === "in_progress") return "in_progress"
+  if (s === "pending") return "pending"
+  if (s === "completed") return c === "success" ? "success" : "neutral"
   return "pending"
 }
 
@@ -57,10 +60,11 @@ function parseChecks(raw: unknown): PrCheck[] {
     if (typeof item !== "object" || item === null) continue
     const obj = item as Record<string, unknown>
     const rawStatus = typeof obj["status"] === "string" ? obj["status"] : ""
-    const conclusion = typeof obj["conclusion"] === "string" ? obj["conclusion"] : null
+    const rawConclusion = typeof obj["conclusion"] === "string" ? obj["conclusion"] : null
+    const conclusion = rawConclusion?.toLowerCase() ?? null
     result.push({
       name: typeof obj["name"] === "string" ? obj["name"] : "",
-      status: normalizeCheckStatus(rawStatus, conclusion),
+      status: normalizeCheckStatus(rawStatus, rawConclusion),
       conclusion: conclusion ?? undefined,
       url: typeof obj["link"] === "string"
         ? obj["link"]
