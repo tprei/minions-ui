@@ -77,7 +77,7 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
 
     return (
       <div
-        class="flex flex-wrap gap-2 px-4 py-2 border-t"
+        class="flex flex-wrap gap-2 px-4 py-1.5 border-t"
         style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}
         data-testid="quick-actions-bar"
       >
@@ -88,7 +88,7 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
             }
           }}
           disabled={stageConfig.disabled}
-          class={`text-xs font-medium px-4 py-3 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
+          class={`text-xs font-medium px-3.5 py-2 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
           data-testid="ship-advance-btn"
         >
           {stageConfig.label}
@@ -120,13 +120,13 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
     return (
       <>
         <div
-          class="flex flex-wrap gap-2 px-4 py-2 border-t"
+          class="flex flex-wrap gap-2 px-4 py-1.5 border-t"
           style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}
           data-testid="quick-actions-bar"
         >
           <button
             onClick={handleMoreClick}
-            class={`text-xs font-medium px-4 py-3 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
+            class={`text-xs font-medium px-3.5 py-2 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
             data-testid="quick-actions-trigger"
             aria-haspopup="dialog"
             aria-expanded={open.value}
@@ -182,7 +182,7 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
     <button
       key={key}
       onClick={() => handleActionClick(action)}
-      class={`text-xs font-medium px-4 py-3 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
+      class={`text-xs font-medium px-3.5 py-2 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
       data-testid={`quick-action-${action.type}`}
     >
       {action.label}
@@ -191,7 +191,7 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
 
   return (
     <div
-      class="flex flex-wrap gap-2 px-4 py-2 border-t relative"
+      class="flex flex-wrap gap-2 px-4 py-1.5 border-t relative"
       style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}
       data-testid="quick-actions-bar"
     >
@@ -199,7 +199,7 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
       {hasOverflow && (
         <button
           onClick={handleMoreClick}
-          class={`text-xs font-medium px-4 py-3 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
+          class={`text-xs font-medium px-3.5 py-2 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
           data-testid="quick-actions-more-btn"
           aria-haspopup="dialog"
           aria-expanded={open.value}
