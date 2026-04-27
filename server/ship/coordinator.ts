@@ -3,6 +3,7 @@ import { prepared } from '../db/sqlite'
 import { getEventBus } from '../events/bus'
 import { handleDag, type PlanActionCtx } from '../commands/plan-actions'
 import { listDags } from '../dag/store'
+import { isDagComplete, dagGraphStatus } from '../dag/dag'
 import { buildVerifyDirective, type VerifyTask } from './verification'
 
 // Stage directive constants
@@ -326,4 +327,73 @@ export async function cancelShip(
 
     return { ok: true, dagId: dag?.id, cancelledChildren }
   })
+}
+
+export interface ReconcileShipsResult {
+  scanned: number
+  advanced: Array<{ sessionId: string; from: ShipStage; to: ShipStage }>
+  failures: Array<{ sessionId: string; reason: string }>
+}
+
+/**
+ * Re-derive ship coordinator stages from DAG state at engine boot.
+ *
+ * If the engine crashes between DAG completion and the dag→verify transition,
+ * the persisted ship row is left at stage='dag' even though every DAG node has
+ * reached a terminal state. The DAG scheduler's reconcileOnBoot skips fully
+ * terminal DAGs, so the stuck ship is never recovered through the normal path.
+ *
+ * This pass walks every active ship row, looks up its DAG, and forces a
+ * dag→verify transition whenever the DAG is complete. The transition reuses
+ * advanceShip so directive injection, status emission, and the stage update
+ * stay consistent with the live path.
+ */
+export async function reconcileShipsOnBoot(ctx: PlanActionCtx): Promise<ReconcileShipsResult> {
+  const result: ReconcileShipsResult = { scanned: 0, advanced: [], failures: [] }
+
+  const rows = ctx.db
+    .query<{ id: string; stage: string | null }, []>(
+      "SELECT id, stage FROM sessions WHERE mode = 'ship' AND status NOT IN ('completed','failed')",
+    )
+    .all()
+
+  if (rows.length === 0) return result
+
+  const dags = listDags(ctx.db)
+  const dagsByRoot = new Map(dags.map((g) => [g.rootSessionId, g] as const))
+
+  for (const row of rows) {
+    result.scanned++
+    const stage = (row.stage as ShipStage | null) ?? 'think'
+    if (stage !== 'dag') continue
+
+    const dag = dagsByRoot.get(row.id)
+    if (!dag) continue
+    if (!isDagComplete(dag)) continue
+
+    console.log(
+      '[ship] reconcileShipsOnBoot: dag',
+      dag.id,
+      'is',
+      dagGraphStatus(dag),
+      '— advancing ship',
+      row.id,
+      'from dag to verify',
+    )
+
+    try {
+      const advanceResult = await advanceShip(row.id, 'verify', ctx)
+      if (advanceResult.ok && advanceResult.from && advanceResult.to) {
+        result.advanced.push({ sessionId: row.id, from: advanceResult.from, to: advanceResult.to })
+      } else {
+        result.failures.push({ sessionId: row.id, reason: advanceResult.reason ?? 'advanceShip returned ok=false' })
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      console.error('[ship] reconcileShipsOnBoot: advanceShip threw for', row.id, reason)
+      result.failures.push({ sessionId: row.id, reason })
+    }
+  }
+
+  return result
 }

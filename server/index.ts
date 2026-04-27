@@ -28,6 +28,7 @@ import {
 } from './handlers/stubs'
 import { createDagScheduler } from './dag/scheduler'
 import { createLandingManager } from './dag/landing'
+import { reconcileShipsOnBoot } from './ship/coordinator'
 import { LoopScheduler } from './loops/scheduler'
 import { createAdmissionController } from './orchestration/admission'
 import { DEFAULT_LOOPS } from './loops/definitions'
@@ -94,6 +95,13 @@ console.log(`[minion] engine on :${PORT}, ${reconciled} sessions resumed`)
 const ciBabysitter = createRealCIBabysitter(registry, db)
 const scheduler = createDagScheduler({ registry, db, bus, workspace: WORKSPACE_ROOT, ciBabysitter })
 await scheduler.reconcileOnBoot()
+
+const shipReconcile = await reconcileShipsOnBoot({ db, registry, scheduler })
+if (shipReconcile.advanced.length > 0 || shipReconcile.failures.length > 0) {
+  console.log(
+    `[minion] ship reconcile: ${shipReconcile.advanced.length} advanced, ${shipReconcile.failures.length} failed (scanned ${shipReconcile.scanned})`,
+  )
+}
 
 bus.onKind('session.resumed', (ev) => { void scheduler.onSessionResumed(ev.sessionId) })
 bus.onKind('session.reply_injected', (ev) => { void scheduler.onSessionResumed(ev.sessionId) })
