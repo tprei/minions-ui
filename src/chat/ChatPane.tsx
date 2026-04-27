@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'preact/hooks'
+import { useState, useMemo, useEffect, useRef } from 'preact/hooks'
+import { useSignal } from '@preact/signals'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { confirm } from '../hooks/useConfirm'
 import { SessionTabs, type SessionTabId } from './SessionTabs'
@@ -11,7 +12,7 @@ import { MessageInput } from './MessageInput'
 import { DagStatusPanel } from './DagStatusPanel'
 import { Transcript, TranscriptUpgradeNotice } from './transcript'
 import { PrPreviewCard } from '../components/PrPreviewCard'
-import { WorktreeHeader } from '../components/WorktreeHeader'
+import { WorktreeHeader, truncateCwd } from '../components/WorktreeHeader'
 import { statusDot } from '../components/SessionList'
 import { hasFeature } from '../api/features'
 import type { ApiSession, MinionCommand, QuickAction } from '../api/types'
@@ -53,6 +54,20 @@ export function ChatPane({
   const [fullscreen, setFullscreen] = useState<boolean>(() =>
     typeof localStorage !== 'undefined' && localStorage.getItem('minions-ui:chat-fullscreen') === 'true',
   )
+  const infoOpen = useSignal(false)
+  const infoRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!infoOpen.value || isDesktopPane.value) return
+    const handler = (e: MouseEvent) => {
+      if (infoRef.current && !infoRef.current.contains(e.target as Node)) {
+        infoOpen.value = false
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [infoOpen.value, isDesktopPane.value, infoOpen])
+
   const toggleFullscreen = () => {
     const next = !fullscreen
     setFullscreen(next)
@@ -132,6 +147,8 @@ export function ChatPane({
     return null
   }, [session.id, store.dags.value, store.sessions.value])
 
+  const cwd = session.repo ? truncateCwd(session.repo) : null
+
   return (
     <div class={rootClass} data-testid="chat-pane" data-fullscreen={mobileFullscreen ? 'true' : 'false'}>
       <header class="flex items-center gap-2.5 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 shrink-0">
@@ -148,19 +165,80 @@ export function ChatPane({
         )}
         <span class={`inline-block h-2 w-2 rounded-full ${statusDot(session.status)}`} />
         <span class="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
-        <span class={`text-xs ${statusTone}`} data-testid="chat-pane-status">{session.status}</span>
-        <span class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 ml-2">
-          {session.mode}
-        </span>
-        {session.prUrl && (
-          <a
-            href={session.prUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-xs underline text-indigo-600 dark:text-indigo-400 ml-2"
-          >
-            PR
-          </a>
+        {isDesktopPane.value ? (
+          <>
+            <span class={`text-xs ${statusTone}`} data-testid="chat-pane-status">{session.status}</span>
+            <span class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 ml-2">
+              {session.mode}
+            </span>
+            {session.prUrl && (
+              <a
+                href={session.prUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-xs underline text-indigo-600 dark:text-indigo-400 ml-2"
+              >
+                PR
+              </a>
+            )}
+          </>
+        ) : (
+          <div class="relative" ref={infoRef}>
+            <button
+              type="button"
+              onClick={() => { infoOpen.value = !infoOpen.value }}
+              aria-haspopup="dialog"
+              aria-expanded={infoOpen.value}
+              aria-label="Session info"
+              title={`${session.status} · ${session.mode}`}
+              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-2.5 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700 min-h-[44px]"
+              data-testid="chat-pane-info-btn"
+            >
+              ⓘ
+            </button>
+            {infoOpen.value && (
+              <div
+                class="absolute left-0 top-full mt-1 z-40 min-w-[220px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-3 flex flex-col gap-2 text-xs"
+                data-testid="chat-pane-info-popover"
+              >
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 w-14 shrink-0">Status</span>
+                  <span class={statusTone} data-testid="chat-pane-status">{session.status}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 w-14 shrink-0">Mode</span>
+                  <span class="text-slate-700 dark:text-slate-200">{session.mode}</span>
+                </div>
+                {session.branch && (
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 w-14 shrink-0">Branch</span>
+                    <span class="font-mono text-slate-700 dark:text-slate-200 truncate" title={session.branch} data-testid="info-branch">
+                      {session.branch}
+                    </span>
+                  </div>
+                )}
+                {cwd && (
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 w-14 shrink-0">Cwd</span>
+                    <span class="font-mono text-slate-700 dark:text-slate-200 truncate" title={cwd.full} data-testid="info-cwd">
+                      {cwd.display}
+                    </span>
+                  </div>
+                )}
+                {session.prUrl && (
+                  <a
+                    href={session.prUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-indigo-600 dark:text-indigo-400 underline"
+                    data-testid="info-pr-link"
+                  >
+                    View PR
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
         )}
         <div class="ml-auto flex items-center gap-1.5">
           {!isDesktopPane.value && (
@@ -197,7 +275,7 @@ export function ChatPane({
           </button>
         </div>
       </header>
-      <WorktreeHeader session={session} store={store} />
+      {isDesktopPane.value && <WorktreeHeader session={session} store={store} />}
       <DagStatusPanel session={session} store={store} onSelect={onNavigate} onLand={handleLand} />
       <SessionTabs
         tabs={[

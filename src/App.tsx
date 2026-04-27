@@ -118,6 +118,7 @@ function ConnectionStatusBadge({
   status: string
   reconnectAt?: number | null
 }) {
+  const isDesktop = useMediaQuery('(min-width: 768px)')
   const color =
     status === 'live'
       ? 'bg-green-500'
@@ -151,9 +152,13 @@ function ConnectionStatusBadge({
     <span
       class="flex items-center gap-1 sm:gap-1.5 text-xs text-slate-600 dark:text-slate-400 min-w-0 shrink"
       data-testid="connection-status-badge"
+      title={label}
+      aria-label={`Connection status: ${label}`}
     >
       <span class={`inline-block h-2 w-2 shrink-0 rounded-full ${color}`} />
-      <span class="truncate" data-testid="connection-status-label">{label}</span>
+      {isDesktop.value && (
+        <span class="truncate" data-testid="connection-status-label">{label}</span>
+      )}
     </span>
   )
 }

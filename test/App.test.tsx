@@ -183,6 +183,7 @@ describe('App', () => {
     render(<App />)
 
     await screen.findByTestId('attention-bar')
+    fireEvent.click(screen.getByTestId('attention-toggle'))
     expect(screen.getByTestId('attention-pill-failed').textContent).toContain('1')
     expect(screen.getByTestId('attention-pill-waiting_for_feedback').textContent).toContain('1')
 
@@ -193,6 +194,7 @@ describe('App', () => {
     expect(screen.queryByTestId('session-item-s2')).toBeNull()
     expect(screen.queryByTestId('session-item-s3')).toBeNull()
 
+    fireEvent.click(screen.getByTestId('attention-toggle'))
     fireEvent.click(screen.getByTestId('attention-clear'))
     expect(screen.getByTestId('session-item-s3')).toBeTruthy()
   })
