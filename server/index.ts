@@ -19,6 +19,7 @@ import { digestHandler } from './handlers/digest-handler'
 import { ciBabysitHandler } from './handlers/ci-babysit-handler'
 import { parentNotifyHandler } from './handlers/parent-notify-handler'
 import { restackResolverHandler } from './handlers/restack-resolver-handler'
+import { registerDagCompletionHandler } from './handlers/dag-completion-handler'
 import {
   createRealCIBabysitter,
   createRealQualityGates,
@@ -151,6 +152,8 @@ dispatcher.register(digestHandler)
 dispatcher.register(restackResolverHandler)
 dispatcher.register(ciBabysitHandler)
 dispatcher.register(parentNotifyHandler)
+
+registerDagCompletionHandler(bus, { db, registry, scheduler })
 
 wirePrLifecycle({
   bus,

@@ -10,7 +10,6 @@ import type { SessionRegistry } from "../session/registry"
 import type { EngineEventBus } from "../events/bus"
 import type { SessionRunState } from "../events/types"
 import type { ApiDagNode, ApiDagGraph } from "../../shared/api-types"
-import { advanceShip } from "../ship/coordinator"
 import type { CIBabysitter } from "../handlers/types"
 import { createRestackManager } from "./restack"
 import type { RestackManager } from "./restack"
@@ -244,13 +243,14 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
       persist(graph)
       if (!completedDags.has(graph.id)) {
         completedDags.add(graph.id)
+        const status = dagGraphStatus(graph)
         bus.emit({
           kind: "dag.completed",
           dagId: graph.id,
-          status: dagGraphStatus(graph) === "failed" ? "failed" : "completed",
+          rootSessionId: graph.rootSessionId,
+          status: status === "failed" ? "failed" : "completed",
         })
       }
-      await advanceShip(graph.rootSessionId, "verify", { db, registry, scheduler: { start } })
     }
   }
 

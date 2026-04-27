@@ -32,7 +32,12 @@ export type EngineEvent =
     }
   | { kind: 'dag.snapshot'; dag: ApiDagGraph }
   | { kind: 'dag.deleted'; dagId: string }
-  | { kind: 'dag.completed'; dagId: string; status: 'completed' | 'failed' }
+  | {
+      kind: 'dag.completed'
+      dagId: string
+      rootSessionId: string
+      status: 'completed' | 'failed'
+    }
   | { kind: 'dag.cancelled'; dagId: string }
   | { kind: 'dag.node.landed'; dagId: string; nodeId: string }
   | { kind: 'dag.node.land_reverted'; dagId: string; nodeId: string }
