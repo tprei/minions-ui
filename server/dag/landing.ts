@@ -4,7 +4,7 @@ import path from "node:path"
 import fs from "node:fs"
 import os from "node:os"
 import crypto from "node:crypto"
-import { nodeIndex, getDownstreamNodes } from "./dag"
+import { nodeIndex } from "./dag"
 import type { DagGraph, DagNode } from "./dag"
 import type { EngineEventBus } from "../events/bus"
 import type { ExecCall, ExecFn } from "./preflight"
@@ -128,10 +128,10 @@ export function createLandingManager(opts: LandingManagerOpts): LandingManager {
     }
   }
 
-  async function rebaseDownstream(mergedNodeId: string, graph: DagGraph): Promise<void> {
-    const downstream = getDownstreamNodes(graph, mergedNodeId)
+  async function rebasePending(mergedNodeId: string, graph: DagGraph): Promise<void> {
+    const targets = graph.nodes.filter((n) => n.id !== mergedNodeId && n.status !== "landed" && !!n.branch)
 
-    for (const node of downstream) {
+    for (const node of targets) {
       if (!node.branch || node.status === "landed") continue
 
       const cwd = worktreeDir(workspaceRoot, node.branch)
@@ -215,8 +215,17 @@ export function createLandingManager(opts: LandingManagerOpts): LandingManager {
       try {
         await registry.close(node.sessionId)
         closedSessionId = node.sessionId
+        node.sessionId = undefined
       } catch (err) {
         log.error({ dagId: graph.id, nodeId, sessionId: node.sessionId, err }, "failed to close session")
+      }
+    }
+
+    if (persistDag && closedSessionId) {
+      try {
+        persistDag(graph)
+      } catch (err) {
+        console.error(`[landing] persistDag (post-close) failed for ${nodeId}:`, err)
       }
     }
 
@@ -226,7 +235,7 @@ export function createLandingManager(opts: LandingManagerOpts): LandingManager {
       nodeId,
     })
 
-    await rebaseDownstream(nodeId, graph)
+    await rebasePending(nodeId, graph)
 
     return { ok: true, prUrl: node.prUrl, closedSessionId, mergeCommitSha }
   }
