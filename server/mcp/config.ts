@@ -72,6 +72,8 @@ export function buildMcpConfig(toggles: McpToggles = {}): McpConfigJson {
       MEMORY_SESSION_ID: toggles.memorySessionId ?? '',
       API_PORT: toggles.apiPort ?? process.env.PORT ?? '8080',
     }
+    const token = process.env.MINION_API_TOKEN
+    if (token) env['MINION_API_TOKEN'] = token
     mcpServers['memory'] = {
       command: 'bun',
       args: ['run', 'server/mcp/memory-server.ts'],
