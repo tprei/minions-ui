@@ -49,7 +49,7 @@ describe("fetchPrPreview", () => {
     expect(result.checks[0]!.status).toBe("success")
   })
 
-  test("checks result is empty array when gh pr checks fails", async () => {
+  test("checks result is empty array when gh pr checks fails without stdout", async () => {
     const viewPayload = JSON.stringify({
       number: 1002,
       url: "https://github.com/org/repo/pull/1002",
@@ -69,6 +69,34 @@ describe("fetchPrPreview", () => {
 
     expect(result.title).toBe("My PR")
     expect(result.checks).toHaveLength(0)
+  })
+
+  test("parses checks from error.stdout when gh pr checks exits code 8", async () => {
+    const viewPayload = JSON.stringify({
+      number: 1004,
+      url: "https://github.com/org/repo/pull/1004",
+      title: "PR with failing checks",
+      body: "",
+      state: "OPEN",
+      isDraft: false,
+      mergeable: "MERGEABLE",
+      headRefName: "feature",
+      baseRefName: "main",
+      author: { login: "octocat" },
+      updatedAt: "2024-01-01T00:00:00Z",
+    })
+    const checksPayload = JSON.stringify([
+      { name: "ci/test", status: "completed", conclusion: "failure", link: "https://ci.example.com/1" },
+    ])
+
+    const errorWithStdout = Object.assign(new Error("exit code 8"), { stdout: checksPayload })
+    const exec = makeExec([{ stdout: viewPayload }, errorWithStdout])
+    const result = await fetchPrPreview("https://github.com/org/repo/pull/1004", exec)
+
+    expect(result.title).toBe("PR with failing checks")
+    expect(result.checks).toHaveLength(1)
+    expect(result.checks[0]!.name).toBe("ci/test")
+    expect(result.checks[0]!.status).toBe("failure")
   })
 
   test("throws when gh pr view fails", async () => {

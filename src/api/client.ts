@@ -10,6 +10,8 @@ import type {
   CreateSessionRequest,
   CreateSessionVariantsRequest,
   CreateSessionVariantsResult,
+  FeedbackReason,
+  FeedbackVote,
   MemoryEntry,
   MergeReadiness,
   MinionCommand,
@@ -51,6 +53,13 @@ export interface ApiClient {
   getDags(): Promise<ApiDagGraph[]>
   sendCommand(cmd: MinionCommand): Promise<CommandResult>
   sendMessage(text: string, sessionId?: string, images?: Array<{ mediaType: string; dataBase64: string }>): Promise<{ ok: true; sessionId: string | null }>
+  submitFeedback(input: {
+    sessionId: string
+    messageBlockId: string
+    vote: FeedbackVote
+    reason?: FeedbackReason
+    comment?: string
+  }): Promise<CommandResult>
   createSession(req: CreateSessionRequest): Promise<ApiSession>
   createSessionVariants(req: CreateSessionVariantsRequest): Promise<CreateSessionVariantsResult>
   createExternalTask(req: CreateExternalTaskRequest): Promise<ExternalTaskResult>
@@ -172,6 +181,23 @@ export function createApiClient(opts: { baseUrl: string; token: string }): ApiCl
 
     sendMessage(text: string, sessionId?: string, images?: Array<{ mediaType: string; dataBase64: string }>) {
       return post<{ ok: true; sessionId: string | null }>('/api/messages', { text, sessionId, images })
+    },
+
+    submitFeedback(input: {
+      sessionId: string
+      messageBlockId: string
+      vote: FeedbackVote
+      reason?: FeedbackReason
+      comment?: string
+    }) {
+      return this.sendCommand({
+        action: 'submit_feedback',
+        sessionId: input.sessionId,
+        messageBlockId: input.messageBlockId,
+        vote: input.vote,
+        reason: input.reason,
+        comment: input.comment,
+      })
     },
 
     createSession(req: CreateSessionRequest) {

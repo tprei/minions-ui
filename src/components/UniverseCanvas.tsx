@@ -16,7 +16,7 @@ import '@reactflow/core/dist/style.css'
 import '@reactflow/core/dist/base.css'
 import '@reactflow/controls/dist/style.css'
 import '@reactflow/minimap/dist/style.css'
-import type { ApiSession, ApiDagGraph } from '../api/types'
+import type { ApiSession, ApiDagGraph, FeedbackMetadata } from '../api/types'
 import { StatusBadge, AttentionIconStack, getStatusColors, getAttentionBorder, formatRelativeTime } from './shared'
 import { PrLink } from './PrLink'
 import { ContextMenu, useLongPress, useContextMenu } from './ContextMenu'
@@ -32,6 +32,14 @@ import { NodeDetailPopup } from './NodeDetailPopup'
 import { useTheme } from '../hooks/useTheme'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useHaptics } from '../hooks/useHaptics'
+
+function isFeedbackSession(session?: ApiSession): session is ApiSession & { metadata: FeedbackMetadata } {
+  return session !== undefined &&
+    session.metadata !== undefined &&
+    typeof session.metadata === 'object' &&
+    'kind' in session.metadata &&
+    session.metadata.kind === 'feedback'
+}
 
 interface UniverseNodeData {
   session?: ApiSession
@@ -79,6 +87,7 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
   const isCoordinator = data.nodeType === 'ship'
 
   const nodeTypeLabel = data.nodeType === 'dag' ? 'DAG' : data.nodeType === 'parent-child' ? 'Tree' : null
+  const isFeedback = isFeedbackSession(session)
 
   const baseWidth = isCoordinator ? 300 : 240
   const baseHeight = isCoordinator ? 120 : 100
@@ -119,17 +128,31 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
       >
         <div class="flex items-center justify-between gap-1">
           <div class="font-semibold text-sm truncate flex-1">{data.label}</div>
-          {nodeTypeLabel && (
-            <span
-              class="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0"
-              style={{
-                backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
-                color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)',
-              }}
-            >
-              {nodeTypeLabel}
-            </span>
-          )}
+          <div class="flex items-center gap-1 shrink-0">
+            {isFeedback && (
+              <span
+                class="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                style={{
+                  backgroundColor: isDark ? 'rgba(251,191,36,0.2)' : 'rgba(245,158,11,0.15)',
+                  color: isDark ? '#fbbf24' : '#d97706',
+                }}
+                data-testid="feedback-canvas-badge"
+              >
+                Feedback
+              </span>
+            )}
+            {nodeTypeLabel && (
+              <span
+                class="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                style={{
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
+                  color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)',
+                }}
+              >
+                {nodeTypeLabel}
+              </span>
+            )}
+          </div>
         </div>
 
         <div class="flex items-center gap-2 mt-1">

@@ -558,6 +558,91 @@ describe('SessionRegistry', () => {
     }, 30_000)
   })
 
+  describe('metadata exposure', () => {
+    test('excludes metadata when empty object', async () => {
+      const bare = trackedDir('bare-empty-meta')
+      const work = trackedDir('work-empty-meta')
+      const workspaceRoot = trackedDir('ws-empty-meta')
+      await initLocalBareRepo(bare, work)
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
+      const { session } = await registry.create({
+        mode: 'task',
+        prompt: 'test',
+        repo: bare,
+        workspaceRoot,
+        metadata: {},
+      })
+
+      const snap = registry.snapshot(session.id)
+      expect(snap).toBeDefined()
+      expect(snap!.metadata).toBeUndefined()
+    }, 30_000)
+
+    test('includes metadata when non-empty', async () => {
+      const bare = trackedDir('bare-with-meta')
+      const work = trackedDir('work-with-meta')
+      const workspaceRoot = trackedDir('ws-with-meta')
+      await initLocalBareRepo(bare, work)
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
+      const { session } = await registry.create({
+        mode: 'task',
+        prompt: 'feedback task',
+        repo: bare,
+        workspaceRoot,
+        metadata: {
+          kind: 'feedback',
+          vote: 'up',
+          sourceSessionId: 'parent-123',
+          sourceSessionSlug: 'parent-slug',
+          sourceMessageBlockId: 'msg-block-1',
+        },
+      })
+
+      const snap = registry.snapshot(session.id)
+      expect(snap).toBeDefined()
+      expect(snap!.metadata).toEqual({
+        kind: 'feedback',
+        vote: 'up',
+        sourceSessionId: 'parent-123',
+        sourceSessionSlug: 'parent-slug',
+        sourceMessageBlockId: 'msg-block-1',
+      })
+    }, 30_000)
+
+    test('includes metadata in list() results', async () => {
+      const bare = trackedDir('bare-list-meta')
+      const work = trackedDir('work-list-meta')
+      const workspaceRoot = trackedDir('ws-list-meta')
+      await initLocalBareRepo(bare, work)
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn() })
+      await registry.create({
+        mode: 'task',
+        prompt: 'no metadata',
+        repo: bare,
+        workspaceRoot,
+      })
+      await registry.create({
+        mode: 'task',
+        prompt: 'with metadata',
+        repo: bare,
+        workspaceRoot,
+        metadata: { kind: 'feedback', vote: 'down' },
+      })
+
+      const sessions = registry.list()
+      expect(sessions).toHaveLength(2)
+
+      const withoutMeta = sessions.find((s) => s.command === 'no metadata')
+      const withMeta = sessions.find((s) => s.command === 'with metadata')
+
+      expect(withoutMeta?.metadata).toBeUndefined()
+      expect(withMeta?.metadata).toEqual({ kind: 'feedback', vote: 'down' })
+    }, 60_000)
+  })
+
   describe('childIds and stage propagation', () => {
     test('populates childIds in ApiSession ordered by created_at', async () => {
       const bare = trackedDir('bare-children')

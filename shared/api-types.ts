@@ -15,6 +15,18 @@ export type PlanActionType = 'execute' | 'split' | 'stack' | 'dag'
 export interface ConversationMessage { role: 'user' | 'assistant'; text: string }
 export type ShipStage = 'think' | 'plan' | 'dag' | 'verify' | 'done'
 
+export type FeedbackVote = 'up' | 'down'
+export type FeedbackReason = 'incorrect' | 'off_topic' | 'too_verbose' | 'unsafe' | 'other'
+export interface FeedbackMetadata {
+  kind: 'feedback'
+  vote: FeedbackVote
+  reason?: FeedbackReason
+  comment?: string
+  sourceSessionId: string
+  sourceSessionSlug: string
+  sourceMessageBlockId: string
+}
+
 export interface ApiSession {
   id: string
   slug: string
@@ -37,6 +49,7 @@ export interface ApiSession {
   conversation: ConversationMessage[]
   variantGroupId?: string
   transcriptUrl?: string
+  metadata?: Record<string, unknown>
 }
 
 export interface ApiDagNode {
@@ -338,6 +351,14 @@ export type MinionCommand =
   | { action: 'ship_advance'; sessionId: string; to?: ShipStage }
   | { action: 'land'; dagId: string; nodeId: string }
   | { action: 'retry_rebase'; dagId: string; nodeId: string }
+  | {
+      action: 'submit_feedback'
+      sessionId: string
+      messageBlockId: string
+      vote: FeedbackVote
+      reason?: FeedbackReason
+      comment?: string
+    }
 
 export interface RepoEntry {
   alias: string

@@ -117,7 +117,12 @@ export async function fetchPrPreview(
       cmd: "gh",
       args: ["pr", "checks", prUrl, "--json", "name,status,conclusion,link"],
       opts: { timeout: TIMEOUT_MS, encoding: "utf-8" },
-    }).catch(() => ({ stdout: "[]", stderr: "" })),
+    }).catch((err: unknown) => {
+      if (err && typeof err === "object" && "stdout" in err && typeof err.stdout === "string") {
+        return { stdout: err.stdout, stderr: "" }
+      }
+      return { stdout: "[]", stderr: "" }
+    }),
   ])
 
   let viewData: Record<string, unknown>
