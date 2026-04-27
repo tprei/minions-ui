@@ -5,7 +5,7 @@ import { saveDag } from "./store"
 import { createDagScheduler } from "./scheduler"
 import { EngineEventBus } from "../events/bus"
 import { openDatabase, prepared, runMigrations } from "../db/sqlite"
-import { DIRECTIVE_VERIFY } from "../ship/coordinator"
+import { buildVerifyDirective } from "../ship/verification"
 import type { SessionRegistry, CreateSessionOpts } from "../session/registry"
 import type { SessionRuntime } from "../session/runtime"
 import type { ApiSession } from "../../shared/api-types"
@@ -351,7 +351,10 @@ describe("DagScheduler", () => {
 
     const row = prepared.getSession(db, rootId)
     expect(row?.stage).toBe("verify")
-    expect(replies).toEqual([{ sessionId: rootId, text: DIRECTIVE_VERIFY }])
+    const expected = buildVerifyDirective([
+      { title: "Task A", description: "A", branch: "minion/test-ship-child", prUrl: null },
+    ])
+    expect(replies).toEqual([{ sessionId: rootId, text: expected }])
   })
 
   it("cancel stops running sessions and marks them failed", async () => {

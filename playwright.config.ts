@@ -16,6 +16,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    serviceWorkers: 'block',
   },
   webServer: {
     command: 'npm run build && npm run preview -- --port 4173 --strictPort',

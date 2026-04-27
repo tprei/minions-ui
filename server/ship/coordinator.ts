@@ -2,6 +2,8 @@ import type { ShipStage, AttentionReason, QuickAction } from '../../shared/api-t
 import { prepared } from '../db/sqlite'
 import { getEventBus } from '../events/bus'
 import { handleDag, type PlanActionCtx } from '../commands/plan-actions'
+import { listDags } from '../dag/store'
+import { buildVerifyDirective, type VerifyTask } from './verification'
 
 // Stage directive constants
 export const DIRECTIVE_PLAN = [
@@ -22,16 +24,32 @@ export const DIRECTIVE_PLAN = [
   'Output at least one task object covering all the work identified during thinking.',
 ].join('\n')
 
-export const DIRECTIVE_VERIFY = [
-  'All implementation tasks have completed. Review the work and verify quality.',
-  '',
-  '1. Check that all planned changes were made correctly.',
-  '2. Review test coverage and results.',
-  '3. Verify no regressions or breaking changes.',
-  '4. Confirm the solution addresses the original request.',
-  '',
-  'If issues are found, describe what needs fixing. Otherwise confirm the work is complete.',
-].join('\n')
+export const DIRECTIVE_VERIFY = buildVerifyDirective([])
+
+function buildVerifyDirectiveForSession(sessionId: string, ctx: PlanActionCtx): string {
+  const dag = listDags(ctx.db).find((g) => g.rootSessionId === sessionId)
+  if (!dag) return DIRECTIVE_VERIFY
+
+  const tasks: VerifyTask[] = dag.nodes.map((node) => {
+    let branch: string | null = node.branch ?? null
+    let prUrl: string | null = node.prUrl ?? null
+    if ((!branch || !prUrl) && node.sessionId) {
+      const childRow = prepared.getSession(ctx.db, node.sessionId)
+      if (childRow) {
+        if (!branch) branch = childRow.branch ?? null
+        if (!prUrl) prUrl = childRow.pr_url ?? null
+      }
+    }
+    return {
+      title: node.title || node.id,
+      description: node.description ?? '',
+      branch,
+      prUrl,
+    }
+  })
+
+  return buildVerifyDirective(tasks)
+}
 
 // State transition matrix
 const TRANSITIONS: Record<ShipStage, ShipStage[]> = {
@@ -204,7 +222,8 @@ export async function advanceShip(
     if (currentStage === 'think' && nextStage === 'plan') {
       await ctx.registry.reply(sessionId, DIRECTIVE_PLAN)
     } else if (currentStage === 'dag' && nextStage === 'verify') {
-      await ctx.registry.reply(sessionId, DIRECTIVE_VERIFY)
+      const directive = buildVerifyDirectiveForSession(sessionId, ctx)
+      await ctx.registry.reply(sessionId, directive)
     }
 
     return { ok: true, from: currentStage, to: nextStage, dagId }
