@@ -8,11 +8,17 @@ export type QualityReport = ApiQualityReport
 export type SessionCompletedEvent = EngineEventOfKind<'session.completed'>
 export type { SessionRunState } from '../events/types'
 
+export interface HandlerResult {
+  handled: boolean
+  stopPropagation?: boolean
+  reason?: string
+}
+
 export interface CompletionHandler {
   readonly name: string
   readonly priority: number
   matches(ev: SessionCompletedEvent): boolean
-  handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<void>
+  handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<HandlerResult>
 }
 
 export interface DagScheduler {

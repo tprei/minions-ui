@@ -63,6 +63,17 @@ export type EngineEvent =
   | { kind: 'memory.updated'; memory: MemoryEntry }
   | { kind: 'memory.reviewed'; memory: MemoryEntry }
   | { kind: 'memory.deleted'; memoryId: number }
+  | {
+      kind: 'handler.invoked'
+      sessionId: string
+      handlerName: string
+      priority: number
+      handled: boolean
+      stopPropagation: boolean
+      durationMs: number
+      reason?: string
+      error?: string
+    }
 
 export type EngineEventKind = EngineEvent['kind']
 export type EngineEventOfKind<K extends EngineEventKind> = Extract<EngineEvent, { kind: K }>

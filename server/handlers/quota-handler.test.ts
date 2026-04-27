@@ -90,7 +90,7 @@ describe('quotaHandler', () => {
     const ctx = makeCtx(db, resumeCalls, 3)
 
     const ev: SessionCompletedEvent = { kind: 'session.completed', sessionId: 'sess-quota', state: 'quota_exhausted', durationMs: 0 }
-    await quotaHandler.handle(ev, ctx)
+    const result = await quotaHandler.handle(ev, ctx)
 
     expect(resumeCalls).toHaveLength(1)
     expect(resumeCalls[0]!.sessionId).toBe('sess-quota')
@@ -98,6 +98,8 @@ describe('quotaHandler', () => {
 
     const row = db.query<{ quota_retry_count: number }, [string]>('SELECT quota_retry_count FROM sessions WHERE id = ?').get('sess-quota')
     expect(row!.quota_retry_count).toBe(1)
+    expect(result.handled).toBe(true)
+    expect(result.reason).toBe('quota_resume_scheduled')
   })
 
   test('does not schedule resume when retry count exceeds max', async () => {
@@ -106,9 +108,11 @@ describe('quotaHandler', () => {
     const ctx = makeCtx(db, resumeCalls, 3)
 
     const ev: SessionCompletedEvent = { kind: 'session.completed', sessionId: 'sess-max', state: 'quota_exhausted', durationMs: 0 }
-    await quotaHandler.handle(ev, ctx)
+    const result = await quotaHandler.handle(ev, ctx)
 
     expect(resumeCalls).toHaveLength(0)
+    expect(result.handled).toBe(false)
+    expect(result.reason).toBe('retry_count_exceeded')
   })
 
   test('increments retry count on each exhaustion up to max', async () => {

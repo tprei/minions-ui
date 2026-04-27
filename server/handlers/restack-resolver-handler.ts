@@ -1,4 +1,4 @@
-import type { CompletionHandler, HandlerCtx, SessionCompletedEvent, SessionMetadata } from './types'
+import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent, SessionMetadata } from './types'
 import { execFile as execFileCb } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
@@ -14,14 +14,16 @@ export const restackResolverHandler: CompletionHandler = {
     return ev.sessionId !== undefined
   },
 
-  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<void> {
+  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<HandlerResult> {
     const row = ctx.db
       .query<{ mode: string; metadata: string; workspace_root: string | null; slug: string }, [string]>(
         'SELECT mode, metadata, workspace_root, slug FROM sessions WHERE id = ?',
       )
       .get(ev.sessionId)
 
-    if (!row || row.mode !== 'rebase-resolver' || !row.workspace_root) return
+    if (!row) return { handled: false, reason: 'session_not_found' }
+    if (row.mode !== 'rebase-resolver') return { handled: false, reason: 'mode_mismatch' }
+    if (!row.workspace_root) return { handled: false, reason: 'no_workspace_root' }
 
     let meta: SessionMetadata
     try {
@@ -33,19 +35,19 @@ export const restackResolverHandler: CompletionHandler = {
     const { dagId, dagNodeId, parentBranch, parentSha } = meta
     if (!dagId || !dagNodeId || !parentBranch || !parentSha) {
       console.error(`[restack-resolver-handler] missing metadata for session ${ev.sessionId}`)
-      return
+      return { handled: false, reason: 'missing_metadata' }
     }
 
     const graph = loadDag(dagId, ctx.db)
     if (!graph) {
       console.error(`[restack-resolver-handler] DAG ${dagId} not found`)
-      return
+      return { handled: false, reason: 'dag_not_found' }
     }
 
     const node = graph.nodes.find((n) => n.id === dagNodeId)
     if (!node) {
       console.error(`[restack-resolver-handler] node ${dagNodeId} not found in DAG ${dagId}`)
-      return
+      return { handled: false, reason: 'node_not_found' }
     }
 
     const cwd = path.join(row.workspace_root, row.slug)
@@ -63,7 +65,7 @@ export const restackResolverHandler: CompletionHandler = {
         result: 'conflict',
         error: node.error,
       })
-      return
+      return { handled: true, reason: 'rebase_in_progress' }
     }
 
     if (rebaseStatus === 'dirty') {
@@ -77,7 +79,7 @@ export const restackResolverHandler: CompletionHandler = {
         result: 'conflict',
         error: node.error,
       })
-      return
+      return { handled: true, reason: 'workspace_dirty' }
     }
 
     let currentSha: string
@@ -99,7 +101,7 @@ export const restackResolverHandler: CompletionHandler = {
         result: 'conflict',
         error: node.error,
       })
-      return
+      return { handled: true, reason: 'head_sha_failed' }
     }
 
     try {
@@ -119,7 +121,7 @@ export const restackResolverHandler: CompletionHandler = {
         result: 'conflict',
         error: node.error,
       })
-      return
+      return { handled: true, reason: 'push_failed' }
     }
 
     console.log(`[restack-resolver-handler] successfully resolved and pushed node ${dagNodeId}`)
@@ -140,6 +142,7 @@ export const restackResolverHandler: CompletionHandler = {
       parentSha: typeof parentSha === 'string' ? parentSha : '',
       newSha: currentSha,
     })
+    return { handled: true, reason: 'restack_resolved' }
   },
 }
 

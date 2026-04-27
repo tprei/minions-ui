@@ -1,4 +1,4 @@
-import type { CompletionHandler, HandlerCtx, SessionCompletedEvent } from './types'
+import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent } from './types'
 
 const QUOTA_RETRY_MAX_DEFAULT = 3
 
@@ -10,7 +10,7 @@ export const quotaHandler: CompletionHandler = {
     return ev.state === 'quota_exhausted'
   },
 
-  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<void> {
+  async handle(ev: SessionCompletedEvent, ctx: HandlerCtx): Promise<HandlerResult> {
     const maxRetries = ctx.config.quotaRetryMax ?? QUOTA_RETRY_MAX_DEFAULT
 
     const row = ctx.db
@@ -22,7 +22,7 @@ export const quotaHandler: CompletionHandler = {
     const retryCount = (row?.quota_retry_count ?? 0) + 1
 
     if (retryCount > maxRetries) {
-      return
+      return { handled: false, reason: 'retry_count_exceeded' }
     }
 
     const resetAt = Date.now() + 60_000
@@ -33,5 +33,6 @@ export const quotaHandler: CompletionHandler = {
     )
 
     await ctx.registry.scheduleQuotaResume(ev.sessionId, resetAt)
+    return { handled: true, reason: 'quota_resume_scheduled' }
   },
 }
