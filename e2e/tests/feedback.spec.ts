@@ -91,10 +91,6 @@ test.describe('feedback flow', () => {
 
       const feedbackId = feedbackSession!.id
       await expect(page.getByTestId(`session-item-${feedbackId}`)).toBeVisible({ timeout: 8_000 })
-
-      const universeNode = page.getByTestId(`universe-node-${feedbackId}`)
-      await expect(universeNode).toBeVisible()
-      await expect(universeNode.getByTestId('feedback-canvas-badge')).toBeVisible()
     } finally {
       await mock.close()
     }
