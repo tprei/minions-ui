@@ -145,6 +145,12 @@ export function saveDag(graph: DagGraph, db?: Database): void {
   }
 
   for (const nodeRow of nodeRows) {
+    if (nodeRow.session_id) {
+      const exists = database
+        .query<{ id: string }, [string]>('SELECT id FROM sessions WHERE id = ? LIMIT 1')
+        .get(nodeRow.session_id)
+      if (!exists) nodeRow.session_id = null
+    }
     prepared.upsertDagNode(database, nodeRow)
   }
 }
