@@ -265,6 +265,88 @@ describe('ChatPane', () => {
     expect(stopBtn.hasAttribute('disabled')).toBe(true)
   })
 
+  it('does not render the failure-recovery strip when session is running', () => {
+    render(
+      <ChatPane
+        session={mockSession}
+        store={mockStore}
+        onSend={mockOnSend}
+        onCommand={mockOnCommand}
+      />,
+    )
+    expect(screen.queryByTestId('failure-recovery-strip')).toBeNull()
+  })
+
+  it('renders the failure-recovery strip when session is failed', () => {
+    const failedSession = { ...mockSession, status: 'failed' as const }
+    render(
+      <ChatPane
+        session={failedSession}
+        store={mockStore}
+        onSend={mockOnSend}
+        onCommand={mockOnCommand}
+      />,
+    )
+    expect(screen.getByTestId('failure-recovery-strip')).toBeTruthy()
+    expect(screen.getByTestId('failure-retry-btn')).toBeTruthy()
+    expect(screen.getByTestId('failure-resume-btn')).toBeTruthy()
+    expect(screen.getByTestId('failure-abort-btn')).toBeTruthy()
+  })
+
+  it('clicking failure retry calls onSend with /retry', async () => {
+    mockOnSend.mockResolvedValue(undefined)
+    const failedSession = { ...mockSession, status: 'failed' as const }
+    render(
+      <ChatPane
+        session={failedSession}
+        store={mockStore}
+        onSend={mockOnSend}
+        onCommand={mockOnCommand}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('failure-retry-btn'))
+    await waitFor(() => {
+      expect(mockOnSend).toHaveBeenCalledWith('/retry', failedSession.id)
+    })
+  })
+
+  it('clicking failure resume calls onSend with /resume', async () => {
+    mockOnSend.mockResolvedValue(undefined)
+    const failedSession = { ...mockSession, status: 'failed' as const }
+    render(
+      <ChatPane
+        session={failedSession}
+        store={mockStore}
+        onSend={mockOnSend}
+        onCommand={mockOnCommand}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('failure-resume-btn'))
+    await waitFor(() => {
+      expect(mockOnSend).toHaveBeenCalledWith('/resume', failedSession.id)
+    })
+  })
+
+  it('clicking failure abort calls onCommand with close after confirm', async () => {
+    mockOnCommand.mockResolvedValue({ success: true })
+    const failedSession = { ...mockSession, status: 'failed' as const }
+    render(
+      <ChatPane
+        session={failedSession}
+        store={mockStore}
+        onSend={mockOnSend}
+        onCommand={mockOnCommand}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('failure-abort-btn'))
+    await waitFor(() => {
+      expect(mockOnCommand).toHaveBeenCalledWith({
+        action: 'close',
+        sessionId: failedSession.id,
+      })
+    })
+  })
+
   it('shows PR link when prUrl is present', () => {
     const sessionWithPr = { ...mockSession, prUrl: 'https://github.com/owner/repo/pull/123' }
 

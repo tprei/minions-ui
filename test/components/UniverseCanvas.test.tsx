@@ -665,6 +665,84 @@ describe('loadPersistedViewport / savePersistedViewport', () => {
     expect(document.querySelector('[data-testid="feedback-canvas-badge"]')).toBeFalsy()
   })
 
+  it('renders Retry and Logs chips on a failed standalone node', () => {
+    const sessions = [createSession({ id: 's-fail', slug: 'failed-one', status: 'failed' })]
+    const onViewLogs = vi.fn()
+    render(
+      <UniverseCanvas {...defaultProps} sessions={sessions} onViewLogs={onViewLogs} />,
+    )
+    expect(document.querySelector('[data-testid="node-retry-chip-s-fail"]')).toBeTruthy()
+    expect(document.querySelector('[data-testid="node-logs-chip-s-fail"]')).toBeTruthy()
+  })
+
+  it('does not render failure chips on running nodes', () => {
+    const sessions = [createSession({ id: 's-ok', slug: 'ok', status: 'running' })]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} onViewLogs={vi.fn()} />)
+    expect(document.querySelector('[data-testid="node-retry-chip-s-ok"]')).toBeFalsy()
+    expect(document.querySelector('[data-testid="node-logs-chip-s-ok"]')).toBeFalsy()
+  })
+
+  it('renders Retry chip on a ci-failed DAG node and clicking it sends /retry', () => {
+    const onSendReply = vi.fn().mockResolvedValue(undefined)
+    const dag = createDag({
+      nodes: {
+        'node-1': {
+          id: 'node-1',
+          slug: 'dag-root',
+          status: 'ci-failed',
+          dependencies: [],
+          dependents: [],
+          session: createSession({ id: 'dag-session-1', slug: 'dag-root', status: 'running' }),
+        },
+      },
+    })
+    render(<UniverseCanvas {...defaultProps} dags={[dag]} onSendReply={onSendReply} onViewLogs={vi.fn()} />)
+    const retryChip = document.querySelector('[data-testid="node-retry-chip-dag-session-1"]') as HTMLButtonElement | null
+    expect(retryChip).toBeTruthy()
+    if (retryChip) {
+      fireEvent.click(retryChip)
+      expect(onSendReply).toHaveBeenCalledWith('dag-session-1', '/retry')
+    }
+  })
+
+  it('clicking Logs chip on a failed node calls onViewLogs with the session id', () => {
+    const onViewLogs = vi.fn()
+    const sessions = [createSession({ id: 's-fail-2', slug: 'failed-two', status: 'failed' })]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} onViewLogs={onViewLogs} />)
+    const logsChip = document.querySelector('[data-testid="node-logs-chip-s-fail-2"]') as HTMLButtonElement | null
+    expect(logsChip).toBeTruthy()
+    if (logsChip) {
+      fireEvent.click(logsChip)
+      expect(onViewLogs).toHaveBeenCalledWith('s-fail-2')
+    }
+  })
+
+  it('clicking a failure chip does not also trigger node selection', () => {
+    const onNodeSelect = vi.fn()
+    const onViewLogs = vi.fn()
+    const sessions = [createSession({ id: 's-fail-3', slug: 'failed-three', status: 'failed' })]
+    render(
+      <UniverseCanvas
+        {...defaultProps}
+        sessions={sessions}
+        onNodeSelect={onNodeSelect}
+        onViewLogs={onViewLogs}
+      />,
+    )
+    const logsChip = document.querySelector('[data-testid="node-logs-chip-s-fail-3"]') as HTMLButtonElement | null
+    if (logsChip) {
+      fireEvent.click(logsChip)
+      expect(onNodeSelect).not.toHaveBeenCalled()
+    }
+  })
+
+  it('omits the Logs chip when no onViewLogs handler is provided', () => {
+    const sessions = [createSession({ id: 's-fail-4', slug: 'failed-four', status: 'failed' })]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    expect(document.querySelector('[data-testid="node-retry-chip-s-fail-4"]')).toBeTruthy()
+    expect(document.querySelector('[data-testid="node-logs-chip-s-fail-4"]')).toBeFalsy()
+  })
+
   it('renders both feedback badge and node type label on canvas node', () => {
     const feedbackMeta: FeedbackMetadata = {
       kind: 'feedback',
