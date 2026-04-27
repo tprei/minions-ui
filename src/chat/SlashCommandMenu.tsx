@@ -55,7 +55,7 @@ export function SlashCommandMenu({ session, context, onPrefill, disabled }: Slas
 
   return (
     <div
-      class="flex flex-wrap gap-1.5 px-4 py-2 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
+      class="flex flex-wrap gap-1.5 px-3 sm:px-4 py-1.5 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
       data-testid="slash-command-menu"
     >
       {commands.map((c) => {

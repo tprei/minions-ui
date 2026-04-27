@@ -152,7 +152,7 @@ export function MessageInput({ store, value, onValueChange, onSend }: MessageInp
 
   return (
     <div
-      class="px-3 sm:px-4 py-2.5 border-t border-slate-200 dark:border-slate-700 flex flex-col gap-2 bg-white dark:bg-slate-800"
+      class="px-3 sm:px-4 py-2 border-t border-slate-200 dark:border-slate-700 flex flex-col gap-1.5 bg-white dark:bg-slate-800"
       data-testid="composer"
     >
       {errorText && (
@@ -250,7 +250,7 @@ function ComposerToolbar({
 }) {
   return (
     <div
-      class="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400"
+      class="hidden sm:flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400"
       data-testid="composer-toolbar"
     >
       <Kbd>Enter</Kbd>
@@ -304,7 +304,7 @@ function ComposerModes({
 }) {
   return (
     <div
-      class="flex flex-wrap items-center gap-1.5"
+      class="hidden sm:flex flex-wrap items-center gap-1.5"
       data-testid="composer-modes"
       role="toolbar"
       aria-label="Input modes"
