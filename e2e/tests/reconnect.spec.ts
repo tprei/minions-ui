@@ -26,13 +26,14 @@ test.describe('SSE reconnect', () => {
     try {
       await connectToMinion(page, mock, 'Reconnect Minion')
 
-      await expect(page.getByText('live')).toBeVisible({ timeout: 20_000 })
+      const statusBadge = page.getByTestId('connection-status-badge')
+      await expect(statusBadge).toHaveAttribute('aria-label', /live/, { timeout: 20_000 })
 
       mock.drop()
 
-      await expect(page.getByText('retrying')).toBeVisible({ timeout: 5_000 })
+      await expect(statusBadge).toHaveAttribute('aria-label', /retrying/, { timeout: 5_000 })
 
-      await expect(page.getByText('live')).toBeVisible({ timeout: 20_000 })
+      await expect(statusBadge).toHaveAttribute('aria-label', /live/, { timeout: 20_000 })
 
       await expect(page.getByTestId('session-item-s-reconnect')).toBeVisible({ timeout: 10_000 })
     } finally {
