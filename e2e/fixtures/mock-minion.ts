@@ -283,6 +283,26 @@ export async function createMockMinion(opts?: {
       return
     }
 
+    const transcriptMatch = path.match(/^\/api\/sessions\/([^/]+)\/transcript$/)
+    if (transcriptMatch && req.method === 'GET') {
+      const slug = decodeURIComponent(transcriptMatch[1])
+      const session = sessions.find((s) => s.slug === slug || s.id === slug)
+      if (!session) return notFound(res)
+      sendJson(res, 200, {
+        data: {
+          session: {
+            sessionId: session.id,
+            mode: session.mode,
+            startedAt: new Date(session.createdAt).getTime(),
+            active: session.status !== 'completed',
+          },
+          events: [],
+          highWaterMark: 0,
+        },
+      })
+      return
+    }
+
     if (path === '/api/events' && req.method === 'GET') {
       const origin = req.headers['origin'] ?? allowedOrigin
       res.writeHead(200, {
