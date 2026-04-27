@@ -4,6 +4,7 @@ import type { LoopScheduler as LoopSchedulerInterface } from '../handlers/types'
 import { DEFAULT_LOOPS, type LoopDefinition } from './definitions'
 import { upsertLoop, getLoop, listLoops, setLoopEnabled, setLoopInterval, recordLoopRun, dumpLoopsJson } from './store'
 import { buildLoopPrompt } from './prompt-builder'
+import { AdmissionDeniedError, type AdmissionController } from '../orchestration/admission'
 
 const MAX_CONSECUTIVE_FAILURES = 5
 const BACKOFF_BASE_MS = 10 * 60 * 1000
@@ -17,6 +18,7 @@ export interface LoopSchedulerOpts {
   repo: string
   maxConcurrentSessions: number
   getInteractiveSessionCount: () => number
+  admission?: AdmissionController
 }
 
 export class LoopScheduler implements LoopSchedulerInterface {
@@ -26,6 +28,7 @@ export class LoopScheduler implements LoopSchedulerInterface {
   private readonly repo: string
   private maxConcurrentSessions: number
   private readonly getInteractiveSessionCount: () => number
+  private readonly admission: AdmissionController | undefined
   private readonly definitions = new Map<string, LoopDefinition>()
   private timer: ReturnType<typeof setInterval> | null = null
   private lastKickAt = new Map<string, number>()
@@ -38,6 +41,7 @@ export class LoopScheduler implements LoopSchedulerInterface {
     this.repo = opts.repo
     this.maxConcurrentSessions = opts.maxConcurrentSessions
     this.getInteractiveSessionCount = opts.getInteractiveSessionCount
+    this.admission = opts.admission
 
     for (const def of DEFAULT_LOOPS) {
       this.definitions.set(def.id, def)
@@ -60,9 +64,13 @@ export class LoopScheduler implements LoopSchedulerInterface {
   }
 
   async tick(now: number): Promise<void> {
-    const interactiveCount = this.getInteractiveSessionCount()
-    const reserved = this.maxConcurrentSessions - interactiveCount
-    if (reserved < 2) return
+    if (this.admission) {
+      if (!this.admission.peek('loop').admitted) return
+    } else {
+      const interactiveCount = this.getInteractiveSessionCount()
+      const reserved = this.maxConcurrentSessions - interactiveCount
+      if (reserved < 2) return
+    }
 
     const rows = listLoops(this.db)
     let staggerOffset = 0
@@ -76,6 +84,8 @@ export class LoopScheduler implements LoopSchedulerInterface {
       const nextRunAt = (row.last_run_at ?? 0) + intervalMs
 
       if (now + staggerOffset < nextRunAt) continue
+
+      if (this.admission && !this.admission.peek('loop').admitted) break
 
       this.lastKickAt.set(row.id, now)
       staggerOffset += STAGGER_MS
@@ -104,16 +114,14 @@ export class LoopScheduler implements LoopSchedulerInterface {
         prompt,
         repo: this.repo,
         workspaceRoot: this.workspaceRoot,
+        metadata: { loopId },
       })
 
       this.activeLoopSessions.set(loopId, session.id)
-
-      const sessionDb = this.db
-      sessionDb.run(
-        `UPDATE sessions SET metadata = json_set(COALESCE(metadata, '{}'), '$.loopId', ?) WHERE id = ?`,
-        [loopId, session.id],
-      )
-    } catch {
+    } catch (err) {
+      if (err instanceof AdmissionDeniedError) {
+        return
+      }
       await this.recordOutcome(loopId, 'errored')
     }
   }

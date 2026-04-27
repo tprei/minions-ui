@@ -9,6 +9,12 @@ import { getDb, prepared, type SessionRow } from '../db/sqlite'
 import { getEventBus } from '../events/bus'
 import type { Database } from 'bun:sqlite'
 import { injectAgentFiles } from './inject-assets'
+import {
+  AdmissionDeniedError,
+  priorityForMode,
+  type AdmissionController,
+  type SessionPriority,
+} from '../orchestration/admission'
 
 const ADJECTIVES = ['brisk','wide','quiet','loud','smart','bright','dim','warm','cool','fast','slow','neat','crisp','rough','sharp','soft']
 const NOUNS = ['ivy','oak','fern','river','meadow','peak','bay','cliff','dune','grove','lake','mesa','pond','reef','stream','wood']
@@ -94,13 +100,24 @@ export interface SessionRegistry {
 export interface RegistryOpts {
   getDb?: () => Database
   spawnFn?: SpawnFn
+  admission?: AdmissionController
 }
 
 export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry {
   const db = opts.getDb ?? getDb
   const bus = getEventBus()
+  const admission = opts.admission
   const runtimes = new Map<string, SessionRuntime>()
   const handles = new Map<string, WorkspaceHandle>()
+
+  function resolvePriority(mode: string, metadata?: Record<string, unknown>): SessionPriority {
+    return priorityForMode({ mode, metadata })
+  }
+
+  if (admission) {
+    bus.onKind('session.completed', (e) => { admission.release(e.sessionId) })
+    bus.onKind('session.deleted', (e) => { admission.release(e.sessionId) })
+  }
 
   function makeRuntime(startOpts: RuntimeStartOpts): SessionRuntime {
     return new SessionRuntime({
@@ -129,12 +146,26 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
     const slug = createOpts.slug ?? generateSlug()
     const workspaceRoot = createOpts.workspaceRoot ?? process.env['WORKSPACE_ROOT'] ?? './.minion-data'
 
-    const handle = await prepareWorkspace({
-      slug,
-      repoUrl: createOpts.repo,
-      workspaceRoot,
-      startRef: createOpts.startRef,
-    })
+    if (admission) {
+      const priority = resolvePriority(createOpts.mode, createOpts.metadata)
+      const decision = admission.tryAdmit(sessionId, priority)
+      if (!decision.admitted) {
+        throw new AdmissionDeniedError(decision)
+      }
+    }
+
+    let handle: WorkspaceHandle
+    try {
+      handle = await prepareWorkspace({
+        slug,
+        repoUrl: createOpts.repo,
+        workspaceRoot,
+        startRef: createOpts.startRef,
+      })
+    } catch (err) {
+      admission?.release(sessionId)
+      throw err
+    }
     injectAgentFiles(handle.cwd, undefined, workspaceRoot)
 
     const now = Date.now()
@@ -323,6 +354,9 @@ export function createSessionRegistry(opts: RegistryOpts = {}): SessionRegistry 
       if (row.claude_session_id) {
         try {
           const runtime = await resumeRuntime(row, row.command)
+          if (admission) {
+            admission.reserve(id, resolvePriority(row.mode, row.metadata))
+          }
           prepared.updateSession(db(), { id, status: 'running', updated_at: Date.now() })
           emitSnapshot(id)
           void runtime.start()

@@ -28,6 +28,7 @@ import {
 import { createDagScheduler } from './dag/scheduler'
 import { createLandingManager } from './dag/landing'
 import { LoopScheduler } from './loops/scheduler'
+import { createAdmissionController } from './orchestration/admission'
 import { DEFAULT_LOOPS } from './loops/definitions'
 import { listLoops } from './loops/store'
 import { ResourceMonitor } from './metrics/resource'
@@ -46,6 +47,9 @@ const DEFAULT_REPO = process.env['DEFAULT_REPO'] ?? ''
 const MAX_CONCURRENT_SESSIONS = Number(process.env['MAX_CONCURRENT_SESSIONS'] ?? 10)
 const MAX_CONCURRENT_LOOPS = Number(process.env['MAX_CONCURRENT_LOOPS'] ?? 3)
 const RESERVED_INTERACTIVE_SLOTS = Number(process.env['RESERVED_INTERACTIVE_SLOTS'] ?? 2)
+const RESERVED_SHIP_ROOT_SLOTS = Number(process.env['RESERVED_SHIP_ROOT_SLOTS'] ?? 1)
+const RESERVED_SHIP_VERIFY_SLOTS = Number(process.env['RESERVED_SHIP_VERIFY_SLOTS'] ?? 0)
+const RESERVED_DAG_TASK_SLOTS = Number(process.env['RESERVED_DAG_TASK_SLOTS'] ?? 0)
 const QUOTA_RETRY_MAX = Number(process.env['QUOTA_RETRY_MAX'] ?? 3)
 const QUOTA_DEFAULT_SLEEP_MS = Number(process.env['QUOTA_DEFAULT_SLEEP_MS'] ?? 5 * 60 * 1000)
 const DISK_PATH = process.env['METRICS_DISK_PATH'] ?? WORKSPACE_ROOT
@@ -61,7 +65,18 @@ const askpass = installAskpass()
 process.env['GIT_ASKPASS'] = askpass.envOverrides['GIT_ASKPASS']
 process.env['SSH_ASKPASS'] = askpass.envOverrides['SSH_ASKPASS']
 
-const registry = createSessionRegistry({ getDb: () => db })
+const admission = createAdmissionController({
+  totalCap: MAX_CONCURRENT_SESSIONS,
+  reservedSlots: {
+    interactive: RESERVED_INTERACTIVE_SLOTS,
+    'ship-root': RESERVED_SHIP_ROOT_SLOTS,
+    'ship-verify': RESERVED_SHIP_VERIFY_SLOTS,
+    'dag-task': RESERVED_DAG_TASK_SLOTS,
+    loop: 0,
+  },
+})
+
+const registry = createSessionRegistry({ getDb: () => db, admission })
 const bus = getEventBus()
 
 await registry.reconcileOnBoot()
@@ -90,6 +105,7 @@ const loopScheduler = new LoopScheduler({
   maxConcurrentSessions: MAX_CONCURRENT_SESSIONS,
   getInteractiveSessionCount: () =>
     registry.list().filter((s) => s.mode !== 'loop').length,
+  admission,
 })
 
 const replyQueueFactory: ReplyQueueFactory = {
