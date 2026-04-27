@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite"
 import { buildDag } from "./dag"
 import { saveDag, loadDag } from "./store"
 import { createDagScheduler } from "./scheduler"
+import { registerDagCompletionHandler } from "../handlers/dag-completion-handler"
 import { EngineEventBus } from "../events/bus"
 import { openDatabase, prepared, runMigrations } from "../db/sqlite"
 import { buildVerifyDirective } from "../ship/verification"
@@ -346,8 +347,20 @@ describe("DagScheduler", () => {
     }
 
     const scheduler = makeScheduler(registry)
+    registerDagCompletionHandler(bus, { db, registry, scheduler: { start: scheduler.start } })
+
+    const dagCompletedEvents: Array<{ dagId: string; rootSessionId: string; status: string }> = []
+    bus.onKind("dag.completed", (e) => {
+      dagCompletedEvents.push({ dagId: e.dagId, rootSessionId: e.rootSessionId, status: e.status })
+    })
+
     await scheduler.start("dag-ship-complete")
     await scheduler.onSessionCompleted("ship-child", "completed")
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(dagCompletedEvents).toEqual([
+      { dagId: "dag-ship-complete", rootSessionId: rootId, status: "completed" },
+    ])
 
     const row = prepared.getSession(db, rootId)
     expect(row?.stage).toBe("verify")
@@ -355,6 +368,56 @@ describe("DagScheduler", () => {
       { title: "Task A", description: "A", branch: "minion/test-ship-child", prUrl: null },
     ])
     expect(replies).toEqual([{ sessionId: rootId, text: expected }])
+  })
+
+  it("emits dag.completed without advancing ship for non-ship root sessions", async () => {
+    const graph = buildDag("dag-non-ship", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session-non-ship", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const dagCompletedEvents: Array<{ dagId: string; status: string }> = []
+    bus.onKind("dag.completed", (e) => {
+      dagCompletedEvents.push({ dagId: e.dagId, status: e.status })
+    })
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-non-ship")
+    await scheduler.onSessionCompleted(sessions[0]!, "completed")
+
+    expect(dagCompletedEvents).toEqual([{ dagId: "dag-non-ship", status: "completed" }])
+  })
+
+  it("emits dag.completed with status=failed when DAG terminates with failed nodes", async () => {
+    const graph = buildDag("dag-failed", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session-failed", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const dagCompletedEvents: Array<{ dagId: string; status: string }> = []
+    bus.onKind("dag.completed", (e) => {
+      dagCompletedEvents.push({ dagId: e.dagId, status: e.status })
+    })
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-failed")
+    await scheduler.onSessionCompleted(sessions[0]!, "errored")
+
+    expect(dagCompletedEvents).toEqual([{ dagId: "dag-failed", status: "failed" }])
   })
 
   it("cancel stops running sessions and marks them cancelled", async () => {
