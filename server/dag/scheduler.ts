@@ -117,6 +117,7 @@ export interface DagScheduler {
   retryNode(nodeId: string, dagId: string): Promise<void>
   forceNodeLanded(nodeId: string, dagId: string): Promise<void>
   reconcileOnBoot(): Promise<void>
+  persistDag(graph: DagGraph): void
 }
 
 export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
@@ -548,5 +549,5 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     })
   })
 
-  return { start, onSessionCompleted, onSessionResumed, cancel, status, retryNode, forceNodeLanded, reconcileOnBoot }
+  return { start, onSessionCompleted, onSessionResumed, cancel, status, retryNode, forceNodeLanded, reconcileOnBoot, persistDag: persist }
 }
