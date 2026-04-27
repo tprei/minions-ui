@@ -2,7 +2,12 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { createApiClient, ApiError } from '../../src/api/client'
 import { createMockMinion, type MockMinion } from '../../e2e/fixtures/mock-minion'
-import type { PrPreview, PushSubscriptionJSON, WorkspaceDiff } from '../../src/api/types'
+import type {
+  ApiSession,
+  PrPreview,
+  PushSubscriptionJSON,
+  WorkspaceDiff,
+} from '../../src/api/types'
 
 describe('mock-minion integration', () => {
   let minion: MockMinion
@@ -110,6 +115,97 @@ describe('mock-minion integration', () => {
     const blob = await client.fetchScreenshotBlob(entry!.url)
     const buf = Buffer.from(await blob.arrayBuffer())
     expect(buf.equals(png)).toBe(true)
+  })
+
+  it('submit_feedback records the command and spawns a feedback child session', async () => {
+    const parent: ApiSession = {
+      id: 'parent-1',
+      slug: 'parent-task',
+      status: 'running',
+      command: '/task do thing',
+      createdAt: '2026-04-19T00:00:00Z',
+      updatedAt: '2026-04-19T00:00:00Z',
+      childIds: [],
+      needsAttention: false,
+      attentionReasons: [],
+      quickActions: [],
+      mode: 'task',
+      conversation: [],
+    }
+    minion.setSessions([parent])
+
+    const before = minion.lastCommands.length
+    const result = await client.sendCommand({
+      action: 'submit_feedback',
+      sessionId: 'parent-1',
+      messageBlockId: 'block-7',
+      vote: 'down',
+      reason: 'incorrect',
+      comment: 'wrong answer',
+    })
+    expect(result.success).toBe(true)
+
+    expect(minion.lastCommands.length).toBe(before + 1)
+    const recorded = minion.lastCommands[minion.lastCommands.length - 1]
+    expect(recorded).toEqual({
+      action: 'submit_feedback',
+      sessionId: 'parent-1',
+      messageBlockId: 'block-7',
+      vote: 'down',
+      reason: 'incorrect',
+      comment: 'wrong answer',
+    })
+
+    const sessions = await client.getSessions()
+    const feedback = sessions.find((s) => s.parentId === 'parent-1')
+    expect(feedback).toBeDefined()
+    expect(feedback!.mode).toBe('feedback')
+    expect(feedback!.metadata).toMatchObject({
+      kind: 'feedback',
+      vote: 'down',
+      reason: 'incorrect',
+      comment: 'wrong answer',
+      sourceSessionId: 'parent-1',
+      sourceSessionSlug: 'parent-task',
+      sourceMessageBlockId: 'block-7',
+    })
+
+    const updatedParent = sessions.find((s) => s.id === 'parent-1')
+    expect(updatedParent?.childIds).toContain(feedback!.id)
+  })
+
+  it('submit_feedback (upvote without reason) still spawns a feedback child', async () => {
+    const parent: ApiSession = {
+      id: 'parent-2',
+      slug: 'good-task',
+      status: 'running',
+      command: '/task something',
+      createdAt: '2026-04-19T00:00:00Z',
+      updatedAt: '2026-04-19T00:00:00Z',
+      childIds: [],
+      needsAttention: false,
+      attentionReasons: [],
+      quickActions: [],
+      mode: 'task',
+      conversation: [],
+    }
+    minion.setSessions([parent])
+
+    await client.sendCommand({
+      action: 'submit_feedback',
+      sessionId: 'parent-2',
+      messageBlockId: 'block-9',
+      vote: 'up',
+    })
+
+    const sessions = await client.getSessions()
+    const feedback = sessions.find((s) => s.parentId === 'parent-2')
+    expect(feedback).toBeDefined()
+    expect(feedback!.metadata).toMatchObject({
+      kind: 'feedback',
+      vote: 'up',
+      sourceMessageBlockId: 'block-9',
+    })
   })
 
   it('web push flow: getVapidKey → subscribe → unsubscribe', async () => {
