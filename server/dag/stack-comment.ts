@@ -3,8 +3,10 @@ import { promisify } from "node:util"
 import { renderDagForGitHub, upsertDagSection } from "./dag"
 import type { DagGraph } from "./dag"
 import type { ExecCall, ExecFn } from "./preflight"
+import { createLogger } from "./logger"
 
 const execFileP = promisify(execFileCb)
+const log = createLogger("stack-comment")
 
 function defaultExec({ cmd, args, opts }: ExecCall): Promise<{ stdout: string; stderr: string }> {
   return execFileP(cmd, args, opts ?? {}) as Promise<{ stdout: string; stderr: string }>
@@ -41,9 +43,10 @@ export async function updateStackComment(graph: DagGraph, execFn: ExecFn = defau
     }),
   )
 
-  for (const result of results) {
+  results.forEach((result, i) => {
     if (result.status === "rejected") {
-      console.error("[stack-comment] failed to update PR:", result.reason)
+      const node = openPrNodes[i]!
+      log.error({ dagId: graph.id, nodeId: node.id, prUrl: node.prUrl, err: result.reason }, "failed to update PR body")
     }
-  }
+  })
 }

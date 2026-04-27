@@ -9,8 +9,10 @@ import type { DagGraph, DagNode } from "./dag"
 import type { EngineEventBus } from "../events/bus"
 import type { ExecCall, ExecFn } from "./preflight"
 import type { SessionRegistry } from "../session/registry"
+import { createLogger } from "./logger"
 
 const execFileP = promisify(execFileCb)
+const log = createLogger("landing")
 
 function defaultExec({ cmd, args, opts }: ExecCall): Promise<{ stdout: string; stderr: string }> {
   return execFileP(cmd, args, opts ?? {}) as Promise<{ stdout: string; stderr: string }>
@@ -104,7 +106,7 @@ export function createLandingManager(opts: LandingManagerOpts): LandingManager {
     for (const node of prNodes) {
       const parsed = parsePrUrl(node.prUrl!)
       if (!parsed) {
-        console.error(`[landing] cannot parse PR URL ${node.prUrl}`)
+        log.error({ dagId: graph.id, nodeId: node.id, prUrl: node.prUrl }, "cannot parse PR URL")
         continue
       }
       try {
@@ -121,7 +123,7 @@ export function createLandingManager(opts: LandingManagerOpts): LandingManager {
           opts: { timeout: 30_000, encoding: "utf-8" },
         })
       } catch (err) {
-        console.error(`[landing] failed to retarget PR ${node.prUrl} to main:`, err)
+        log.error({ dagId: graph.id, nodeId: node.id, prUrl: node.prUrl, err }, "failed to retarget PR to main")
       }
     }
   }
@@ -134,7 +136,7 @@ export function createLandingManager(opts: LandingManagerOpts): LandingManager {
 
       const cwd = worktreeDir(workspaceRoot, node.branch)
       if (!fs.existsSync(cwd)) {
-        console.error(`[landing] skip rebase for ${node.id}: worktree ${cwd} missing`)
+        log.error({ dagId: graph.id, nodeId: node.id, cwd }, "skip rebase: worktree missing")
         continue
       }
 
@@ -152,7 +154,7 @@ export function createLandingManager(opts: LandingManagerOpts): LandingManager {
         })
         await run({ cmd: "git", args: ["push", "--force-with-lease"], opts: { cwd, timeout: 60_000, encoding: "utf-8" } })
       } catch (err) {
-        console.error(`[landing] rebase failed for node ${node.id} branch ${node.branch}:`, err)
+        log.error({ dagId: graph.id, nodeId: node.id, branch: node.branch, err }, "rebase failed")
       }
     }
   }
@@ -204,7 +206,7 @@ export function createLandingManager(opts: LandingManagerOpts): LandingManager {
       try {
         persistDag(graph)
       } catch (err) {
-        console.error(`[landing] persistDag failed for ${nodeId}:`, err)
+        log.error({ dagId: graph.id, nodeId, err }, "persistDag failed")
       }
     }
 
@@ -214,7 +216,7 @@ export function createLandingManager(opts: LandingManagerOpts): LandingManager {
         await registry.close(node.sessionId)
         closedSessionId = node.sessionId
       } catch (err) {
-        console.error(`[landing] failed to close session ${node.sessionId} for node ${nodeId}:`, err)
+        log.error({ dagId: graph.id, nodeId, sessionId: node.sessionId, err }, "failed to close session")
       }
     }
 
