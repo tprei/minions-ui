@@ -71,7 +71,7 @@ export function ChatPanel({
           class="mt-1 text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wide font-medium px-3 py-1 hover:text-slate-600 dark:hover:text-slate-300 min-h-[24px]"
           data-testid="chat-panel-snap-indicator"
         >
-          {currentSnap === 'peek' ? 'Swipe up' : currentSnap === 'half' ? 'Half' : 'Full'}
+          {currentSnap === 'peek' ? 'Swipe up' : currentSnap === 'half' ? 'Swipe up' : 'Swipe down'}
         </button>
       </div>
       <div class="flex-1 min-h-0 overflow-hidden">

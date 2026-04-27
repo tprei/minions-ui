@@ -73,7 +73,7 @@ export function WorktreeHeader({
 
   return (
     <div
-      class="flex items-center gap-3 px-4 py-1.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 text-xs shrink-0"
+      class="flex items-center gap-3 px-4 py-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 text-xs shrink-0"
       data-testid="worktree-header"
     >
       {session.branch && (
