@@ -720,6 +720,47 @@ describe('universe-layout', () => {
     expect(cross?.animated).toBe(false)
   })
 
+  it('attaches dagProgressIndex and dagProgressTotal to DAG nodes', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const dag = makeDag({
+      id: 'dag-1',
+      nodes: {
+        a: { id: 'a', slug: 'first', status: 'completed', dependencies: [], dependents: ['b'] },
+        b: { id: 'b', slug: 'second', status: 'running', dependencies: ['a'], dependents: ['c'] },
+        c: { id: 'c', slug: 'third', status: 'pending', dependencies: ['b'], dependents: [] },
+      },
+    })
+
+    const result = layoutUniverse([], [dag], false)
+
+    expect(result.nodes).toHaveLength(3)
+    for (const n of result.nodes) {
+      expect(n.data.dagProgressTotal).toBe(3)
+    }
+    const a = result.nodes.find((n) => n.id === 'a')!
+    const b = result.nodes.find((n) => n.id === 'b')!
+    const c = result.nodes.find((n) => n.id === 'c')!
+    expect(a.data.dagProgressIndex).toBe(1)
+    expect(b.data.dagProgressIndex).toBe(2)
+    expect(c.data.dagProgressIndex).toBe(3)
+  })
+
+  it('does not attach DAG progress fields to standalone or parent-child nodes', async () => {
+    const { layoutUniverse } = await import('../../src/components/universe-layout')
+    const sessions = [
+      makeSession({ id: 'p', slug: 'parent', childIds: ['c'] }),
+      makeSession({ id: 'c', slug: 'child', parentId: 'p' }),
+      makeSession({ id: 'solo', slug: 'solo' }),
+    ]
+
+    const result = layoutUniverse(sessions, [], false)
+
+    for (const n of result.nodes) {
+      expect(n.data.dagProgressIndex).toBeUndefined()
+      expect(n.data.dagProgressTotal).toBeUndefined()
+    }
+  })
+
   it('renders ship coordinator (mode=ship) with stage in ship group', async () => {
     const { layoutUniverse } = await import('../../src/components/universe-layout')
     const coordinator = makeSession({

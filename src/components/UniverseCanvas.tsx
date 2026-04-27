@@ -17,7 +17,8 @@ import '@reactflow/core/dist/base.css'
 import '@reactflow/controls/dist/style.css'
 import '@reactflow/minimap/dist/style.css'
 import type { ApiSession, ApiDagGraph, FeedbackMetadata } from '../api/types'
-import { StatusBadge, AttentionIconStack, getStatusColors, getAttentionBorder, formatRelativeTime } from './shared'
+import { StatusBadge, AttentionIconStack, STATUS_CONFIG, getStatusColors, getAttentionBorder, formatRelativeTime } from './shared'
+import type { StatusType } from './shared'
 import { PrLink } from './PrLink'
 import { ContextMenu, useLongPress, useContextMenu } from './ContextMenu'
 import type { ContextMenuActions, DagContext } from './ContextMenu'
@@ -49,10 +50,22 @@ interface UniverseNodeData {
   nodeType: 'dag' | 'parent-child' | 'standalone' | 'ship'
   isDark: boolean
   scale: number
+  dagProgressIndex?: number
+  dagProgressTotal?: number
   onContextMenu: (session: ApiSession, position: { x: number; y: number }) => void
   onNodeClick: (session: ApiSession) => void
   onRetryNode?: (session: ApiSession) => void
   onViewNodeLogs?: (sessionId: string) => void
+}
+
+export function formatDagProgressBadge(
+  index: number,
+  total: number,
+  status: string,
+): string {
+  const config = STATUS_CONFIG[status as StatusType]
+  const label = config?.label ?? status
+  return `${index}/${total} · ${label}`
 }
 
 function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
@@ -182,7 +195,7 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
           </div>
         </div>
 
-        <div class="flex items-center gap-2 mt-1">
+        <div class="flex items-center gap-2 mt-1 flex-wrap">
           {isRebasing && (
             <span class="inline-flex items-center gap-1.5 text-xs" data-testid="rebasing-indicator">
               <span
@@ -192,6 +205,21 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
             </span>
           )}
           <StatusBadge status={status} />
+          {data.dagProgressIndex !== undefined &&
+            data.dagProgressTotal !== undefined &&
+            data.dagProgressTotal > 1 && (
+              <span
+                class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold tabular-nums"
+                style={{
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                  color: isDark ? 'rgba(229,231,235,0.85)' : 'rgba(31,41,55,0.75)',
+                }}
+                data-testid="dag-progress-badge"
+                title={`Step ${data.dagProgressIndex} of ${data.dagProgressTotal}`}
+              >
+                {formatDagProgressBadge(data.dagProgressIndex, data.dagProgressTotal, data.status)}
+              </span>
+            )}
           {session?.needsAttention && session.attentionReasons.length > 0 && (
             <AttentionIconStack reasons={session.attentionReasons} darkMode={isDark} />
           )}

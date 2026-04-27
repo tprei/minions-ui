@@ -39,8 +39,9 @@ import type { ApiSession, AttentionReason, MinionCommand } from './api/types'
 import { HeaderMenu } from './components/HeaderMenu'
 import { MemoryDrawer } from './components/MemoryDrawer'
 import { KanbanView } from './components/KanbanView'
+import { TimelineView } from './components/TimelineView'
 
-export type ViewMode = 'list' | 'canvas' | 'ship' | 'kanban'
+export type ViewMode = 'list' | 'canvas' | 'ship' | 'kanban' | 'timeline'
 
 const showSettings = signal(false)
 const showDrawer = signal(false)
@@ -89,6 +90,18 @@ function ViewToggle({ mode, onChange, showKanban }: { mode: ViewMode; onChange: 
           <span class="hidden sm:inline">Kanban</span>
         </button>
       )}
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'timeline'}
+        aria-label="Timeline"
+        onClick={() => onChange('timeline')}
+        class={`${tabClass(mode === 'timeline')} border-l border-slate-300 dark:border-slate-600`}
+        data-testid="view-toggle-timeline"
+      >
+        <span class="sm:hidden" aria-hidden="true">≡</span>
+        <span class="hidden sm:inline">Timeline</span>
+      </button>
       <button
         type="button"
         role="tab"
@@ -693,6 +706,17 @@ function ActiveView() {
               onSessionSelect={handleOpenChat}
             />
           </div>
+        ) : mode === 'timeline' ? (
+          <div class="flex flex-1 min-h-0" data-testid="timeline-pane">
+            <TimelineView
+              store={store}
+              sessions={sessions}
+              dags={dags}
+              sessionId={sessionId}
+              onSelect={selectSession}
+              isDesktop
+            />
+          </div>
         ) : (
           <DesktopBody
             sessions={sessions}
@@ -803,6 +827,35 @@ function ActiveView() {
           </div>
           <div class="flex-1 min-h-0 flex flex-col">
             <ShipPipelineView dags={dags} onOpenChat={handleOpenChat} />
+          </div>
+        </div>
+      )}
+      {!isDesktop.value && mode === 'timeline' && (
+        <div
+          class="fixed inset-0 z-40 bg-slate-50 dark:bg-slate-900 flex flex-col"
+          data-testid="timeline-mobile-modal"
+        >
+          <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
+            <span class="text-sm font-medium text-slate-900 dark:text-slate-100">Timeline</span>
+            <button
+              type="button"
+              onClick={() => { viewMode.value = 'list' }}
+              class="ml-auto rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-2.5 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700 min-h-[44px]"
+              data-testid="timeline-mobile-close"
+              aria-label="Close timeline"
+            >
+              Close
+            </button>
+          </div>
+          <div class="flex-1 min-h-0 flex flex-col">
+            <TimelineView
+              store={store}
+              sessions={sessions}
+              dags={dags}
+              sessionId={sessionId}
+              onSelect={selectSession}
+              isDesktop={false}
+            />
           </div>
         </div>
       )}

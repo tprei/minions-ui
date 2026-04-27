@@ -767,4 +767,64 @@ describe('loadPersistedViewport / savePersistedViewport', () => {
     expect(document.body.innerHTML).toContain('Tree')
     expect(document.body.innerHTML).toContain('Feedback')
   })
+
+  it('renders DAG progress badge on multi-node DAG nodes', () => {
+    const dag = createDag({
+      nodes: {
+        a: {
+          id: 'a',
+          slug: 'first',
+          status: 'completed',
+          dependencies: [],
+          dependents: ['b'],
+          session: createSession({ id: 'sess-a', slug: 'first' }),
+        },
+        b: {
+          id: 'b',
+          slug: 'second',
+          status: 'running',
+          dependencies: ['a'],
+          dependents: ['c'],
+          session: createSession({ id: 'sess-b', slug: 'second', status: 'running' }),
+        },
+        c: {
+          id: 'c',
+          slug: 'third',
+          status: 'pending',
+          dependencies: ['b'],
+          dependents: [],
+          session: createSession({ id: 'sess-c', slug: 'third', status: 'pending' }),
+        },
+      },
+    })
+    render(<UniverseCanvas {...defaultProps} dags={[dag]} />)
+    const badges = document.querySelectorAll('[data-testid="dag-progress-badge"]')
+    expect(badges).toHaveLength(3)
+    const labels = Array.from(badges).map((b) => b.textContent)
+    expect(labels).toContain('1/3 · Done')
+    expect(labels).toContain('2/3 · Running')
+    expect(labels).toContain('3/3 · Idle')
+  })
+
+  it('omits the DAG progress badge on single-node DAGs', () => {
+    const dag = createDag({
+      nodes: {
+        only: {
+          id: 'only',
+          slug: 'only',
+          status: 'running',
+          dependencies: [],
+          dependents: [],
+          session: createSession({ id: 'sess-only', slug: 'only' }),
+        },
+      },
+    })
+    render(<UniverseCanvas {...defaultProps} dags={[dag]} />)
+    expect(document.querySelector('[data-testid="dag-progress-badge"]')).toBeFalsy()
+  })
+
+  it('omits the DAG progress badge on standalone (non-DAG) sessions', () => {
+    render(<UniverseCanvas {...defaultProps} sessions={[createSession()]} />)
+    expect(document.querySelector('[data-testid="dag-progress-badge"]')).toBeFalsy()
+  })
 })

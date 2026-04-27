@@ -20,11 +20,34 @@ export type UniverseNode = Node<{
   status: string
   groupId: string
   nodeType: 'dag' | 'parent-child' | 'standalone' | 'ship'
+  dagProgressIndex?: number
+  dagProgressTotal?: number
 }>
 
 export type UniverseEdge = Edge<{
   relationship: EdgeRelationship
 }>
+
+export function topologicalDagOrder(dagNodes: ApiDagNode[]): Map<string, number> {
+  const byId = new Map<string, ApiDagNode>(dagNodes.map((n) => [n.id, n]))
+  const visited = new Set<string>()
+  const order: string[] = []
+
+  function visit(id: string): void {
+    if (visited.has(id)) return
+    const node = byId.get(id)
+    if (!node) return
+    visited.add(id)
+    for (const dep of node.dependencies) visit(dep)
+    order.push(id)
+  }
+
+  for (const node of dagNodes) visit(node.id)
+
+  const result = new Map<string, number>()
+  order.forEach((id, idx) => result.set(id, idx + 1))
+  return result
+}
 
 interface LayoutGroup {
   id: string
@@ -69,6 +92,9 @@ function layoutDagGroup(dag: ApiDagGraph, isDark: boolean): LayoutGroup {
 
   dagre.layout(g)
 
+  const order = topologicalDagOrder(dagNodes)
+  const total = dagNodes.length
+
   const nodes: Node[] = dagNodes.map((dagNode) => {
     const pos = g.node(dagNode.id)
     return {
@@ -85,6 +111,8 @@ function layoutDagGroup(dag: ApiDagGraph, isDark: boolean): LayoutGroup {
         status: dagNode.status,
         groupId: `dag-${dag.id}`,
         nodeType: 'dag' as const,
+        dagProgressIndex: order.get(dagNode.id),
+        dagProgressTotal: total,
       },
     }
   })
