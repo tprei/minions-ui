@@ -187,7 +187,7 @@ describe('getStatusColors', () => {
 
   it('covers all statuses', () => {
     const colors = getStatusColors(false)
-    expect(Object.keys(colors)).toEqual(['pending', 'running', 'completed', 'failed', 'skipped', 'ci-pending', 'ci-failed', 'landed', 'rebasing', 'rebase-conflict'])
+    expect(Object.keys(colors)).toEqual(['pending', 'running', 'completed', 'failed', 'skipped', 'ci-pending', 'ci-failed', 'landed', 'rebasing', 'rebase-conflict', 'cancelled'])
   })
 
   it('each status has bg, border, and text', () => {

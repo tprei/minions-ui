@@ -100,7 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_session_checkpoints_dag_node ON session_checkpoin
 CREATE TABLE IF NOT EXISTS dags (
   id TEXT PRIMARY KEY,
   root_task_id TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('pending','running','completed','failed')),
+  status TEXT NOT NULL CHECK (status IN ('pending','running','completed','failed','cancelled')),
   repo TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS dag_nodes (
   dag_id TEXT NOT NULL REFERENCES dags(id) ON DELETE CASCADE,
   id TEXT NOT NULL,
   slug TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('pending','running','completed','failed','skipped','ci-pending','ci-failed','landed')),
+  status TEXT NOT NULL CHECK (status IN ('pending','running','completed','failed','skipped','ci-pending','ci-failed','landed','cancelled')),
   session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
   dependencies TEXT NOT NULL DEFAULT '[]',
   dependents TEXT NOT NULL DEFAULT '[]',
