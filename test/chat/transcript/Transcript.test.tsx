@@ -1,8 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/preact'
+import { signal } from '@preact/signals'
 import { Transcript } from '../../../src/chat/transcript/Transcript'
 import { createTranscriptStore } from '../../../src/state/transcript'
 import type { ApiClient } from '../../../src/api/client'
+import type { ConnectionStore } from '../../../src/state/types'
 import type {
   TranscriptEvent,
   TranscriptSnapshot,
@@ -200,6 +202,73 @@ describe('Transcript', () => {
     await flush()
     await waitFor(() => expect(screen.getByTestId('transcript-tool-call')).toBeTruthy())
     expect(screen.queryByTestId('transcript-tool-group')).toBeNull()
+  })
+
+  it('threads connectionStore so finalized assistant text renders feedback buttons', async () => {
+    const events: TranscriptEvent[] = [
+      { ...baseEvent(1), type: 'user_message', text: 'hi' },
+      { ...baseEvent(2), type: 'assistant_text', blockId: 'b1', text: 'hello back', final: true },
+    ]
+    const client = makeClient(snapshot(events))
+    const store = createTranscriptStore({ client, slug: 's' })
+    const connectionStore = {
+      connectionId: 'conn-1',
+      version: signal({
+        apiVersion: '2.0.0',
+        libraryVersion: '1.110.0',
+        features: ['message-feedback'],
+      }),
+      client: { submitFeedback: vi.fn() },
+    } as unknown as ConnectionStore
+
+    render(<Transcript store={store} connectionStore={connectionStore} />)
+    await flush()
+    await waitFor(() => expect(screen.getByTestId('transcript-assistant-text')).toBeTruthy())
+    expect(screen.getByTestId('feedback-buttons')).toBeTruthy()
+  })
+
+  it('omits feedback buttons on streaming (non-final) assistant text', async () => {
+    const initial: TranscriptEvent[] = [
+      { ...baseEvent(1), type: 'user_message', text: 'q' },
+    ]
+    const client = makeClient(snapshot(initial))
+    const store = createTranscriptStore({ client, slug: 's' })
+    const connectionStore = {
+      connectionId: 'conn-1',
+      version: signal({
+        apiVersion: '2.0.0',
+        libraryVersion: '1.110.0',
+        features: ['message-feedback'],
+      }),
+      client: { submitFeedback: vi.fn() },
+    } as unknown as ConnectionStore
+
+    render(<Transcript store={store} connectionStore={connectionStore} />)
+    await flush()
+
+    store.applyEvent({
+      ...baseEvent(2),
+      type: 'assistant_text',
+      blockId: 'b1',
+      text: 'streaming',
+      final: false,
+    })
+
+    await waitFor(() => expect(screen.getByTestId('transcript-streaming-indicator')).toBeTruthy())
+    expect(screen.queryByTestId('feedback-buttons')).toBeNull()
+  })
+
+  it('does not render feedback buttons when connectionStore is omitted', async () => {
+    const events: TranscriptEvent[] = [
+      { ...baseEvent(1), type: 'user_message', text: 'hi' },
+      { ...baseEvent(2), type: 'assistant_text', blockId: 'b1', text: 'hello back', final: true },
+    ]
+    const client = makeClient(snapshot(events))
+    const store = createTranscriptStore({ client, slug: 's' })
+    render(<Transcript store={store} />)
+    await flush()
+    await waitFor(() => expect(screen.getByTestId('transcript-assistant-text')).toBeTruthy())
+    expect(screen.queryByTestId('feedback-buttons')).toBeNull()
   })
 
   it('renders an error banner when fetch fails and exposes Retry', async () => {

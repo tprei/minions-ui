@@ -1,11 +1,15 @@
 import type { AssistantTextEvent } from '../../api/types'
+import type { ConnectionStore } from '../../state/types'
 import { MarkdownView } from '../../components/MarkdownView'
+import { FeedbackButtons } from './FeedbackButtons'
 
 interface Props {
   event: AssistantTextEvent
+  sessionId?: string
+  store?: ConnectionStore
 }
 
-export function AssistantTextBlock({ event }: Props) {
+export function AssistantTextBlock({ event, sessionId, store }: Props) {
   return (
     <div class="flex gap-3 justify-start" data-testid="transcript-assistant-text">
       <div class="shrink-0 mt-1 w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
@@ -22,6 +26,11 @@ export function AssistantTextBlock({ event }: Props) {
             aria-label="Streaming"
             data-testid="transcript-streaming-indicator"
           />
+        )}
+        {event.final && sessionId && store && (
+          <div class="mt-1.5">
+            <FeedbackButtons sessionId={sessionId} blockId={event.blockId} store={store} />
+          </div>
         )}
       </div>
     </div>
