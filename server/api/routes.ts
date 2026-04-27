@@ -118,6 +118,15 @@ const ImageSchema = z.object({
   dataBase64: z.string().min(1),
 })
 
+function parseLandMode(rest: string): 'best-effort' | 'all-or-nothing' | 'invalid' | undefined {
+  const arg = rest.trim()
+  if (!arg) return undefined
+  const normalized = arg.toLowerCase()
+  if (normalized === 'all-or-nothing' || normalized === 'atomic') return 'all-or-nothing'
+  if (normalized === 'best-effort' || normalized === 'partial') return 'best-effort'
+  return 'invalid'
+}
+
 function validateImagePayloads(
   images: Array<{ dataBase64: string }> | undefined,
 ): string | null {
@@ -149,7 +158,7 @@ const CommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('stop'), sessionId: z.string() }),
   z.object({ action: z.literal('close'), sessionId: z.string() }),
   z.object({ action: z.literal('plan_action'), sessionId: z.string(), planAction: z.enum(['execute', 'split', 'stack', 'dag']), markdown: z.string().optional(), message: z.string().optional() }),
-  z.object({ action: z.literal('land'), dagId: z.string(), nodeId: z.string() }),
+  z.object({ action: z.literal('land'), dagId: z.string(), nodeId: z.string(), mode: z.enum(['best-effort', 'all-or-nothing']).optional() }),
   z.object({ action: z.literal('retry_rebase'), dagId: z.string(), nodeId: z.string() }),
   z.object({ action: z.literal('ship_advance'), sessionId: z.string(), to: z.enum(['think', 'plan', 'dag', 'verify', 'done']).optional() }),
   z.object({
@@ -498,6 +507,7 @@ export function registerApiRoutes(
         const result = await handleLandCommand(command.nodeId, command.dagId, {
           landingManager,
           db: resolveDb(),
+          mode: command.mode,
         })
         const body: ApiResponse<CommandResult> = {
           data: result.ok ? { success: true } : { success: false, error: result.error ?? 'land failed' },
@@ -723,6 +733,11 @@ export function registerApiRoutes(
         const graph = findDagForSession(db, sessionId)
         if (!graph) return c.json({ error: 'no DAG associated with this session' }, 422)
 
+        const mode = parseLandMode(rest)
+        if (mode === 'invalid') {
+          return c.json({ error: `unknown /land argument "${rest}"; expected "all-or-nothing" or "best-effort"` }, 400)
+        }
+
         const idx = nodeIndex(graph)
         const order = topologicalSort(graph)
         const landable = order
@@ -733,44 +748,71 @@ export function registerApiRoutes(
           return c.json({ error: 'no nodes with a PR URL are ready to land' }, 422)
         }
 
+        const effectiveMode = mode ?? 'best-effort'
         console.log(
-          `[land] dag=${graph.id} attempting ${landable.length} node(s):`,
+          `[land] dag=${graph.id} mode=${effectiveMode} attempting ${landable.length} node(s):`,
           landable.map((n) => `${n.id}@${n.prUrl}`).join(', '),
         )
-        const landed: Array<{ nodeId: string; prUrl?: string; closedSessionId?: string }> = []
-        const failed: Array<{ nodeId: string; error: string }> = []
-        for (const node of landable) {
-          console.log(`[land] dag=${graph.id} node=${node.id} pr=${node.prUrl} -> attempting merge`)
-          const result = await landingManager.landNode(node.id, graph)
-          if (result.ok) {
-            console.log(
-              `[land] dag=${graph.id} node=${node.id} merged${
-                result.closedSessionId ? ` (closed session ${result.closedSessionId})` : ''
-              }`,
-            )
-            landed.push({
-              nodeId: node.id,
-              prUrl: result.prUrl,
-              closedSessionId: result.closedSessionId,
-            })
-          } else {
-            console.error(`[land] dag=${graph.id} node=${node.id} failed: ${result.error}`)
-            failed.push({ nodeId: node.id, error: result.error ?? 'unknown error' })
+
+        const sequence = await landingManager.landSequence(
+          landable.map((n) => n.id),
+          graph,
+          { mode: effectiveMode },
+        )
+
+        const landed = sequence.landed.map((r) => {
+          const node = landable.find((n) => n.prUrl === r.prUrl)
+          return {
+            nodeId: node?.id ?? '',
+            prUrl: r.prUrl,
+            closedSessionId: r.closedSessionId,
           }
+        })
+        const failed = sequence.failed.map((r) => {
+          const node = landable.find((n) => n.prUrl === r.prUrl)
+          return { nodeId: node?.id ?? '', error: r.error ?? 'unknown error' }
+        })
+
+        for (const l of landed) {
+          console.log(
+            `[land] dag=${graph.id} node=${l.nodeId} merged${
+              l.closedSessionId ? ` (closed session ${l.closedSessionId})` : ''
+            }`,
+          )
         }
+        for (const f of failed) {
+          console.error(`[land] dag=${graph.id} node=${f.nodeId} failed: ${f.error}`)
+        }
+
+        if (sequence.rollback) {
+          console.warn(
+            `[land] dag=${graph.id} rollback ${sequence.rollback.fullySuccessful ? 'completed' : 'partial'}: ${sequence.rollback.entries
+              .map((e) => `${e.nodeId}=${e.reverted ? 'reverted' : 'failed'}`)
+              .join(', ')}`,
+          )
+        }
+
         console.log(
-          `[land] dag=${graph.id} done: landed=${landed.length} failed=${failed.length}`,
+          `[land] dag=${graph.id} done: landed=${landed.length} failed=${failed.length}${
+            sequence.rollback ? ` rolledBack=${sequence.rollback.entries.filter((e) => e.reverted).length}` : ''
+          }`,
         )
 
         return c.json({
           data: {
-            ok: failed.length === 0,
+            ok: sequence.ok,
             sessionId,
             dagId: graph.id,
-            attempted: landable.length,
+            mode: effectiveMode,
+            attempted: sequence.attempted,
             landed: landed.length,
             failed: failed.length,
-            details: { landed, failed },
+            aborted: sequence.aborted,
+            details: {
+              landed,
+              failed,
+              ...(sequence.rollback ? { rollback: sequence.rollback } : {}),
+            },
           },
         })
       }
