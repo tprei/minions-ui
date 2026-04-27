@@ -57,6 +57,7 @@ import { handleConfigCommand } from '../commands/config'
 import { handleLoopsCommand } from '../commands/loops'
 import { handleDoneCommand } from '../commands/done'
 import { handleDoctorCommand } from '../commands/doctor'
+import { handleSubmitFeedback } from '../commands/feedback'
 import { getProvider } from '../session/providers/index'
 import { buildMergeReadiness } from '../readiness/merge-readiness'
 import { buildReadinessSummary } from '../readiness/summary'
@@ -539,6 +540,35 @@ export function registerApiRoutes(
           data: result.ok
             ? { success: true, ...(result.dagId ? { dagId: result.dagId } : {}) }
             : { success: false, error: result.reason ?? 'ship advance failed' },
+        } satisfies ApiResponse<CommandResult>)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return c.json({ data: { success: false, error: message } } satisfies ApiResponse<CommandResult>)
+      }
+    }
+
+    if (command.action === 'submit_feedback') {
+      const db = resolveDb()
+      const sessionRow = prepared.getSession(db, command.sessionId)
+      if (!sessionRow) {
+        return c.json({ data: { success: false, error: 'session not found' } } satisfies ApiResponse<CommandResult>)
+      }
+      try {
+        const result = await handleSubmitFeedback(
+          {
+            sourceSessionId: command.sessionId,
+            sourceSessionSlug: sessionRow.slug,
+            sourceMessageBlockId: command.messageBlockId,
+            vote: command.vote,
+            reason: command.reason,
+            comment: command.comment,
+          },
+          { registry, db },
+        )
+        return c.json({
+          data: result.ok
+            ? { success: true, ...(result.childSessionId && { sessionId: result.childSessionId }) }
+            : { success: false, error: result.error ?? 'submit_feedback failed' },
         } satisfies ApiResponse<CommandResult>)
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
