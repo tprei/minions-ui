@@ -755,6 +755,229 @@ describe('POST /api/commands', () => {
     expect(feedbackEvent?.metadata.comment).toBe('Wrong approach')
   })
 
+  test('submit_feedback rejects vote=maybe with 400', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          sessionId: 'whatever',
+          messageBlockId: 'reply-1',
+          vote: 'maybe',
+        }),
+      }),
+    )
+    expect(res.status).toBe(400)
+  })
+
+  test('submit_feedback downvote with reason spawns child feedback session', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'feedback-down-'))
+    const repo = path.join(root, 'repo')
+    const workspaceRoot = path.join(root, 'workspaces')
+    const previousWorkspaceRoot = process.env['WORKSPACE_ROOT']
+    mkdirSync(repo, { recursive: true })
+
+    try {
+      process.env['WORKSPACE_ROOT'] = workspaceRoot
+      await runGit(repo, ['init', '-b', 'main'])
+      await runGit(repo, ['config', 'user.email', 'minions@example.test'])
+      await runGit(repo, ['config', 'user.name', 'Minions Test'])
+      writeFileSync(path.join(repo, 'README.txt'), 'base\n')
+      await runGit(repo, ['add', 'README.txt'])
+      await runGit(repo, ['commit', '-m', 'initial'])
+
+      const now = Date.now()
+      prepared.insertSession(testDb, {
+        id: 'parent-down',
+        slug: 'parent-down',
+        status: 'completed',
+        command: 'test task',
+        mode: 'task',
+        repo,
+        branch: null,
+        bare_dir: null,
+        pr_url: null,
+        parent_id: null,
+        variant_group_id: null,
+        claude_session_id: null,
+        workspace_root: null,
+        created_at: now,
+        updated_at: now,
+        needs_attention: false,
+        attention_reasons: [],
+        quick_actions: [],
+        conversation: [],
+        quota_sleep_until: null,
+        quota_retry_count: 0,
+        metadata: {},
+        pipeline_advancing: false,
+        stage: null,
+        coordinator_children: [],
+      })
+      prepared.insertEvent(testDb, {
+        session_id: 'parent-down',
+        seq: 1,
+        turn: 1,
+        type: 'assistant_text',
+        timestamp: now,
+        payload: {
+          type: 'assistant_text',
+          blockId: 'reply-1',
+          text: 'Here is my answer',
+          final: true,
+        },
+      })
+
+      const app = makeApp(testDb)
+      const res = await app.fetch(
+        new Request('http://localhost/api/commands', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'submit_feedback',
+            sessionId: 'parent-down',
+            messageBlockId: 'reply-1',
+            vote: 'down',
+            reason: 'incorrect',
+            comment: 'Bad approach',
+          }),
+        }),
+      )
+
+      expect(res.status).toBe(200)
+      const body = await json<{ data: { success: boolean; sessionId?: string; error?: string } }>(res)
+      expect(body.data.success).toBe(true)
+      expect(body.data.sessionId).toBeTruthy()
+
+      const child = prepared.getSession(testDb, body.data.sessionId!)
+      expect(child).toBeTruthy()
+      expect(child?.parent_id).toBe('parent-down')
+      expect(child?.mode).toBe('task')
+      expect(child?.metadata['kind']).toBe('feedback')
+      expect(child?.metadata['vote']).toBe('down')
+      expect(child?.metadata['reason']).toBe('incorrect')
+      expect(child?.metadata['comment']).toBe('Bad approach')
+      expect(child?.metadata['sourceSessionId']).toBe('parent-down')
+      expect(child?.metadata['sourceMessageBlockId']).toBe('reply-1')
+
+      await waitForCondition(() =>
+        prepared.listSessionCheckpoints(testDb, body.data.sessionId!).some((cp) => cp.kind === 'completion'),
+      )
+    } finally {
+      if (previousWorkspaceRoot !== undefined) {
+        process.env['WORKSPACE_ROOT'] = previousWorkspaceRoot
+      } else {
+        delete process.env['WORKSPACE_ROOT']
+      }
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('submit_feedback upvote without reason spawns child feedback session and records audit', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'feedback-up-'))
+    const repo = path.join(root, 'repo')
+    const workspaceRoot = path.join(root, 'workspaces')
+    const previousWorkspaceRoot = process.env['WORKSPACE_ROOT']
+    mkdirSync(repo, { recursive: true })
+
+    try {
+      process.env['WORKSPACE_ROOT'] = workspaceRoot
+      await runGit(repo, ['init', '-b', 'main'])
+      await runGit(repo, ['config', 'user.email', 'minions@example.test'])
+      await runGit(repo, ['config', 'user.name', 'Minions Test'])
+      writeFileSync(path.join(repo, 'README.txt'), 'base\n')
+      await runGit(repo, ['add', 'README.txt'])
+      await runGit(repo, ['commit', '-m', 'initial'])
+
+      const now = Date.now()
+      prepared.insertSession(testDb, {
+        id: 'parent-up',
+        slug: 'parent-up',
+        status: 'completed',
+        command: 'test task',
+        mode: 'task',
+        repo,
+        branch: null,
+        bare_dir: null,
+        pr_url: null,
+        parent_id: null,
+        variant_group_id: null,
+        claude_session_id: null,
+        workspace_root: null,
+        created_at: now,
+        updated_at: now,
+        needs_attention: false,
+        attention_reasons: [],
+        quick_actions: [],
+        conversation: [],
+        quota_sleep_until: null,
+        quota_retry_count: 0,
+        metadata: {},
+        pipeline_advancing: false,
+        stage: null,
+        coordinator_children: [],
+      })
+      prepared.insertEvent(testDb, {
+        session_id: 'parent-up',
+        seq: 1,
+        turn: 1,
+        type: 'assistant_text',
+        timestamp: now,
+        payload: {
+          type: 'assistant_text',
+          blockId: 'reply-1',
+          text: 'Spot-on answer',
+          final: true,
+        },
+      })
+
+      const app = makeApp(testDb)
+      const res = await app.fetch(
+        new Request('http://localhost/api/commands', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'submit_feedback',
+            sessionId: 'parent-up',
+            messageBlockId: 'reply-1',
+            vote: 'up',
+          }),
+        }),
+      )
+
+      expect(res.status).toBe(200)
+      const body = await json<{ data: { success: boolean; sessionId?: string; error?: string } }>(res)
+      expect(body.data.success).toBe(true)
+      expect(body.data.sessionId).toBeTruthy()
+
+      const child = prepared.getSession(testDb, body.data.sessionId!)
+      expect(child).toBeTruthy()
+      expect(child?.parent_id).toBe('parent-up')
+      expect(child?.mode).toBe('task')
+      expect(child?.metadata['kind']).toBe('feedback')
+      expect(child?.metadata['vote']).toBe('up')
+      expect(child?.metadata['reason']).toBeUndefined()
+
+      const audit = prepared.listAuditEvents(testDb).find((e) => e.action === 'message_feedback')
+      expect(audit).toBeDefined()
+      expect(audit?.session_id).toBe('parent-up')
+      expect(audit?.metadata.vote).toBe('up')
+
+      await waitForCondition(() =>
+        prepared.listSessionCheckpoints(testDb, body.data.sessionId!).some((cp) => cp.kind === 'completion'),
+      )
+    } finally {
+      if (previousWorkspaceRoot !== undefined) {
+        process.env['WORKSPACE_ROOT'] = previousWorkspaceRoot
+      } else {
+        delete process.env['WORKSPACE_ROOT']
+      }
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   test('invalid body returns 400', async () => {
     const app = makeApp(testDb)
     const res = await app.fetch(
