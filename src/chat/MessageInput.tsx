@@ -170,11 +170,17 @@ export function MessageInput({ store, value, onValueChange, onSend }: MessageInp
           )}
         </div>
       )}
+      {micSupported && (
+        <ComposerModes
+          recording={recording}
+          sending={sending}
+          onToggleVoice={handleMicClick}
+        />
+      )}
       <ComposerToolbar
         charCount={charCount}
         isSlash={isSlash}
         sending={sending}
-        recording={recording}
       />
       {imagesSupported && attachmentsStrip}
       <div class="flex items-end gap-2">
@@ -237,12 +243,10 @@ function ComposerToolbar({
   charCount,
   isSlash,
   sending,
-  recording,
 }: {
   charCount: number
   isSlash: boolean
   sending: boolean
-  recording: boolean
 }) {
   return (
     <div
@@ -265,15 +269,6 @@ function ComposerToolbar({
         </span>
       )}
       <span class="ml-auto flex items-center gap-1.5">
-        {recording && (
-          <span
-            class="inline-flex items-center gap-1 text-red-600 dark:text-red-400"
-            data-testid="composer-recording-indicator"
-          >
-            <span class="inline-block h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-            listening
-          </span>
-        )}
         {sending && (
           <span class="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-300">
             <span class="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
@@ -295,6 +290,51 @@ function Kbd({ children }: { children: string }) {
     <kbd class="rounded border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 dark:text-slate-300">
       {children}
     </kbd>
+  )
+}
+
+function ComposerModes({
+  recording,
+  sending,
+  onToggleVoice,
+}: {
+  recording: boolean
+  sending: boolean
+  onToggleVoice: () => void
+}) {
+  return (
+    <div
+      class="flex flex-wrap items-center gap-1.5"
+      data-testid="composer-modes"
+      role="toolbar"
+      aria-label="Input modes"
+    >
+      <button
+        type="button"
+        onClick={onToggleVoice}
+        disabled={sending}
+        aria-pressed={recording}
+        aria-label={recording ? 'Stop voice input' : 'Start voice input'}
+        class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+          recording
+            ? 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/40'
+            : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'
+        }`}
+        data-testid="voice-mode-chip"
+      >
+        {recording ? (
+          <>
+            <span class="inline-block h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+            <span>Listening…</span>
+          </>
+        ) : (
+          <>
+            <MicIcon recording={false} />
+            <span>Voice</span>
+          </>
+        )}
+      </button>
+    </div>
   )
 }
 

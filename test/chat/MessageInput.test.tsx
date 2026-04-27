@@ -241,16 +241,134 @@ describe('MessageInput · voice input', () => {
     delete w.webkitSpeechRecognition
     render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
     const mic = screen.getByTestId('mic-btn') as HTMLButtonElement
+    const chip = screen.getByTestId('voice-mode-chip') as HTMLButtonElement
     expect(mic.getAttribute('aria-pressed')).toBe('false')
+    expect(chip.getAttribute('aria-pressed')).toBe('false')
+    expect(chip.textContent).toContain('Voice')
     act(() => {
       fireEvent.click(mic)
     })
     await waitFor(() => expect(mic.getAttribute('aria-pressed')).toBe('true'))
-    expect(screen.getByTestId('composer-recording-indicator')).toBeTruthy()
+    expect(chip.getAttribute('aria-pressed')).toBe('true')
+    expect(chip.textContent).toContain('Listening')
     act(() => {
       fireEvent.click(mic)
     })
     await waitFor(() => expect(mic.getAttribute('aria-pressed')).toBe('false'))
+    expect(chip.textContent).toContain('Voice')
+  })
+
+  it('hides voice mode chip when SpeechRecognition is unsupported', () => {
+    delete w.SpeechRecognition
+    delete w.webkitSpeechRecognition
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    expect(screen.queryByTestId('voice-mode-chip')).toBeNull()
+    expect(screen.queryByTestId('composer-modes')).toBeNull()
+  })
+
+  it('voice mode chip toggles recording state and stays in sync with inline mic button', async () => {
+    class FakeRec extends EventTarget implements SpeechRecognition {
+      continuous = false
+      interimResults = false
+      lang = ''
+      maxAlternatives = 1
+      onstart: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null = null
+      onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null = null
+      onend: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      start() {
+        this.onstart?.call(this, new Event('start'))
+      }
+      stop() {
+        this.onend?.call(this, new Event('end'))
+      }
+      abort() {
+        this.onend?.call(this, new Event('end'))
+      }
+    }
+    w.SpeechRecognition = FakeRec as unknown as SpeechRecognitionConstructor
+    delete w.webkitSpeechRecognition
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    const chip = screen.getByTestId('voice-mode-chip') as HTMLButtonElement
+    const mic = screen.getByTestId('mic-btn') as HTMLButtonElement
+    expect(chip.getAttribute('aria-label')).toBe('Start voice input')
+    act(() => {
+      fireEvent.click(chip)
+    })
+    await waitFor(() => expect(chip.getAttribute('aria-pressed')).toBe('true'))
+    expect(mic.getAttribute('aria-pressed')).toBe('true')
+    expect(chip.getAttribute('aria-label')).toBe('Stop voice input')
+    act(() => {
+      fireEvent.click(chip)
+    })
+    await waitFor(() => expect(chip.getAttribute('aria-pressed')).toBe('false'))
+    expect(mic.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('voice mode chip is the primary discoverability surface — labeled "Voice" when idle', () => {
+    class FakeRec extends EventTarget implements SpeechRecognition {
+      continuous = false
+      interimResults = false
+      lang = ''
+      maxAlternatives = 1
+      onstart: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null = null
+      onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null = null
+      onend: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      start() {
+        this.onstart?.call(this, new Event('start'))
+      }
+      stop() {
+        this.onend?.call(this, new Event('end'))
+      }
+      abort() {
+        this.onend?.call(this, new Event('end'))
+      }
+    }
+    w.SpeechRecognition = FakeRec as unknown as SpeechRecognitionConstructor
+    delete w.webkitSpeechRecognition
+    render(<Controlled onSend={vi.fn().mockResolvedValue(undefined)} />)
+    const chip = screen.getByTestId('voice-mode-chip') as HTMLButtonElement
+    expect(chip.textContent?.trim()).toContain('Voice')
+    const modes = screen.getByTestId('composer-modes')
+    expect(modes.getAttribute('role')).toBe('toolbar')
+    expect(modes.getAttribute('aria-label')).toBe('Input modes')
+  })
+
+  it('voice mode chip is disabled while sending', async () => {
+    class FakeRec extends EventTarget implements SpeechRecognition {
+      continuous = false
+      interimResults = false
+      lang = ''
+      maxAlternatives = 1
+      onstart: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null = null
+      onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null = null
+      onend: ((this: SpeechRecognition, ev: Event) => void) | null = null
+      start() {
+        this.onstart?.call(this, new Event('start'))
+      }
+      stop() {
+        this.onend?.call(this, new Event('end'))
+      }
+      abort() {
+        this.onend?.call(this, new Event('end'))
+      }
+    }
+    w.SpeechRecognition = FakeRec as unknown as SpeechRecognitionConstructor
+    delete w.webkitSpeechRecognition
+    let resolve: () => void
+    const onSend = vi.fn().mockReturnValue(new Promise<void>((r) => { resolve = r }))
+    render(<Controlled onSend={onSend} />)
+    fireEvent.input(getTextarea(), { target: { value: 'pending' } })
+    act(() => {
+      fireEvent.click(getSendBtn())
+    })
+    await waitFor(() => {
+      const chip = screen.getByTestId('voice-mode-chip') as HTMLButtonElement
+      expect(chip.hasAttribute('disabled')).toBe(true)
+    })
+    act(() => { resolve!() })
   })
 
   it('appends final transcript to existing input', async () => {
