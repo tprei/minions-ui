@@ -22,6 +22,7 @@ const HELP_TEXT = `**Task / Plan / Think / Review**
   /retry <nodeId> <dagId>       Retry a failed DAG node
   /force <nodeId> <dagId>       Force a DAG node to landed state
   /land <nodeId> <dagId>        Land a DAG node (merge PR)
+  /land [all-or-nothing|best-effort]  Land all ready PRs in a session's DAG; default best-effort
 
 **Status**
   /status [sessionId]  Summary of sessions

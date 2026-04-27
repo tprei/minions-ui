@@ -33,6 +33,7 @@ export type EngineEvent =
   | { kind: 'dag.snapshot'; dag: ApiDagGraph }
   | { kind: 'dag.deleted'; dagId: string }
   | { kind: 'dag.node.landed'; dagId: string; nodeId: string }
+  | { kind: 'dag.node.land_reverted'; dagId: string; nodeId: string }
   | { kind: 'dag.node.pushed'; dagId: string; nodeId: string; parentSha: string; newSha: string }
   | { kind: 'dag.node.restack.started'; dagId: string; nodeId: string; parentNodeId: string }
   | {
