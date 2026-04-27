@@ -6,6 +6,7 @@ import { nodeIndex, getDownstreamNodes } from "./dag"
 import type { DagGraph } from "./dag"
 import type { EngineEventBus } from "../events/bus"
 import type { ExecCall, ExecFn } from "./preflight"
+import type { SessionRegistry } from "../session/registry"
 
 const execFileP = promisify(execFileCb)
 
@@ -17,12 +18,15 @@ export interface LandNodeResult {
   ok: boolean
   prUrl?: string
   error?: string
+  closedSessionId?: string
 }
 
 export interface LandingManagerOpts {
   bus: EngineEventBus
   workspaceRoot: string
   execFile?: ExecFn
+  registry?: SessionRegistry
+  persistDag?: (graph: DagGraph) => void
 }
 
 export interface LandingManager {
@@ -47,7 +51,7 @@ function worktreeDir(workspaceRoot: string, branch: string): string {
 }
 
 export function createLandingManager(opts: LandingManagerOpts): LandingManager {
-  const { bus, workspaceRoot } = opts
+  const { bus, workspaceRoot, registry, persistDag } = opts
   const run = opts.execFile ?? defaultExec
 
   async function retargetAllStackedPRs(graph: DagGraph): Promise<void> {
@@ -134,6 +138,24 @@ export function createLandingManager(opts: LandingManagerOpts): LandingManager {
 
     node.status = "landed"
 
+    if (persistDag) {
+      try {
+        persistDag(graph)
+      } catch (err) {
+        console.error(`[landing] persistDag failed for ${nodeId}:`, err)
+      }
+    }
+
+    let closedSessionId: string | undefined
+    if (registry && node.sessionId) {
+      try {
+        await registry.close(node.sessionId)
+        closedSessionId = node.sessionId
+      } catch (err) {
+        console.error(`[landing] failed to close session ${node.sessionId} for node ${nodeId}:`, err)
+      }
+    }
+
     bus.emit({
       kind: "dag.node.landed",
       dagId: graph.id,
@@ -142,7 +164,7 @@ export function createLandingManager(opts: LandingManagerOpts): LandingManager {
 
     await rebaseDownstream(nodeId, graph)
 
-    return { ok: true, prUrl: node.prUrl }
+    return { ok: true, prUrl: node.prUrl, closedSessionId }
   }
 
   return { landNode }

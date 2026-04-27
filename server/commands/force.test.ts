@@ -14,6 +14,7 @@ function makeScheduler(shouldFail = false): DagScheduler {
       if (shouldFail) throw new Error(`cannot force ${nodeId} in ${dagId}`)
     },
     async reconcileOnBoot() {},
+    persistDag() {},
   }
 }
 

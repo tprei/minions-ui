@@ -733,23 +733,41 @@ export function registerApiRoutes(
           return c.json({ error: 'no nodes with a PR URL are ready to land' }, 422)
         }
 
-        const landed: Array<{ nodeId: string; prUrl?: string }> = []
+        console.log(
+          `[land] dag=${graph.id} attempting ${landable.length} node(s):`,
+          landable.map((n) => `${n.id}@${n.prUrl}`).join(', '),
+        )
+        const landed: Array<{ nodeId: string; prUrl?: string; closedSessionId?: string }> = []
         const failed: Array<{ nodeId: string; error: string }> = []
         for (const node of landable) {
+          console.log(`[land] dag=${graph.id} node=${node.id} pr=${node.prUrl} -> attempting merge`)
           const result = await landingManager.landNode(node.id, graph)
           if (result.ok) {
-            landed.push({ nodeId: node.id, prUrl: result.prUrl })
+            console.log(
+              `[land] dag=${graph.id} node=${node.id} merged${
+                result.closedSessionId ? ` (closed session ${result.closedSessionId})` : ''
+              }`,
+            )
+            landed.push({
+              nodeId: node.id,
+              prUrl: result.prUrl,
+              closedSessionId: result.closedSessionId,
+            })
           } else {
+            console.error(`[land] dag=${graph.id} node=${node.id} failed: ${result.error}`)
             failed.push({ nodeId: node.id, error: result.error ?? 'unknown error' })
-            break
           }
         }
+        console.log(
+          `[land] dag=${graph.id} done: landed=${landed.length} failed=${failed.length}`,
+        )
 
         return c.json({
           data: {
             ok: failed.length === 0,
             sessionId,
             dagId: graph.id,
+            attempted: landable.length,
             landed: landed.length,
             failed: failed.length,
             details: { landed, failed },
