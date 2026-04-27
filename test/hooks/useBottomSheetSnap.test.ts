@@ -66,7 +66,7 @@ describe('useBottomSheetSnap', () => {
       result.current.snapTo('half')
     })
 
-    expect(mockElement.style.height).toBe('500px')
+    expect(mockElement.style.height).toBe('650px')
   })
 
   it('calculates correct heights for snap points', () => {
@@ -78,12 +78,12 @@ describe('useBottomSheetSnap', () => {
     act(() => {
       result.current.snapTo('peek')
     })
-    expect(mockElement.style.height).toBe('250px')
+    expect(mockElement.style.height).toBe('450px')
 
     act(() => {
       result.current.snapTo('half')
     })
-    expect(mockElement.style.height).toBe('500px')
+    expect(mockElement.style.height).toBe('650px')
 
     act(() => {
       result.current.snapTo('full')

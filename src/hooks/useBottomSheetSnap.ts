@@ -17,8 +17,8 @@ interface TouchState {
 }
 
 const SNAP_HEIGHTS = {
-  peek: 0.25,
-  half: 0.5,
+  peek: 0.45,
+  half: 0.65,
   full: 0.9,
 }
 
