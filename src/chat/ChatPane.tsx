@@ -36,7 +36,7 @@ function TranscriptPane({ store, sessionId }: { store: ConnectionStore; sessionI
       </div>
     )
   }
-  return <Transcript store={transcript} />
+  return <Transcript store={transcript} connectionStore={store} />
 }
 
 export function ChatPane({

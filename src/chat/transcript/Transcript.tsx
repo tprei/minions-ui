@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { TranscriptStore } from '../../state/transcript'
+import type { ConnectionStore } from '../../state/types'
 import { AssistantTextBlock } from './AssistantTextBlock'
 import { StatusBanner } from './StatusBanner'
 import { ThinkingBlock } from './ThinkingBlock'
@@ -15,14 +16,16 @@ const TOOL_GROUP_COLLAPSE_THRESHOLD = 5
 
 interface Props {
   store: TranscriptStore
+  connectionStore?: ConnectionStore
 }
 
-export function Transcript({ store }: Props) {
+export function Transcript({ store, connectionStore }: Props) {
   const events = store.events.value
   const loading = store.loading.value
   const error = store.error.value
   const sessionInfo = store.session.value
   const sessionTerminal = sessionInfo?.active === false
+  const sessionId = sessionInfo?.sessionId
   const rows = useMemo(() => buildTranscriptRows(events).rows, [events])
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -105,7 +108,13 @@ export function Transcript({ store }: Props) {
               sessionTerminal={sessionTerminal}
             />
           ) : (
-            <RowView key={rowKey(item.row)} row={item.row} sessionTerminal={sessionTerminal} />
+            <RowView
+              key={rowKey(item.row)}
+              row={item.row}
+              sessionTerminal={sessionTerminal}
+              sessionId={sessionId}
+              connectionStore={connectionStore}
+            />
           ),
         )}
       </div>
@@ -127,14 +136,24 @@ export function Transcript({ store }: Props) {
   )
 }
 
-function RowView({ row, sessionTerminal }: { row: TranscriptRow; sessionTerminal: boolean }) {
+function RowView({
+  row,
+  sessionTerminal,
+  sessionId,
+  connectionStore,
+}: {
+  row: TranscriptRow
+  sessionTerminal: boolean
+  sessionId?: string
+  connectionStore?: ConnectionStore
+}) {
   switch (row.kind) {
     case 'turn-separator':
       return <TurnSeparator turn={row.turn} started={row.started} completed={row.completed} />
     case 'user-message':
       return <UserMessageCard event={row.event} />
     case 'assistant-text':
-      return <AssistantTextBlock event={row.event} />
+      return <AssistantTextBlock event={row.event} sessionId={sessionId} store={connectionStore} />
     case 'thinking':
       return <ThinkingBlock event={row.event} />
     case 'tool-call':
