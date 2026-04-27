@@ -103,11 +103,6 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
     ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-600'
     : 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-200'
 
-  const maxVisible = isDesktop.value ? 5 : 3
-  const hasOverflow = session.quickActions.length > maxVisible
-  const visibleActions = hasOverflow ? session.quickActions.slice(0, maxVisible) : session.quickActions
-  const overflowActions = hasOverflow ? session.quickActions.slice(maxVisible) : []
-
   const handleActionClick = (action: QuickAction) => {
     vibrate('light')
     void onAction(action)
@@ -121,6 +116,68 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
     open.value = true
   }
 
+  if (!isDesktop.value) {
+    return (
+      <>
+        <div
+          class="flex flex-wrap gap-2 px-4 py-2 border-t"
+          style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}
+          data-testid="quick-actions-bar"
+        >
+          <button
+            onClick={handleMoreClick}
+            class={`text-xs font-medium px-4 py-3 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
+            data-testid="quick-actions-trigger"
+            aria-haspopup="dialog"
+            aria-expanded={open.value}
+          >
+            Quick actions ({session.quickActions.length})
+          </button>
+        </div>
+        {open.value && (
+          <div class="fixed inset-x-0 top-0 z-50 h-[100dvh]">
+            <div
+              class="absolute inset-0 bg-black/50"
+              data-testid="quick-actions-backdrop"
+              onClick={handleClose}
+            />
+            <div
+              ref={sheetRef}
+              class="absolute bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl flex flex-col border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 max-h-[70dvh]"
+              data-testid="quick-actions-sheet"
+            >
+              <div class="flex justify-center pt-2 pb-1 shrink-0">
+                <div class="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+              </div>
+              <div class="px-4 py-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
+                <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Quick actions
+                </h3>
+              </div>
+              <div class="flex-1 overflow-y-auto">
+                {session.quickActions.map((action) => (
+                  <button
+                    key={action.type}
+                    onClick={() => handleActionClick(action)}
+                    class="w-full text-left px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors min-h-[44px] border-b border-slate-100 dark:border-slate-700 last:border-0"
+                    data-testid={`quick-action-${action.type}`}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
+
+  const maxVisible = 5
+  const hasOverflow = session.quickActions.length > maxVisible
+  const visibleActions = hasOverflow ? session.quickActions.slice(0, maxVisible) : session.quickActions
+  const overflowActions = hasOverflow ? session.quickActions.slice(maxVisible) : []
+
   const actionButton = (action: QuickAction, key: string) => (
     <button
       key={key}
@@ -133,79 +190,42 @@ export function QuickActionsBar({ session, onAction, onShipAdvance }: QuickActio
   )
 
   return (
-    <>
-      <div
-        class="flex flex-wrap gap-2 px-4 py-2 border-t relative"
-        style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}
-        data-testid="quick-actions-bar"
-      >
-        {visibleActions.map((action) => actionButton(action, action.type))}
-        {hasOverflow && (
-          <button
-            onClick={handleMoreClick}
-            class={`text-xs font-medium px-4 py-3 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
-            data-testid="quick-actions-more-btn"
-            aria-haspopup="dialog"
-            aria-expanded={open.value}
-          >
-            More actions... ({overflowActions.length})
-          </button>
-        )}
-        {open.value && isDesktop.value && (
-          <div
-            ref={dropdownRef}
-            class="absolute left-4 bottom-full mb-2 z-50 min-w-[220px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-2 max-h-64 overflow-y-auto"
-            data-testid="quick-actions-dropdown"
-          >
-            {overflowActions.map((action) => (
-              <button
-                key={action.type}
-                onClick={() => handleActionClick(action)}
-                class="w-full text-left px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors min-h-[44px]"
-                data-testid={`quick-action-overflow-${action.type}`}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      {open.value && !isDesktop.value && (
-        <div class="fixed inset-x-0 top-0 z-50 h-[100dvh]">
-          <div
-            class="absolute inset-0 bg-black/50"
-            data-testid="quick-actions-backdrop"
-            onClick={handleClose}
-          />
-          <div
-            ref={sheetRef}
-            class="absolute bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl flex flex-col border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 max-h-[70dvh]"
-            data-testid="quick-actions-sheet"
-          >
-            <div class="flex justify-center pt-2 pb-1 shrink-0">
-              <div class="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
-            </div>
-            <div class="px-4 py-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
-              <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                More actions
-              </h3>
-            </div>
-            <div class="flex-1 overflow-y-auto">
-              {overflowActions.map((action) => (
-                <button
-                  key={action.type}
-                  onClick={() => handleActionClick(action)}
-                  class="w-full text-left px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors min-h-[44px] border-b border-slate-100 dark:border-slate-700 last:border-0"
-                  data-testid={`quick-action-overflow-${action.type}`}
-                >
-                  {action.label}
-                </button>
-              ))}
-            </div>
-          </div>
+    <div
+      class="flex flex-wrap gap-2 px-4 py-2 border-t relative"
+      style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}
+      data-testid="quick-actions-bar"
+    >
+      {visibleActions.map((action) => actionButton(action, action.type))}
+      {hasOverflow && (
+        <button
+          onClick={handleMoreClick}
+          class={`text-xs font-medium px-4 py-3 rounded-full border transition-colors min-h-[44px] ${btnClass}`}
+          data-testid="quick-actions-more-btn"
+          aria-haspopup="dialog"
+          aria-expanded={open.value}
+        >
+          More actions... ({overflowActions.length})
+        </button>
+      )}
+      {open.value && (
+        <div
+          ref={dropdownRef}
+          class="absolute left-4 bottom-full mb-2 z-50 min-w-[220px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-2 max-h-64 overflow-y-auto"
+          data-testid="quick-actions-dropdown"
+        >
+          {overflowActions.map((action) => (
+            <button
+              key={action.type}
+              onClick={() => handleActionClick(action)}
+              class="w-full text-left px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors min-h-[44px]"
+              data-testid={`quick-action-overflow-${action.type}`}
+            >
+              {action.label}
+            </button>
+          ))}
         </div>
       )}
-    </>
+    </div>
   )
 }
 

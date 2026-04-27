@@ -8,6 +8,19 @@ import {
 } from '../../src/components/AttentionBar'
 import type { ApiSession, AttentionReason } from '../../src/api/types'
 
+function mockMatchMedia(matches: boolean) {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: vi.fn((query: string) => ({
+      matches,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  })
+}
+
 function makeSession(overrides: Partial<ApiSession> = {}): ApiSession {
   return {
     id: 'session-1',
@@ -136,9 +149,10 @@ describe('firstSessionWithReason', () => {
   })
 })
 
-describe('AttentionBar', () => {
+describe('AttentionBar (desktop)', () => {
   beforeEach(() => {
     cleanup()
+    mockMatchMedia(true)
   })
 
   it('renders nothing when no sessions need attention', () => {
@@ -263,5 +277,62 @@ describe('AttentionBar', () => {
 
     fireEvent.click(screen.getByTestId('attention-pill-failed'))
     expect(onSelect).toHaveBeenCalledWith('failed', 's1')
+  })
+})
+
+describe('AttentionBar (mobile)', () => {
+  beforeEach(() => {
+    cleanup()
+    mockMatchMedia(false)
+  })
+
+  it('renders a collapsed toggle showing the total attention count', () => {
+    const sessions = [
+      makeSession({ id: 's1', needsAttention: true, attentionReasons: ['failed', 'waiting_for_feedback'] }),
+      makeSession({ id: 's2', slug: 's2', needsAttention: true, attentionReasons: ['interrupted'] }),
+    ]
+    render(<AttentionBar sessions={sessions} filter={null} onSelect={() => {}} />)
+
+    const toggle = screen.getByTestId('attention-toggle')
+    expect(toggle).toBeTruthy()
+    expect(toggle.textContent).toContain('3')
+    expect(screen.queryByTestId('attention-popover')).toBeNull()
+    expect(screen.queryByTestId('attention-pill-failed')).toBeNull()
+  })
+
+  it('opens a popover with pills when the toggle is clicked', () => {
+    const sessions = [
+      makeSession({ id: 's1', needsAttention: true, attentionReasons: ['failed'] }),
+      makeSession({ id: 's2', slug: 's2', needsAttention: true, attentionReasons: ['waiting_for_feedback'] }),
+    ]
+    render(<AttentionBar sessions={sessions} filter={null} onSelect={() => {}} />)
+
+    fireEvent.click(screen.getByTestId('attention-toggle'))
+    expect(screen.getByTestId('attention-popover')).toBeTruthy()
+    expect(screen.getByTestId('attention-pill-failed')).toBeTruthy()
+    expect(screen.getByTestId('attention-pill-waiting_for_feedback')).toBeTruthy()
+  })
+
+  it('clicking a pill in the popover invokes onSelect and closes the popover', () => {
+    const onSelect = vi.fn()
+    const sessions = [
+      makeSession({ id: 's1', needsAttention: true, attentionReasons: ['failed'] }),
+    ]
+    render(<AttentionBar sessions={sessions} filter={null} onSelect={onSelect} />)
+
+    fireEvent.click(screen.getByTestId('attention-toggle'))
+    fireEvent.click(screen.getByTestId('attention-pill-failed'))
+
+    expect(onSelect).toHaveBeenCalledWith('failed', 's1')
+    expect(screen.queryByTestId('attention-popover')).toBeNull()
+  })
+
+  it('shows "filtered" indicator on the toggle when a filter is active', () => {
+    const sessions = [
+      makeSession({ id: 's1', needsAttention: true, attentionReasons: ['failed'] }),
+    ]
+    render(<AttentionBar sessions={sessions} filter="failed" onSelect={() => {}} />)
+    const toggle = screen.getByTestId('attention-toggle')
+    expect(toggle.textContent?.toLowerCase()).toContain('filtered')
   })
 })
