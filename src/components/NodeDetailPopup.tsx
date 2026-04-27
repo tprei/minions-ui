@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'preact/hooks'
-import type { ApiDagGraph, ApiDagNode, ApiSession } from '../api/types'
+import type { ApiDagGraph, ApiDagNode, ApiSession, FeedbackMetadata } from '../api/types'
 import { useTheme } from '../hooks/useTheme'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss'
@@ -69,6 +69,28 @@ function findOwningDag(
     }
   }
   return null
+}
+
+function isFeedbackSession(session: ApiSession): session is ApiSession & { metadata: FeedbackMetadata } {
+  return session.metadata !== undefined &&
+    typeof session.metadata === 'object' &&
+    'kind' in session.metadata &&
+    session.metadata.kind === 'feedback'
+}
+
+function FeedbackBadge({ isDark }: { isDark: boolean }) {
+  return (
+    <span
+      class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+      style={{
+        backgroundColor: isDark ? 'rgba(251,191,36,0.2)' : 'rgba(245,158,11,0.15)',
+        color: isDark ? '#fbbf24' : '#d97706',
+      }}
+      data-testid="feedback-badge"
+    >
+      Feedback
+    </span>
+  )
 }
 
 export function NodeDetailPopup({
@@ -146,7 +168,11 @@ export function NodeDetailPopup({
   const hasChatAction = Boolean(onOpenChat)
   const hasLogsAction = Boolean(onViewLogs)
 
+  const feedbackMeta = isFeedbackSession(session) ? session.metadata : null
+  const sourceSession = feedbackMeta ? sessionById.get(feedbackMeta.sourceSessionId) : undefined
+
   const hasHierarchyMeta =
+    feedbackMeta !== null ||
     parentSession !== undefined ||
     childSessions.length > 0 ||
     dagMatch !== null ||
@@ -182,6 +208,7 @@ export function NodeDetailPopup({
               </div>
               <div class="flex items-center gap-2 mt-1.5">
                 <StatusBadge status={session.status} />
+                {isFeedbackSession(session) && <FeedbackBadge isDark={isDark} />}
                 {session.needsAttention && session.attentionReasons.length > 0 && (
                   <AttentionBadge reason={session.attentionReasons[0]} darkMode={isDark} />
                 )}
@@ -202,6 +229,29 @@ export function NodeDetailPopup({
 
             {hasHierarchyMeta && (
               <div class={`px-4 py-3 border-b ${borderColor} flex flex-col gap-2`} data-testid="node-detail-hierarchy">
+                {feedbackMeta && (
+                  <MetaRow label="Reviewing" isDark={isDark}>
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center gap-2">
+                        <span>{feedbackMeta.vote === 'up' ? '👍' : '👎'}</span>
+                        {feedbackMeta.reason && (
+                          <span class="text-xs">
+                            {feedbackMeta.reason === 'incorrect' ? 'Incorrect' :
+                             feedbackMeta.reason === 'off_topic' ? 'Off Topic' :
+                             feedbackMeta.reason === 'too_verbose' ? 'Too Verbose' :
+                             feedbackMeta.reason === 'unsafe' ? 'Unsafe' : 'Other'}
+                          </span>
+                        )}
+                      </div>
+                      {sourceSession && (
+                        <SessionLink session={sourceSession} onClick={onSelectSession} isDark={isDark} />
+                      )}
+                      {feedbackMeta.comment && (
+                        <span class="text-[11px] opacity-70 italic">{feedbackMeta.comment}</span>
+                      )}
+                    </div>
+                  </MetaRow>
+                )}
                 {isShipCoordinator && session.stage && (
                   <MetaRow label="Stage" isDark={isDark}>
                     <span
@@ -395,6 +445,7 @@ export function NodeDetailPopup({
           </div>
           <div class="flex items-center gap-2 mt-1.5">
             <StatusBadge status={session.status} />
+            {isFeedbackSession(session) && <FeedbackBadge isDark={isDark} />}
             {session.needsAttention && session.attentionReasons.length > 0 && (
               <AttentionBadge reason={session.attentionReasons[0]} darkMode={isDark} />
             )}
@@ -415,6 +466,29 @@ export function NodeDetailPopup({
 
         {hasHierarchyMeta && (
           <div class={`px-4 py-3 border-b ${borderColor} flex flex-col gap-2`} data-testid="node-detail-hierarchy">
+            {feedbackMeta && (
+              <MetaRow label="Reviewing" isDark={isDark}>
+                <div class="flex flex-col gap-1">
+                  <div class="flex items-center gap-2">
+                    <span>{feedbackMeta.vote === 'up' ? '👍' : '👎'}</span>
+                    {feedbackMeta.reason && (
+                      <span class="text-xs">
+                        {feedbackMeta.reason === 'incorrect' ? 'Incorrect' :
+                         feedbackMeta.reason === 'off_topic' ? 'Off Topic' :
+                         feedbackMeta.reason === 'too_verbose' ? 'Too Verbose' :
+                         feedbackMeta.reason === 'unsafe' ? 'Unsafe' : 'Other'}
+                      </span>
+                    )}
+                  </div>
+                  {sourceSession && (
+                    <SessionLink session={sourceSession} onClick={onSelectSession} isDark={isDark} />
+                  )}
+                  {feedbackMeta.comment && (
+                    <span class="text-[11px] opacity-70 italic">{feedbackMeta.comment}</span>
+                  )}
+                </div>
+              </MetaRow>
+            )}
             {isShipCoordinator && session.stage && (
               <MetaRow label="Stage" isDark={isDark}>
                 <span

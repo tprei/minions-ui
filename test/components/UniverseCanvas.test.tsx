@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, fireEvent, cleanup } from '@testing-library/preact'
 import { UniverseCanvas } from '../../src/components/UniverseCanvas'
-import type { ApiSession, ApiDagGraph } from '../../src/api/types'
+import type { ApiSession, ApiDagGraph, FeedbackMetadata } from '../../src/api/types'
 
 vi.mock('@reactflow/core', async () => {
   return {
@@ -525,5 +525,58 @@ describe('UniverseCanvas', () => {
       expect(nodes[0].data.scale).toBeGreaterThan(0)
       expect(nodes[0].data.scale).toBeLessThanOrEqual(1)
     }
+  })
+
+  it('renders feedback badge on canvas node when session has feedback metadata', () => {
+    const feedbackMeta: FeedbackMetadata = {
+      kind: 'feedback',
+      vote: 'down',
+      reason: 'incorrect',
+      sourceSessionId: 'source-1',
+      sourceSessionSlug: 'source-slug',
+      sourceMessageBlockId: 'block-123',
+    }
+    const sessions = [
+      createSession({
+        id: 'feedback-1',
+        slug: 'feedback-minion',
+        metadata: feedbackMeta as unknown as Record<string, unknown>,
+      }),
+    ]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    const badge = document.querySelector('[data-testid="feedback-canvas-badge"]')
+    expect(badge).toBeTruthy()
+    expect(badge!.textContent).toContain('Feedback')
+  })
+
+  it('does not render feedback badge on canvas node for non-feedback sessions', () => {
+    const sessions = [createSession({ id: 's1', slug: 'normal-session' })]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    expect(document.querySelector('[data-testid="feedback-canvas-badge"]')).toBeFalsy()
+  })
+
+  it('renders both feedback badge and node type label on canvas node', () => {
+    const feedbackMeta: FeedbackMetadata = {
+      kind: 'feedback',
+      vote: 'up',
+      sourceSessionId: 'source-1',
+      sourceSessionSlug: 'source-slug',
+      sourceMessageBlockId: 'block-123',
+    }
+    const parent = createSession({
+      id: 'parent-1',
+      slug: 'parent-task',
+      childIds: ['feedback-1'],
+    })
+    const feedbackSession = createSession({
+      id: 'feedback-1',
+      slug: 'feedback-child',
+      parentId: 'parent-1',
+      metadata: feedbackMeta as unknown as Record<string, unknown>,
+    })
+    render(<UniverseCanvas {...defaultProps} sessions={[parent, feedbackSession]} />)
+    expect(document.querySelector('[data-testid="feedback-canvas-badge"]')).toBeTruthy()
+    expect(document.body.innerHTML).toContain('Tree')
+    expect(document.body.innerHTML).toContain('Feedback')
   })
 })
