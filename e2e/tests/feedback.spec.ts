@@ -55,7 +55,7 @@ test.describe('feedback flow', () => {
 
       await expect(page.getByTestId('transcript-assistant-text').first()).toBeVisible({ timeout: 5_000 })
 
-      const downBtn = page.getByTestId(`feedback-thumbs-down-${BLOCK_ID}`)
+      const downBtn = page.getByTestId('feedback-thumbs-down').first()
       await expect(downBtn).toBeVisible({ timeout: 5_000 })
       await downBtn.click()
 
@@ -63,7 +63,7 @@ test.describe('feedback flow', () => {
       await expect(popup).toBeVisible({ timeout: 5_000 })
 
       await popup.getByTestId('feedback-reason-incorrect').click()
-      await popup.getByTestId('feedback-submit-btn').click()
+      await popup.getByTestId('feedback-submit').click()
 
       await expect
         .poll(
@@ -94,7 +94,7 @@ test.describe('feedback flow', () => {
 
       const universeNode = page.getByTestId(`universe-node-${feedbackId}`)
       await expect(universeNode).toBeVisible()
-      await expect(universeNode.getByTestId('feedback-badge')).toBeVisible()
+      await expect(universeNode.getByTestId('feedback-canvas-badge')).toBeVisible()
     } finally {
       await mock.close()
     }
@@ -129,7 +129,7 @@ test.describe('feedback flow', () => {
 
       await expect(page.getByTestId('transcript-assistant-text').first()).toBeVisible({ timeout: 5_000 })
 
-      await page.getByTestId(`feedback-thumbs-up-${BLOCK_ID}`).click()
+      await page.getByTestId('feedback-thumbs-up').first().click()
 
       await expect(page.getByTestId('feedback-reason-popup')).not.toBeVisible()
 
