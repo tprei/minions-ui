@@ -12,6 +12,7 @@ import {
 const MEMORY_REPO = process.env.MEMORY_REPO ?? ''
 const MEMORY_SESSION_ID = process.env.MEMORY_SESSION_ID ?? ''
 const API_PORT = process.env.API_PORT ?? '8080'
+const API_TOKEN = process.env.MINION_API_TOKEN ?? ''
 const API_BASE = `http://127.0.0.1:${API_PORT}`
 
 interface RememberInput {
@@ -44,6 +45,7 @@ async function apiRequest(method: string, path: string, body?: unknown): Promise
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }
+  if (API_TOKEN) headers['Authorization'] = `Bearer ${API_TOKEN}`
 
   const res = await fetch(url, {
     method,

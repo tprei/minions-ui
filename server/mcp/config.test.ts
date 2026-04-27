@@ -12,6 +12,7 @@ const MCP_ENV_KEYS = [
   'GITHUB_TOKEN',
   'GITHUB_PERSONAL_ACCESS_TOKEN',
   'SUPABASE_ACCESS_TOKEN',
+  'MINION_API_TOKEN',
   'PORT',
 ]
 
@@ -135,6 +136,19 @@ describe('buildMcpConfig', () => {
     const cfg = buildMcpConfig({ apiPort: '7777' })
     const memory = cfg.mcpServers['memory']
     expect(memory!.env?.['API_PORT']).toBe('7777')
+  })
+
+  test('memory server forwards MINION_API_TOKEN when set', () => {
+    process.env['MINION_API_TOKEN'] = 'secret-token-123'
+    const cfg = buildMcpConfig()
+    const memory = cfg.mcpServers['memory']
+    expect(memory!.env?.['MINION_API_TOKEN']).toBe('secret-token-123')
+  })
+
+  test('memory server omits MINION_API_TOKEN when unset', () => {
+    const cfg = buildMcpConfig()
+    const memory = cfg.mcpServers['memory']
+    expect(memory!.env?.['MINION_API_TOKEN']).toBeUndefined()
   })
 })
 

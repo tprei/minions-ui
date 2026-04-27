@@ -23,6 +23,13 @@ describe('memory-server tool definitions', () => {
     expect(content).toContain('forget')
     expect(content).toContain('@modelcontextprotocol/sdk')
   })
+
+  test('memory-server.ts forwards MINION_API_TOKEN as Bearer Authorization header', () => {
+    const serverPath = resolve(__dirname, 'memory-server.ts')
+    const content = readFileSync(serverPath, 'utf-8')
+    expect(content).toContain('MINION_API_TOKEN')
+    expect(content).toMatch(/Bearer \$\{API_TOKEN\}/)
+  })
 })
 
 describe('memory-server HTTP integration', () => {
