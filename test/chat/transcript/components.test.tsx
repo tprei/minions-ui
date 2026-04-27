@@ -1,7 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/preact'
+import { signal } from '@preact/signals'
 import { UserMessageCard } from '../../../src/chat/transcript/UserMessageCard'
 import { AssistantTextBlock } from '../../../src/chat/transcript/AssistantTextBlock'
+import type { ConnectionStore } from '../../../src/state/types'
 import { ThinkingBlock } from '../../../src/chat/transcript/ThinkingBlock'
 import { ToolCallCard } from '../../../src/chat/transcript/ToolCallCard'
 import { ToolResultBody } from '../../../src/chat/transcript/ToolResultBody'
@@ -91,6 +93,62 @@ describe('AssistantTextBlock', () => {
     }
     render(<AssistantTextBlock event={event} />)
     expect(screen.getByTestId('transcript-streaming-indicator')).toBeTruthy()
+  })
+
+  it('renders feedback buttons when final, sessionId, and store are provided', () => {
+    const event: AssistantTextEvent = {
+      ...baseEvent(1),
+      type: 'assistant_text',
+      blockId: 'b1',
+      text: 'final answer',
+      final: true,
+    }
+    const store = {
+      connectionId: 'conn-1',
+      version: signal({
+        apiVersion: '2.0.0',
+        libraryVersion: '1.110.0',
+        features: ['message-feedback'],
+      }),
+      client: { submitFeedback: vi.fn() },
+    } as unknown as ConnectionStore
+    render(<AssistantTextBlock event={event} sessionId="s1" store={store} />)
+    expect(screen.getByTestId('feedback-buttons')).toBeTruthy()
+    expect(screen.getByTestId('feedback-thumbs-up')).toBeTruthy()
+    expect(screen.getByTestId('feedback-thumbs-down')).toBeTruthy()
+  })
+
+  it('does not render feedback buttons when not final (still streaming)', () => {
+    const event: AssistantTextEvent = {
+      ...baseEvent(1),
+      type: 'assistant_text',
+      blockId: 'b1',
+      text: 'streaming...',
+      final: false,
+    }
+    const store = {
+      connectionId: 'conn-1',
+      version: signal({
+        apiVersion: '2.0.0',
+        libraryVersion: '1.110.0',
+        features: ['message-feedback'],
+      }),
+      client: { submitFeedback: vi.fn() },
+    } as unknown as ConnectionStore
+    render(<AssistantTextBlock event={event} sessionId="s1" store={store} />)
+    expect(screen.queryByTestId('feedback-buttons')).toBeNull()
+  })
+
+  it('does not render feedback buttons when sessionId or store is missing', () => {
+    const event: AssistantTextEvent = {
+      ...baseEvent(1),
+      type: 'assistant_text',
+      blockId: 'b1',
+      text: 'final answer',
+      final: true,
+    }
+    render(<AssistantTextBlock event={event} />)
+    expect(screen.queryByTestId('feedback-buttons')).toBeNull()
   })
 })
 

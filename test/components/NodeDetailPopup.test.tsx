@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, fireEvent, cleanup } from '@testing-library/preact'
 import { NodeDetailPopup } from '../../src/components/NodeDetailPopup'
-import type { ApiDagGraph, ApiSession } from '../../src/api/types'
+import type { ApiDagGraph, ApiSession, FeedbackMetadata } from '../../src/api/types'
 
 function makeSession(overrides: Partial<ApiSession> = {}): ApiSession {
   return {
@@ -626,5 +626,169 @@ describe('NodeDetailPopup mobile bottom sheet', () => {
     expect(modal).toBeTruthy()
     const handle = container.querySelector('.w-10.h-1.rounded-full')
     expect(handle).toBeFalsy()
+  })
+})
+
+describe('NodeDetailPopup feedback sessions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('renders feedback badge when session has feedback metadata', () => {
+    const feedbackMeta: FeedbackMetadata = {
+      kind: 'feedback',
+      vote: 'down',
+      reason: 'incorrect',
+      sourceSessionId: 'source-1',
+      sourceSessionSlug: 'source-slug',
+      sourceMessageBlockId: 'block-123',
+    }
+    const session = makeSession({
+      id: 'feedback-1',
+      slug: 'feedback-minion',
+      metadata: feedbackMeta as unknown as Record<string, unknown>,
+    })
+    render(<NodeDetailPopup session={session} onClose={vi.fn()} sessions={[session]} dags={[]} />)
+    const badge = document.querySelector('[data-testid="feedback-badge"]')
+    expect(badge).toBeTruthy()
+    expect(badge!.textContent).toContain('Feedback')
+  })
+
+  it('does not render feedback badge for non-feedback sessions', () => {
+    const session = makeSession({ id: 's1', slug: 'normal-session' })
+    render(<NodeDetailPopup session={session} onClose={vi.fn()} sessions={[session]} dags={[]} />)
+    expect(document.querySelector('[data-testid="feedback-badge"]')).toBeFalsy()
+  })
+
+  it('renders feedback meta row with thumbs down and reason', () => {
+    const feedbackMeta: FeedbackMetadata = {
+      kind: 'feedback',
+      vote: 'down',
+      reason: 'incorrect',
+      sourceSessionId: 'source-1',
+      sourceSessionSlug: 'source-slug',
+      sourceMessageBlockId: 'block-123',
+    }
+    const sourceSession = makeSession({ id: 'source-1', slug: 'source-slug' })
+    const feedbackSession = makeSession({
+      id: 'feedback-1',
+      slug: 'feedback-minion',
+      metadata: feedbackMeta as unknown as Record<string, unknown>,
+    })
+    render(
+      <NodeDetailPopup
+        session={feedbackSession}
+        onClose={vi.fn()}
+        sessions={[sourceSession, feedbackSession]}
+        dags={[]}
+      />
+    )
+    const hierarchy = document.querySelector('[data-testid="node-detail-hierarchy"]')
+    expect(hierarchy).toBeTruthy()
+    expect(hierarchy!.textContent).toContain('👎')
+    expect(hierarchy!.textContent).toContain('Incorrect')
+    expect(hierarchy!.textContent).toContain('source-slug')
+  })
+
+  it('renders feedback meta row with thumbs up', () => {
+    const feedbackMeta: FeedbackMetadata = {
+      kind: 'feedback',
+      vote: 'up',
+      sourceSessionId: 'source-1',
+      sourceSessionSlug: 'source-slug',
+      sourceMessageBlockId: 'block-123',
+    }
+    const sourceSession = makeSession({ id: 'source-1', slug: 'source-slug' })
+    const feedbackSession = makeSession({
+      id: 'feedback-1',
+      slug: 'feedback-minion',
+      metadata: feedbackMeta as unknown as Record<string, unknown>,
+    })
+    render(
+      <NodeDetailPopup
+        session={feedbackSession}
+        onClose={vi.fn()}
+        sessions={[sourceSession, feedbackSession]}
+        dags={[]}
+      />
+    )
+    const hierarchy = document.querySelector('[data-testid="node-detail-hierarchy"]')
+    expect(hierarchy).toBeTruthy()
+    expect(hierarchy!.textContent).toContain('👍')
+  })
+
+  it('renders all feedback reason labels correctly', () => {
+    const reasons: Array<{ reason: FeedbackMetadata['reason']; label: string }> = [
+      { reason: 'incorrect', label: 'Incorrect' },
+      { reason: 'off_topic', label: 'Off Topic' },
+      { reason: 'too_verbose', label: 'Too Verbose' },
+      { reason: 'unsafe', label: 'Unsafe' },
+      { reason: 'other', label: 'Other' },
+    ]
+
+    reasons.forEach(({ reason, label }) => {
+      const feedbackMeta: FeedbackMetadata = {
+        kind: 'feedback',
+        vote: 'down',
+        reason,
+        sourceSessionId: 'source-1',
+        sourceSessionSlug: 'source-slug',
+        sourceMessageBlockId: 'block-123',
+      }
+      const session = makeSession({ id: 'fb-1', slug: 'feedback-minion', metadata: feedbackMeta as unknown as Record<string, unknown> })
+      const { container } = render(<NodeDetailPopup session={session} onClose={vi.fn()} sessions={[session]} dags={[]} />)
+      expect(container.textContent).toContain(label)
+      cleanup()
+    })
+  })
+
+  it('renders comment when present', () => {
+    const feedbackMeta: FeedbackMetadata = {
+      kind: 'feedback',
+      vote: 'down',
+      reason: 'other',
+      comment: 'This was not what I expected',
+      sourceSessionId: 'source-1',
+      sourceSessionSlug: 'source-slug',
+      sourceMessageBlockId: 'block-123',
+    }
+    const session = makeSession({ id: 'fb-1', slug: 'feedback-minion', metadata: feedbackMeta as unknown as Record<string, unknown> })
+    render(<NodeDetailPopup session={session} onClose={vi.fn()} sessions={[session]} dags={[]} />)
+    expect(document.body.textContent).toContain('This was not what I expected')
+  })
+
+  it('clicking source session link navigates to source session', () => {
+    const feedbackMeta: FeedbackMetadata = {
+      kind: 'feedback',
+      vote: 'down',
+      reason: 'incorrect',
+      sourceSessionId: 'source-1',
+      sourceSessionSlug: 'source-slug',
+      sourceMessageBlockId: 'block-123',
+    }
+    const sourceSession = makeSession({ id: 'source-1', slug: 'source-slug' })
+    const feedbackSession = makeSession({
+      id: 'feedback-1',
+      slug: 'feedback-minion',
+      metadata: feedbackMeta as unknown as Record<string, unknown>,
+    })
+    const onSelectSession = vi.fn()
+    render(
+      <NodeDetailPopup
+        session={feedbackSession}
+        onClose={vi.fn()}
+        sessions={[sourceSession, feedbackSession]}
+        dags={[]}
+        onSelectSession={onSelectSession}
+      />
+    )
+    const link = document.querySelector('[data-testid="node-detail-session-link-source-1"]') as HTMLButtonElement
+    expect(link).toBeTruthy()
+    fireEvent.click(link)
+    expect(onSelectSession).toHaveBeenCalledWith(expect.objectContaining({ id: 'source-1' }))
   })
 })
