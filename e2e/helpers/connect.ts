@@ -7,6 +7,9 @@ export async function connectToMinion(
   mock: MockMinion,
   label: string,
 ): Promise<void> {
+  await page.addInitScript(() => {
+    try { localStorage.setItem('minions-ui:onboarding-tour:v1', 'completed') } catch { /* ignore */ }
+  })
   await page.goto('/')
 
   await expect(page.getByRole('button', { name: 'Add connection' })).toBeVisible()

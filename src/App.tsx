@@ -44,6 +44,13 @@ import { InboxButton } from './components/InboxButton'
 import { InboxSheet } from './components/InboxPanel'
 import { NotificationsToggle } from './pwa/NotificationsToggle'
 import type { InboxEvent } from './state/inbox'
+import {
+  OnboardingTour,
+  markTourCompleted,
+  resetTour,
+  shouldShowFirstRunTour,
+} from './components/OnboardingTour'
+import { HelpPanel } from './components/HelpPanel'
 
 export type ViewMode = 'list' | 'canvas' | 'ship' | 'kanban' | 'timeline'
 
@@ -54,6 +61,8 @@ const showMemory = signal(false)
 const showPalette = signal(false)
 const showShortcutsHelp = signal(false)
 const showInboxSheet = signal(false)
+const showHelp = signal(false)
+const showTour = signal(false)
 export const viewMode = signal<ViewMode>('list')
 
 function ViewToggle({ mode, onChange, showKanban }: { mode: ViewMode; onChange: (m: ViewMode) => void; showKanban?: boolean }) {
@@ -394,6 +403,12 @@ function ActiveView() {
     document.documentElement.style.setProperty('--accent', color)
   }, [conn?.color])
 
+  useEffect(() => {
+    if (shouldShowFirstRunTour(connections.value.length > 0)) {
+      showTour.value = true
+    }
+  }, [])
+
   const runningCount = store ? countRunning(store.sessions.value) : 0
   useEffect(() => {
     const base = 'Minions UI'
@@ -677,6 +692,16 @@ function ActiveView() {
             >
               <span aria-hidden="true">🔄</span>
             </button>
+            <button
+              type="button"
+              onClick={() => { showHelp.value = true }}
+              class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 min-h-[44px] min-w-[44px] flex items-center justify-center text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+              title="Help and surface guide"
+              aria-label="Open help and surface guide"
+              data-testid="header-help-btn"
+            >
+              <span aria-hidden="true">❓</span>
+            </button>
           </div>
         ) : (
           <div class="ml-auto">
@@ -686,6 +711,7 @@ function ActiveView() {
               onClean={hasFeature(store, 'messages') ? handleClean : undefined}
               onRefresh={() => void store.refresh()}
               onInbox={() => { showInboxSheet.value = true }}
+              onHelp={() => { showHelp.value = true }}
               showMemory={hasFeature(store, 'memory')}
               memoryProposalsCount={store.memoryProposalsCount.value}
               showRuntimeConfig={hasFeature(store, 'runtime-config')}
@@ -953,6 +979,22 @@ function ActiveView() {
           />
         )
       })()}
+      <HelpPanel
+        open={showHelp.value}
+        onClose={() => { showHelp.value = false }}
+        onReplayTour={() => {
+          showHelp.value = false
+          resetTour()
+          showTour.value = true
+        }}
+      />
+      <OnboardingTour
+        open={showTour.value}
+        onClose={() => {
+          showTour.value = false
+          markTourCompleted()
+        }}
+      />
       </div>
     </div>
   )
