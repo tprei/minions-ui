@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite"
 import { readyNodes, advanceDag, failNode, resetFailedNode, nodeIndex, getUpstreamBranches, isDagComplete, dagGraphStatus } from "./dag"
 import type { DagGraph, DagNode, DagInput } from "./dag"
-import { saveDag, loadDag, listDags } from "./store"
+import { saveDag, loadDag, listDags, isDagCancelled, markDagCancelled, clearDagCancelled, findDagOwnerBySession } from "./store"
 import { prepared } from "../db/sqlite"
 import { updateStackComment } from "./stack-comment"
 import { buildDagChildPrompt } from "./dag-extract"
@@ -124,11 +124,6 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
   const { registry, db, bus, ciBabysitter } = opts
   const commentUpdater = opts.updateStackComment ?? updateStackComment
 
-  const activeGraphs = new Map<string, DagGraph>()
-  const nodeToSession = new Map<string, string>()
-  const nodeToGraph = new Map<string, string>()
-  const cancelledDags = new Set<string>()
-
   const restackManager: RestackManager = createRestackManager({
     bus,
     workspaceRoot: opts.workspace,
@@ -136,6 +131,20 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
   })
 
   const deferredRestacks = new Map<string, Array<{ dagId: string; nodeId: string; parentSha: string; newSha: string; cascadeDepth: number }>>()
+
+  const dagLocks = new Map<string, Promise<unknown>>()
+
+  function withDagLock<T>(dagId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = dagLocks.get(dagId) ?? Promise.resolve()
+    const next = prev.then(fn, fn)
+    dagLocks.set(
+      dagId,
+      next.catch(() => undefined).then(() => {
+        if (dagLocks.get(dagId) === next) dagLocks.delete(dagId)
+      }),
+    )
+    return next
+  }
 
   function runningCount(graph: DagGraph): number {
     return graph.nodes.filter((n) => n.status === "running").length
@@ -179,7 +188,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
   }
 
   async function spawnNode(node: DagNode, graph: DagGraph): Promise<void> {
-    if (cancelledDags.has(graph.id)) return
+    if (isDagCancelled(graph.id, db)) return
     if (runningCount(graph) >= MAX_DAG_CONCURRENCY) return
 
     node.status = "running"
@@ -205,8 +214,6 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
 
       node.status = "running"
       node.sessionId = session.id
-      nodeToSession.set(node.id, session.id)
-      nodeToGraph.set(session.id, graph.id)
 
       bus.emit({
         kind: "dag.node.started",
@@ -228,7 +235,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
   }
 
   async function tickGraph(graph: DagGraph): Promise<void> {
-    if (cancelledDags.has(graph.id)) return
+    if (isDagCancelled(graph.id, db)) return
 
     const ready = readyNodes(graph)
     const available = MAX_DAG_CONCURRENCY - runningCount(graph)
@@ -239,135 +246,130 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     }
 
     if (isDagComplete(graph)) {
-      activeGraphs.delete(graph.id)
       persist(graph)
       await advanceShip(graph.rootSessionId, "verify", { db, registry, scheduler: { start } })
     }
   }
 
   async function start(dagId: string): Promise<void> {
-    const existing = loadDag(dagId, db)
-    if (!existing) throw new Error(`DAG ${dagId} not found in store`)
+    return withDagLock(dagId, async () => {
+      const existing = loadDag(dagId, db)
+      if (!existing) throw new Error(`DAG ${dagId} not found in store`)
 
-    activeGraphs.set(dagId, existing)
-    cancelledDags.delete(dagId)
-
-    await tickGraph(existing)
+      clearDagCancelled(dagId, db)
+      await tickGraph(existing)
+    })
   }
 
   async function onSessionCompleted(sessionId: string, state: SessionRunState): Promise<void> {
-    const dagId = nodeToGraph.get(sessionId)
-    if (!dagId) return
+    const owner = findDagOwnerBySession(sessionId, db)
+    if (!owner) return
 
-    const graph = activeGraphs.get(dagId)
-    if (!graph) return
+    await withDagLock(owner.dagId, async () => {
+      const graph = loadDag(owner.dagId, db)
+      if (!graph) return
 
-    const nodeEntry = Array.from(nodeToSession.entries()).find(([, sid]) => sid === sessionId)
-    if (!nodeEntry) return
-    const [nodeId] = nodeEntry
+      const idx = nodeIndex(graph)
+      const node = idx.get(owner.nodeId)
+      if (!node) return
+      if (node.status !== "running") return
 
-    const idx = nodeIndex(graph)
-    const node = idx.get(nodeId)
-    if (!node) return
+      if (state === "completed") {
+        const { prUrl, branch } = readNodePrInfo(db, sessionId)
+        if (branch) node.branch = branch
+        if (prUrl) node.prUrl = prUrl
 
-    nodeToSession.delete(nodeId)
-    nodeToGraph.delete(sessionId)
+        if (prUrl) {
+          const metaRow = db
+            .query<{ metadata: string }, [string]>("SELECT metadata FROM sessions WHERE id = ?")
+            .get(sessionId)
 
-    if (state === "completed") {
-      const { prUrl, branch } = readNodePrInfo(db, sessionId)
-      if (branch) node.branch = branch
-      if (prUrl) node.prUrl = prUrl
+          let metadata: Record<string, unknown>
+          try {
+            const parsed = metaRow?.metadata ? JSON.parse(metaRow.metadata) : {}
+            metadata = (parsed && typeof parsed === "object") ? parsed as Record<string, unknown> : {}
+          } catch {
+            metadata = {}
+          }
 
-      if (prUrl) {
-        const metaRow = db
-          .query<{ metadata: string }, [string]>("SELECT metadata FROM sessions WHERE id = ?")
-          .get(sessionId)
-
-        let metadata: Record<string, unknown>
-        try {
-          const parsed = metaRow?.metadata ? JSON.parse(metaRow.metadata) : {}
-          metadata = (parsed && typeof parsed === "object") ? parsed as Record<string, unknown> : {}
-        } catch {
-          metadata = {}
+          if (!metadata.ciBabysitStartedAt) {
+            metadata.ciBabysitStartedAt = Date.now()
+            metadata.ciBabysitTrigger = "completion"
+            prepared.updateSession(db, {
+              id: sessionId,
+              metadata,
+              updated_at: Date.now(),
+            })
+            void ciBabysitter.babysitDagChildCI(sessionId, prUrl)
+          }
         }
 
-        if (!metadata.ciBabysitStartedAt) {
-          metadata.ciBabysitStartedAt = Date.now()
-          metadata.ciBabysitTrigger = "completion"
-          prepared.updateSession(db, {
-            id: sessionId,
-            metadata,
-            updated_at: Date.now(),
-          })
-          void ciBabysitter.babysitDagChildCI(sessionId, prUrl)
-        }
+        node.status = "done"
+        advanceDag(graph)
+
+        bus.emit({
+          kind: "dag.node.completed",
+          dagId: owner.dagId,
+          nodeId: owner.nodeId,
+          sessionId,
+          state: "completed",
+        })
+      } else {
+        node.status = "failed"
+        node.error = `session ended with state: ${state}`
+        failNode(graph, owner.nodeId)
+
+        bus.emit({
+          kind: "dag.node.completed",
+          dagId: owner.dagId,
+          nodeId: owner.nodeId,
+          sessionId,
+          state: state === "quota_exhausted" ? "quota_exhausted" : "errored",
+        })
       }
 
-      node.status = "done"
-      advanceDag(graph)
+      persist(graph)
+      await commentUpdater(graph)
+      await tickGraph(graph)
 
-      bus.emit({
-        kind: "dag.node.completed",
-        dagId,
-        nodeId,
-        sessionId,
-        state: "completed",
-      })
-    } else {
-      node.status = "failed"
-      node.error = `session ended with state: ${state}`
-      failNode(graph, nodeId)
-
-      bus.emit({
-        kind: "dag.node.completed",
-        dagId,
-        nodeId,
-        sessionId,
-        state: state === "quota_exhausted" ? "quota_exhausted" : "errored",
-      })
-    }
-
-    persist(graph)
-    await commentUpdater(graph)
-    await tickGraph(graph)
-
-    const deferred = deferredRestacks.get(sessionId)
-    if (deferred) {
-      deferredRestacks.delete(sessionId)
-      for (const event of deferred) {
-        const dagGraph = activeGraphs.get(event.dagId)
-        if (dagGraph) {
-          await restackManager.onParentPushed(event, dagGraph).catch((err) => {
-            console.error(`[scheduler] deferred restack failed for node ${event.nodeId}:`, err)
-          })
+      const deferred = deferredRestacks.get(sessionId)
+      if (deferred) {
+        deferredRestacks.delete(sessionId)
+        const refreshed = loadDag(owner.dagId, db)
+        if (refreshed) {
+          for (const event of deferred) {
+            await restackManager.onParentPushed(event, refreshed).catch((err) => {
+              console.error(`[scheduler] deferred restack failed for node ${event.nodeId}:`, err)
+            })
+          }
         }
       }
-    }
+    })
   }
 
   async function cancel(dagId: string): Promise<void> {
-    cancelledDags.add(dagId)
-    const graph = activeGraphs.get(dagId)
-    if (!graph) return
+    return withDagLock(dagId, async () => {
+      markDagCancelled(dagId, db)
 
-    const runningNodes = graph.nodes.filter((n) => n.status === "running")
-    for (const node of runningNodes) {
-      const sessionId = nodeToSession.get(node.id)
-      if (sessionId) {
-        await registry.stop(sessionId, "dag cancelled")
-        nodeToSession.delete(node.id)
-        nodeToGraph.delete(sessionId)
+      const graph = loadDag(dagId, db)
+      if (!graph) return
+
+      const runningNodes = graph.nodes.filter((n) => n.status === "running")
+      for (const node of runningNodes) {
+        const sessionId = node.sessionId
+        if (sessionId) {
+          await registry.stop(sessionId, "dag cancelled")
+        }
+        node.status = "failed"
+        node.error = "dag cancelled"
       }
-      node.status = "failed"
-      node.error = "dag cancelled"
-    }
 
-    persist(graph)
-    activeGraphs.delete(dagId)
+      persist(graph)
+    })
   }
 
   function status(dagId: string): DagStatusSnapshot {
-    const graph = activeGraphs.get(dagId) ?? loadDag(dagId, db)
+    const graph = loadDag(dagId, db)
     if (!graph) {
       return { dagId, nodes: [] }
     }
@@ -377,26 +379,23 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
       nodes: graph.nodes.map((n) => ({
         id: n.id,
         status: n.status,
-        sessionId: nodeToSession.get(n.id),
+        sessionId: n.status === "running" ? n.sessionId : undefined,
         error: n.error,
       })),
     }
   }
 
   async function retryNode(nodeId: string, dagId: string): Promise<void> {
-    let graph = activeGraphs.get(dagId)
-    if (!graph) {
-      const stored = loadDag(dagId, db)
-      if (!stored) throw new Error(`DAG ${dagId} not found`)
-      graph = stored
-      activeGraphs.set(dagId, graph)
-      cancelledDags.delete(dagId)
-    }
+    return withDagLock(dagId, async () => {
+      const graph = loadDag(dagId, db)
+      if (!graph) throw new Error(`DAG ${dagId} not found`)
 
-    resetFailedNode(graph, nodeId)
-    persist(graph)
-    await commentUpdater(graph)
-    await tickGraph(graph)
+      clearDagCancelled(dagId, db)
+      resetFailedNode(graph, nodeId)
+      persist(graph)
+      await commentUpdater(graph)
+      await tickGraph(graph)
+    })
   }
 
   async function onSessionResumed(sessionId: string): Promise<void> {
@@ -405,113 +404,110 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     const meta = row.metadata as { dagId?: string; dagNodeId?: string }
     if (!meta.dagId || !meta.dagNodeId) return
 
-    let graph = activeGraphs.get(meta.dagId)
-    if (!graph) {
-      const stored = loadDag(meta.dagId, db)
-      if (!stored) return
-      graph = stored
-      activeGraphs.set(meta.dagId, graph)
-      cancelledDags.delete(meta.dagId)
-    }
+    const dagId = meta.dagId
+    const nodeId = meta.dagNodeId
 
-    const idx = nodeIndex(graph)
-    const node = idx.get(meta.dagNodeId)
-    if (!node) return
-    if (node.status !== "failed" && node.status !== "ci-failed") return
+    await withDagLock(dagId, async () => {
+      const graph = loadDag(dagId, db)
+      if (!graph) return
 
-    node.status = "running"
-    node.error = undefined
-    node.sessionId = sessionId
-    nodeToSession.set(node.id, sessionId)
-    nodeToGraph.set(sessionId, graph.id)
+      clearDagCancelled(dagId, db)
 
-    persist(graph)
-    await commentUpdater(graph).catch(() => {})
+      const idx = nodeIndex(graph)
+      const node = idx.get(nodeId)
+      if (!node) return
+      if (node.status !== "failed" && node.status !== "ci-failed") return
+
+      node.status = "running"
+      node.error = undefined
+      node.sessionId = sessionId
+
+      persist(graph)
+      await commentUpdater(graph).catch(() => {})
+    })
   }
 
   async function reconcileOnBoot(): Promise<void> {
     const graphs = listDags(db)
     for (const graph of graphs) {
+      if (isDagCancelled(graph.id, db)) continue
+
       const nonTerminal = graph.nodes.some((n) =>
         n.status === "pending" || n.status === "ready" || n.status === "running"
       )
       if (!nonTerminal) continue
 
-      activeGraphs.set(graph.id, graph)
+      await withDagLock(graph.id, async () => {
+        for (const node of graph.nodes) {
+          if (node.status !== "running") continue
+          if (!node.sessionId) {
+            node.status = "failed"
+            node.error = "session id missing after engine restart"
+            failNode(graph, node.id)
+            continue
+          }
 
-      for (const node of graph.nodes) {
-        if (node.status !== "running") continue
-        if (!node.sessionId) {
-          node.status = "failed"
-          node.error = "session id missing after engine restart"
-          failNode(graph, node.id)
-          continue
+          const row = db
+            .query<{ status: string }, [string]>("SELECT status FROM sessions WHERE id = ?")
+            .get(node.sessionId)
+
+          if (!row) {
+            node.status = "failed"
+            node.error = "session row missing after engine restart"
+            failNode(graph, node.id)
+            continue
+          }
+
+          if (row.status === "completed") {
+            const { prUrl, branch } = readNodePrInfo(db, node.sessionId)
+            if (branch) node.branch = branch
+            if (prUrl) node.prUrl = prUrl
+            node.status = "done"
+            advanceDag(graph)
+          } else if (row.status === "failed") {
+            node.status = "failed"
+            node.error = "session ended (failed) while engine was down"
+            failNode(graph, node.id)
+          }
         }
 
-        const row = db
-          .query<{ status: string }, [string]>("SELECT status FROM sessions WHERE id = ?")
-          .get(node.sessionId)
-
-        if (!row) {
-          node.status = "failed"
-          node.error = "session row missing after engine restart"
-          failNode(graph, node.id)
-          continue
-        }
-
-        if (row.status === "completed") {
-          const { prUrl, branch } = readNodePrInfo(db, node.sessionId)
-          if (branch) node.branch = branch
-          if (prUrl) node.prUrl = prUrl
-          node.status = "done"
-          advanceDag(graph)
-        } else if (row.status === "failed") {
-          node.status = "failed"
-          node.error = "session ended (failed) while engine was down"
-          failNode(graph, node.id)
-        } else {
-          nodeToSession.set(node.id, node.sessionId)
-          nodeToGraph.set(node.sessionId, graph.id)
-        }
-      }
-
-      persist(graph)
-      await commentUpdater(graph).catch(() => {})
-      await tickGraph(graph)
+        persist(graph)
+        await commentUpdater(graph).catch(() => {})
+        await tickGraph(graph)
+      })
     }
   }
 
   async function forceNodeLanded(nodeId: string, dagId: string): Promise<void> {
-    let graph = activeGraphs.get(dagId)
-    if (!graph) {
-      const stored = loadDag(dagId, db)
-      if (!stored) throw new Error(`DAG ${dagId} not found`)
-      graph = stored
-      activeGraphs.set(dagId, graph)
-      cancelledDags.delete(dagId)
-    }
+    return withDagLock(dagId, async () => {
+      const graph = loadDag(dagId, db)
+      if (!graph) throw new Error(`DAG ${dagId} not found`)
 
-    const idx = nodeIndex(graph)
-    const node = idx.get(nodeId)
-    if (!node) throw new Error(`node ${nodeId} not found in DAG ${dagId}`)
+      clearDagCancelled(dagId, db)
 
-    node.status = "landed"
-    advanceDag(graph)
+      const idx = nodeIndex(graph)
+      const node = idx.get(nodeId)
+      if (!node) throw new Error(`node ${nodeId} not found in DAG ${dagId}`)
 
-    bus.emit({
-      kind: "dag.node.landed",
-      dagId,
-      nodeId,
+      node.status = "landed"
+      advanceDag(graph)
+
+      bus.emit({
+        kind: "dag.node.landed",
+        dagId,
+        nodeId,
+      })
+
+      persist(graph)
+      await commentUpdater(graph)
+      await tickGraph(graph)
     })
-
-    persist(graph)
-    await commentUpdater(graph)
-    await tickGraph(graph)
   }
 
   bus.onKind("dag.node.pushed", async (event) => {
-    const graph = activeGraphs.get(event.dagId)
+    const graph = loadDag(event.dagId, db)
     if (!graph) return
+    if (isDagCancelled(event.dagId, db)) return
 
     const idx = nodeIndex(graph)
     const node = idx.get(event.nodeId)

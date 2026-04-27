@@ -406,6 +406,7 @@ test('memories table has all expected columns and constraints', () => {
     repo: 'test/repo',
     created_at: now,
     updated_at: now,
+    cancelled_at: null,
   })
 
   db.run(

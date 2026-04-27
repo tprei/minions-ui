@@ -541,6 +541,268 @@ describe("DagScheduler", () => {
   })
 })
 
+describe("DagScheduler durable state", () => {
+  let db: Database
+  let bus: EngineEventBus
+
+  beforeEach(() => {
+    db = makeTestDb()
+    bus = new EngineEventBus()
+  })
+
+  function makeScheduler(registry: SessionRegistry) {
+    return createDagScheduler({
+      registry,
+      db,
+      bus,
+      workspace: "/tmp",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
+      updateStackComment: async () => {},
+    })
+  }
+
+  it("persists cancellation so a fresh scheduler instance honors it", async () => {
+    const graph = buildDag("dag-cancel-persist", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessionsA: string[] = []
+    const registryA = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessionsA.length}`, db)
+      sessionsA.push(session.id)
+      return { session, runtime: {} as never }
+    })
+    const stoppedA: string[] = []
+    registryA.stop = async (id) => { stoppedA.push(id) }
+
+    const schedulerA = makeScheduler(registryA)
+    await schedulerA.start("dag-cancel-persist")
+    expect(sessionsA).toHaveLength(1)
+
+    await schedulerA.cancel("dag-cancel-persist")
+    expect(stoppedA).toEqual([sessionsA[0]!])
+
+    const dagRow = prepared.getDag(db, "dag-cancel-persist")
+    expect(dagRow?.cancelled_at).not.toBeNull()
+    expect(dagRow?.cancelled_at).toBeTypeOf("number")
+
+    const sessionsB: string[] = []
+    const registryB = makeRegistry(db, async () => {
+      const session = makeSession(`s-b-${sessionsB.length}`, db)
+      sessionsB.push(session.id)
+      return { session, runtime: {} as never }
+    })
+    const schedulerB = makeScheduler(registryB)
+    await schedulerB.reconcileOnBoot()
+
+    expect(sessionsB).toHaveLength(0)
+
+    const after = schedulerB.status("dag-cancel-persist")
+    expect(after.nodes.find((n) => n.id === "a")?.status).toBe("failed")
+    expect(after.nodes.find((n) => n.id === "b")?.status).toBe("pending")
+  })
+
+  it("findOwnerBySession lets a fresh scheduler resolve completion without in-memory map", async () => {
+    const graph = buildDag("dag-no-cache", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessionsA: string[] = []
+    const registryA = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessionsA.length}`, db)
+      sessionsA.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const schedulerA = makeScheduler(registryA)
+    await schedulerA.start("dag-no-cache")
+    const childSessionId = sessionsA[0]!
+
+    const sessionsB: string[] = []
+    const registryB = makeRegistry(db, async () => {
+      const session = makeSession(`s-b-${sessionsB.length}`, db)
+      sessionsB.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const schedulerB = makeScheduler(registryB)
+    await schedulerB.onSessionCompleted(childSessionId, "completed")
+
+    const after = schedulerB.status("dag-no-cache")
+    expect(after.nodes.find((n) => n.id === "a")?.status).toBe("done")
+    expect(after.nodes.find((n) => n.id === "b")?.status).toBe("running")
+    expect(sessionsB).toHaveLength(1)
+  })
+
+  it("ignores onSessionCompleted for an already-completed node (idempotent)", async () => {
+    const graph = buildDag("dag-idempotent", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-idempotent")
+    await scheduler.onSessionCompleted(sessions[0]!, "completed")
+
+    const completedEvents: unknown[] = []
+    bus.onKind("dag.node.completed", (e) => completedEvents.push(e))
+
+    await scheduler.onSessionCompleted(sessions[0]!, "completed")
+
+    expect(completedEvents).toHaveLength(0)
+  })
+
+  it("status() reads from DB without in-memory cache", async () => {
+    const graph = buildDag("dag-status-from-db", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const registry = makeRegistry(db, async () => ({ session: makeSession("s-0", db), runtime: {} as never }))
+    const schedulerA = makeScheduler(registry)
+    await schedulerA.start("dag-status-from-db")
+
+    const schedulerB = makeScheduler(registry)
+    const status = schedulerB.status("dag-status-from-db")
+    expect(status.nodes).toHaveLength(1)
+    expect(status.nodes[0]?.status).toBe("running")
+    expect(status.nodes[0]?.sessionId).toBe("s-0")
+  })
+
+  it("reconcileOnBoot does NOT spawn new nodes for cancelled DAGs", async () => {
+    const graph = buildDag("dag-cancel-reconcile", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    prepared.cancelDag(db, "dag-cancel-reconcile", Date.now())
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.reconcileOnBoot()
+
+    expect(sessions).toHaveLength(0)
+  })
+
+  it("retryNode clears cancellation so the DAG is restartable", async () => {
+    const graph = buildDag("dag-retry-uncancel", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+    registry.stop = async () => {}
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-retry-uncancel")
+    await scheduler.onSessionCompleted(sessions[0]!, "errored")
+    await scheduler.cancel("dag-retry-uncancel")
+
+    expect(prepared.getDag(db, "dag-retry-uncancel")?.cancelled_at).not.toBeNull()
+
+    await scheduler.retryNode("a", "dag-retry-uncancel")
+
+    expect(prepared.getDag(db, "dag-retry-uncancel")?.cancelled_at).toBeNull()
+    expect(sessions).toHaveLength(2)
+  })
+
+  it("serializes concurrent onSessionCompleted calls for the same DAG", async () => {
+    const graph = buildDag("dag-mutex", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: [] },
+      { id: "c", title: "Task C", description: "C", dependsOn: ["a", "b"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      await new Promise<void>((r) => setTimeout(r, 0))
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-mutex")
+
+    expect(sessions).toHaveLength(2)
+    const sessionA = sessions[0]!
+    const sessionB = sessions[1]!
+
+    await Promise.all([
+      scheduler.onSessionCompleted(sessionA, "completed"),
+      scheduler.onSessionCompleted(sessionB, "completed"),
+    ])
+
+    const after = scheduler.status("dag-mutex")
+    expect(after.nodes.find((n) => n.id === "a")?.status).toBe("done")
+    expect(after.nodes.find((n) => n.id === "b")?.status).toBe("done")
+    expect(after.nodes.find((n) => n.id === "c")?.status).toBe("running")
+  })
+
+  it("ignores dag.node.pushed events for cancelled DAGs", async () => {
+    const graph = buildDag("dag-cancel-push", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    graph.nodes[0]!.branch = "minion/test-a"
+    graph.nodes[1]!.branch = "minion/test-b"
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+    registry.stop = async () => {}
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-cancel-push")
+    await scheduler.cancel("dag-cancel-push")
+
+    bus.emit({
+      kind: "dag.node.pushed",
+      dagId: "dag-cancel-push",
+      nodeId: "a",
+      parentSha: "old-sha",
+      newSha: "new-sha",
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const after = scheduler.status("dag-cancel-push")
+    expect(after.nodes.find((n) => n.id === "a")?.status).toBe("failed")
+  })
+})
+
 describe("DagScheduler restack integration", () => {
   it("defers restack when node is running", async () => {
     const db = makeTestDb()

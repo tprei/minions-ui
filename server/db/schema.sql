@@ -103,7 +103,8 @@ CREATE TABLE IF NOT EXISTS dags (
   status TEXT NOT NULL CHECK (status IN ('pending','running','completed','failed')),
   repo TEXT,
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  cancelled_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS dag_nodes (

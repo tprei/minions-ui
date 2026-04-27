@@ -157,6 +157,7 @@ interface DagRow {
   repo: string | null
   created_at: number
   updated_at: number
+  cancelled_at: number | null
 }
 
 interface DagNodeRow {
@@ -204,10 +205,12 @@ type StmtCache = {
   getSessionCheckpoint?: ReturnType<Database['prepare']>
   insertDag?: ReturnType<Database['prepare']>
   updateDag?: ReturnType<Database['prepare']>
+  cancelDag?: ReturnType<Database['prepare']>
   getDag?: ReturnType<Database['prepare']>
   listDags?: ReturnType<Database['prepare']>
   deleteDag?: ReturnType<Database['prepare']>
   upsertDagNode?: ReturnType<Database['prepare']>
+  findDagNodeBySession?: ReturnType<Database['prepare']>
 }
 
 const dbCaches = new WeakMap<Database, StmtCache>()
@@ -620,8 +623,8 @@ export const prepared = {
     const c = stmts(db)
     if (!c.insertDag) {
       c.insertDag = db.prepare(
-        `INSERT INTO dags (id, root_task_id, status, repo, created_at, updated_at)
-         VALUES ($id, $root_task_id, $status, $repo, $created_at, $updated_at)`,
+        `INSERT INTO dags (id, root_task_id, status, repo, created_at, updated_at, cancelled_at)
+         VALUES ($id, $root_task_id, $status, $repo, $created_at, $updated_at, $cancelled_at)`,
       )
     }
     c.insertDag.run({
@@ -631,6 +634,7 @@ export const prepared = {
       $repo: row.repo,
       $created_at: row.created_at,
       $updated_at: row.updated_at,
+      $cancelled_at: row.cancelled_at,
     })
   },
 
@@ -655,6 +659,20 @@ export const prepared = {
     })
   },
 
+  cancelDag(db: Database, id: string, cancelledAt: number): void {
+    const c = stmts(db)
+    if (!c.cancelDag) {
+      c.cancelDag = db.prepare(
+        `UPDATE dags SET cancelled_at = $cancelled_at, updated_at = $updated_at WHERE id = $id`,
+      )
+    }
+    c.cancelDag.run({ $id: id, $cancelled_at: cancelledAt, $updated_at: cancelledAt })
+  },
+
+  uncancelDag(db: Database, id: string, updatedAt: number): void {
+    db.run('UPDATE dags SET cancelled_at = NULL, updated_at = ? WHERE id = ?', [updatedAt, id])
+  },
+
   getDag(db: Database, id: string): DagRow | null {
     const c = stmts(db)
     if (!c.getDag) {
@@ -677,6 +695,17 @@ export const prepared = {
       c.deleteDag = db.prepare('DELETE FROM dags WHERE id = ?')
     }
     c.deleteDag.run(id)
+  },
+
+  findDagNodeBySession(db: Database, sessionId: string): { dag_id: string; id: string } | null {
+    const c = stmts(db)
+    if (!c.findDagNodeBySession) {
+      c.findDagNodeBySession = db.prepare<{ dag_id: string; id: string }, [string]>(
+        'SELECT dag_id, id FROM dag_nodes WHERE session_id = ? LIMIT 1',
+      )
+    }
+    const row = c.findDagNodeBySession.get(sessionId) as { dag_id: string; id: string } | null
+    return row ?? null
   },
 
   upsertDagNode(db: Database, row: DagNodeRow): void {

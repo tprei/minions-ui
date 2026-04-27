@@ -12,6 +12,7 @@ function graphToRows(graph: DagGraph): { dagRow: Parameters<typeof prepared.inse
     repo: repo && repo.length > 0 ? repo : null,
     created_at: graph.createdAt,
     updated_at: Date.now(),
+    cancelled_at: null,
   }
 
   const idx = nodeIndex(graph)
@@ -160,4 +161,26 @@ export function listDags(db?: Database): DagGraph[] {
 export function deleteDag(id: string, db?: Database): void {
   const database = db ?? getDb()
   prepared.deleteDag(database, id)
+}
+
+export function isDagCancelled(id: string, db?: Database): boolean {
+  const database = db ?? getDb()
+  const row = prepared.getDag(database, id)
+  return row?.cancelled_at != null
+}
+
+export function markDagCancelled(id: string, db?: Database): void {
+  const database = db ?? getDb()
+  prepared.cancelDag(database, id, Date.now())
+}
+
+export function clearDagCancelled(id: string, db?: Database): void {
+  const database = db ?? getDb()
+  prepared.uncancelDag(database, id, Date.now())
+}
+
+export function findDagOwnerBySession(sessionId: string, db?: Database): { dagId: string; nodeId: string } | null {
+  const database = db ?? getDb()
+  const row = prepared.findDagNodeBySession(database, sessionId)
+  return row ? { dagId: row.dag_id, nodeId: row.id } : null
 }
