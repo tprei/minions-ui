@@ -56,6 +56,7 @@ function rowToApi(row: SessionRow, db?: Database): ApiSession {
     mode: row.mode,
     conversation: [],
     transcriptUrl: `/api/sessions/${row.slug}/transcript`,
+    metadata: Object.keys(row.metadata).length > 0 ? row.metadata : undefined,
   }
 
   if (row.mode === 'ship' && row.stage) {

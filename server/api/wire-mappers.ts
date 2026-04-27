@@ -45,6 +45,7 @@ export function sessionRowToApi(row: SessionRow): ApiSession {
     quickActions,
     conversation: row.conversation as ConversationMessage[],
     variantGroupId: row.variant_group_id ?? undefined,
+    metadata: Object.keys(row.metadata).length > 0 ? row.metadata : undefined,
   }
 
   // Include stage only when mode is 'ship' and stage is present
