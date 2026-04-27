@@ -662,6 +662,99 @@ describe('POST /api/commands', () => {
     expect(row?.stage).toBe('dag')
   })
 
+  test('submit_feedback with missing session returns error', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          sessionId: 'nonexistent',
+          messageBlockId: 'block-1',
+          vote: 'up',
+        }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    const body = await json<{ data: { success: boolean; error?: string } }>(res)
+    expect(body.data.success).toBe(false)
+    expect(body.data.error).toContain('not found')
+  })
+
+  test('submit_feedback records audit event', async () => {
+    const now = Date.now()
+    prepared.insertSession(testDb, {
+      id: 'feedback-source',
+      slug: 'feedback-source',
+      status: 'completed',
+      command: 'test task',
+      mode: 'task',
+      repo: null,
+      branch: null,
+      bare_dir: null,
+      pr_url: null,
+      parent_id: null,
+      variant_group_id: null,
+      claude_session_id: null,
+      workspace_root: null,
+      created_at: now,
+      updated_at: now,
+      needs_attention: false,
+      attention_reasons: [],
+      quick_actions: [],
+      conversation: [],
+      quota_sleep_until: null,
+      quota_retry_count: 0,
+      metadata: {},
+      pipeline_advancing: false,
+      stage: null,
+      coordinator_children: [],
+    })
+    prepared.insertEvent(testDb, {
+      session_id: 'feedback-source',
+      seq: 1,
+      turn: 1,
+      type: 'assistant_text',
+      timestamp: now,
+      payload: {
+        type: 'assistant_text',
+        blockId: 'reply-1',
+        text: 'Here is my answer',
+        final: true,
+      },
+    })
+
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          sessionId: 'feedback-source',
+          messageBlockId: 'reply-1',
+          vote: 'down',
+          reason: 'incorrect',
+          comment: 'Wrong approach',
+        }),
+      }),
+    )
+
+    expect(res.status).toBe(200)
+    const body = await json<{ data: { success: boolean; error?: string; sessionId?: string } }>(res)
+    expect(body.data.success).toBe(true)
+    expect(body.data.sessionId).toBeUndefined()
+
+    const auditRows = prepared.listAuditEvents(testDb)
+    const feedbackEvent = auditRows.find((e) => e.action === 'message_feedback')
+    expect(feedbackEvent).toBeDefined()
+    expect(feedbackEvent?.session_id).toBe('feedback-source')
+    expect(feedbackEvent?.metadata.vote).toBe('down')
+    expect(feedbackEvent?.metadata.reason).toBe('incorrect')
+    expect(feedbackEvent?.metadata.comment).toBe('Wrong approach')
+  })
+
   test('invalid body returns 400', async () => {
     const app = makeApp(testDb)
     const res = await app.fetch(
