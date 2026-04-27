@@ -13,7 +13,7 @@ import { DagStatusPanel } from './DagStatusPanel'
 import { Transcript, TranscriptUpgradeNotice } from './transcript'
 import { PrPreviewCard } from '../components/PrPreviewCard'
 import { WorktreeHeader, truncateCwd } from '../components/WorktreeHeader'
-import { statusDot } from '../components/SessionList'
+import { StatusIndicator } from '../components/SessionList'
 import { hasFeature } from '../api/features'
 import type { ApiSession, MinionCommand, QuickAction } from '../api/types'
 import type { ConnectionStore } from '../state/types'
@@ -163,7 +163,7 @@ export function ChatPane({
             ↑ {parentSession.slug}
           </button>
         )}
-        <span class={`inline-block h-2 w-2 rounded-full ${statusDot(session.status)}`} />
+        <StatusIndicator status={session.status} label={`${session.slug}: ${session.status}`} />
         <span class="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
         {isDesktopPane.value ? (
           <>

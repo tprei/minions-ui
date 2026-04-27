@@ -548,6 +548,7 @@ function ActiveView() {
     onRetryRebase: handleRetryRebase,
     isActionLoading,
     accentColor: conn.color,
+    viewportStorageKey: `minions-ui:viewport:${conn.id}`,
   }
 
   return (

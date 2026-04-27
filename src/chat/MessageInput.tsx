@@ -214,11 +214,19 @@ export function MessageInput({ store, value, onValueChange, onSend }: MessageInp
           type="button"
           onClick={() => void submit(value, attachments)}
           disabled={sending || (!trimmed && attachments.length === 0)}
-          class="shrink-0 rounded-lg px-4 py-3 text-sm font-medium transition-colors text-white shadow-sm bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+          class="shrink-0 inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors text-white shadow-sm bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
           data-testid="send-btn"
           aria-label={sending ? 'Sending' : 'Send'}
+          aria-busy={sending}
         >
-          {sending ? 'Sending…' : 'Send'}
+          {sending && (
+            <span
+              class="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"
+              aria-hidden="true"
+              data-testid="send-btn-spinner"
+            />
+          )}
+          <span>{sending ? 'Sending…' : 'Send'}</span>
         </button>
       </div>
     </div>

@@ -91,6 +91,27 @@ describe('MessageInput', () => {
     act(() => { resolve!() })
   })
 
+  it('shows a spinner and aria-busy=true while onSend is pending', async () => {
+    let resolve: () => void
+    const onSend = vi.fn().mockReturnValue(new Promise<void>((r) => { resolve = r }))
+    render(<Controlled onSend={onSend} />)
+    fireEvent.input(getTextarea(), { target: { value: 'spinner test' } })
+    act(() => {
+      fireEvent.click(getSendBtn())
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('send-btn-spinner')).toBeTruthy()
+      expect(getSendBtn().getAttribute('aria-busy')).toBe('true')
+      expect(getSendBtn().textContent).toContain('Sending')
+    })
+    act(() => { resolve!() })
+    await waitFor(() => {
+      expect(screen.queryByTestId('send-btn-spinner')).toBeNull()
+      expect(getSendBtn().getAttribute('aria-busy')).toBe('false')
+      expect(getSendBtn().textContent).toContain('Send')
+    })
+  })
+
   it('shows retry banner when onSend rejects', async () => {
     const onSend = vi.fn().mockRejectedValue(new Error('network error'))
     render(<Controlled onSend={onSend} />)

@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, fireEvent, cleanup } from '@testing-library/preact'
-import { UniverseCanvas } from '../../src/components/UniverseCanvas'
+import {
+  UniverseCanvas,
+  loadPersistedViewport,
+  savePersistedViewport,
+} from '../../src/components/UniverseCanvas'
 import type { ApiSession, ApiDagGraph, FeedbackMetadata } from '../../src/api/types'
 
 vi.mock('@reactflow/core', async () => {
@@ -525,6 +529,112 @@ describe('UniverseCanvas', () => {
       expect(nodes[0].data.scale).toBeGreaterThan(0)
       expect(nodes[0].data.scale).toBeLessThanOrEqual(1)
     }
+  })
+
+  it('uses fitView and no defaultViewport when no viewportStorageKey is provided', async () => {
+    const mockModule = await import('@reactflow/core')
+    const sessions = [createSession()]
+    render(<UniverseCanvas {...defaultProps} sessions={sessions} />)
+    const calls = vi.mocked(mockModule.ReactFlow).mock.calls
+    const props = calls[calls.length - 1][0]
+    expect(props.fitView).toBe(true)
+    expect(props.defaultViewport).toBeUndefined()
+  })
+
+  it('passes defaultViewport from localStorage and disables fitView when persisted viewport is present', async () => {
+    const storageKey = 'minions-ui:viewport:test-conn'
+    window.localStorage.setItem(storageKey, JSON.stringify({ x: 42, y: -17, zoom: 0.75 }))
+    const mockModule = await import('@reactflow/core')
+    const sessions = [createSession()]
+    render(
+      <UniverseCanvas
+        {...defaultProps}
+        sessions={sessions}
+        viewportStorageKey={storageKey}
+      />
+    )
+    const calls = vi.mocked(mockModule.ReactFlow).mock.calls
+    const props = calls[calls.length - 1][0]
+    expect(props.defaultViewport).toEqual({ x: 42, y: -17, zoom: 0.75 })
+    expect(props.fitView).toBe(false)
+    window.localStorage.removeItem(storageKey)
+  })
+
+  it('persists viewport to localStorage when ReactFlow emits onMoveEnd', async () => {
+    const storageKey = 'minions-ui:viewport:onmove-test'
+    window.localStorage.removeItem(storageKey)
+    const mockModule = await import('@reactflow/core')
+    const sessions = [createSession()]
+    render(
+      <UniverseCanvas
+        {...defaultProps}
+        sessions={sessions}
+        viewportStorageKey={storageKey}
+      />
+    )
+    const calls = vi.mocked(mockModule.ReactFlow).mock.calls
+    const props = calls[calls.length - 1][0]
+    expect(typeof props.onMoveEnd).toBe('function')
+    props.onMoveEnd?.(null as unknown as MouseEvent, { x: 100, y: 200, zoom: 1.25 })
+    expect(JSON.parse(window.localStorage.getItem(storageKey)!)).toEqual({
+      x: 100,
+      y: 200,
+      zoom: 1.25,
+    })
+    window.localStorage.removeItem(storageKey)
+  })
+
+  it('ignores invalid viewport stored in localStorage', async () => {
+    const storageKey = 'minions-ui:viewport:bad'
+    window.localStorage.setItem(storageKey, 'not-json')
+    const mockModule = await import('@reactflow/core')
+    const sessions = [createSession()]
+    render(
+      <UniverseCanvas
+        {...defaultProps}
+        sessions={sessions}
+        viewportStorageKey={storageKey}
+      />
+    )
+    const calls = vi.mocked(mockModule.ReactFlow).mock.calls
+    const props = calls[calls.length - 1][0]
+    expect(props.defaultViewport).toBeUndefined()
+    expect(props.fitView).toBe(true)
+    window.localStorage.removeItem(storageKey)
+  })
+})
+
+describe('loadPersistedViewport / savePersistedViewport', () => {
+  const key = 'minions-ui:viewport:unit'
+
+  afterEach(() => {
+    window.localStorage.removeItem(key)
+  })
+
+  it('returns null when no value is stored', () => {
+    expect(loadPersistedViewport(key)).toBeNull()
+  })
+
+  it('round-trips a viewport through localStorage', () => {
+    savePersistedViewport(key, { x: 11, y: 22, zoom: 1.5 })
+    expect(loadPersistedViewport(key)).toEqual({ x: 11, y: 22, zoom: 1.5 })
+  })
+
+  it('returns null for malformed JSON', () => {
+    window.localStorage.setItem(key, '{{')
+    expect(loadPersistedViewport(key)).toBeNull()
+  })
+
+  it('returns null when zoom is not positive', () => {
+    window.localStorage.setItem(key, JSON.stringify({ x: 0, y: 0, zoom: 0 }))
+    expect(loadPersistedViewport(key)).toBeNull()
+  })
+
+  it('returns null when fields are missing or non-finite', () => {
+    window.localStorage.setItem(key, JSON.stringify({ x: 1, y: 2 }))
+    expect(loadPersistedViewport(key)).toBeNull()
+    window.localStorage.setItem(key, JSON.stringify({ x: Infinity, y: 0, zoom: 1 }))
+    expect(loadPersistedViewport(key)).toBeNull()
   })
 
   it('renders feedback badge on canvas node when session has feedback metadata', () => {

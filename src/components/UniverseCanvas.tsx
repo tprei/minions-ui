@@ -303,6 +303,46 @@ export interface UniverseCanvasProps {
   onViewLogs?: (sessionId: string) => void
   onRetryRebase?: (dagId: string, nodeId: string) => Promise<void>
   accentColor?: string
+  viewportStorageKey?: string
+}
+
+interface PersistedViewport {
+  x: number
+  y: number
+  zoom: number
+}
+
+export function loadPersistedViewport(storageKey: string): PersistedViewport | null {
+  if (typeof window === 'undefined' || !window.localStorage) return null
+  try {
+    const raw = window.localStorage.getItem(storageKey)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (
+      parsed &&
+      typeof parsed.x === 'number' &&
+      typeof parsed.y === 'number' &&
+      typeof parsed.zoom === 'number' &&
+      Number.isFinite(parsed.x) &&
+      Number.isFinite(parsed.y) &&
+      Number.isFinite(parsed.zoom) &&
+      parsed.zoom > 0
+    ) {
+      return { x: parsed.x, y: parsed.y, zoom: parsed.zoom }
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+export function savePersistedViewport(storageKey: string, viewport: PersistedViewport): void {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(viewport))
+  } catch {
+    return
+  }
 }
 
 export function UniverseCanvas(props: UniverseCanvasProps) {
@@ -326,6 +366,7 @@ function UniverseCanvasInner({
   onOpenChat,
   onViewLogs,
   onRetryRebase,
+  viewportStorageKey,
 }: UniverseCanvasProps) {
   const theme = useTheme()
   const isDark = theme.value === 'dark'
@@ -504,6 +545,18 @@ function UniverseCanvasInner({
     reactFlow.fitView({ padding: 0.2, duration: 400 })
   }, [reactFlow])
 
+  const persistedViewport = useMemo(
+    () => (viewportStorageKey ? loadPersistedViewport(viewportStorageKey) : null),
+    [viewportStorageKey]
+  )
+  const handleMoveEnd = useCallback(
+    (_event: MouseEvent | TouchEvent | null, viewport: PersistedViewport) => {
+      if (!viewportStorageKey || !viewport) return
+      savePersistedViewport(viewportStorageKey, viewport)
+    },
+    [viewportStorageKey]
+  )
+
   const minZoom = isMobile.value ? 0.15 : 0.1
   const maxZoom = isMobile.value ? 1.5 : 2
 
@@ -514,8 +567,10 @@ function UniverseCanvasInner({
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onMoveEnd={handleMoveEnd}
         nodeTypes={nodeTypes}
-        fitView
+        defaultViewport={persistedViewport ?? undefined}
+        fitView={!persistedViewport}
         fitViewOptions={{ padding: 0.3 }}
         minZoom={minZoom}
         maxZoom={maxZoom}
