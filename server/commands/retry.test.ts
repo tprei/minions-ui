@@ -15,6 +15,8 @@ function makeScheduler(shouldFail = false): DagScheduler {
     async forceNodeLanded() {},
     async reconcileOnBoot() {},
     persistDag() {},
+    async watchdogTick() {},
+    shutdown() {},
   }
 }
 

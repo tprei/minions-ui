@@ -10,6 +10,7 @@ function graphToRows(graph: DagGraph): { dagRow: Parameters<typeof prepared.inse
     root_task_id: graph.rootSessionId,
     status: dagGraphStatus(graph),
     repo: repo && repo.length > 0 ? repo : null,
+    deadline_ms: graph.deadlineMs ?? null,
     created_at: graph.createdAt,
     updated_at: Date.now(),
   }
@@ -121,6 +122,7 @@ export function loadDag(id: string, db?: Database): DagGraph | null {
     rootSessionId: dagRow.root_task_id,
     repo: dagRow.repo ?? "",
     createdAt: dagRow.created_at,
+    deadlineMs: dagRow.deadline_ms ?? undefined,
   }
 }
 
@@ -135,6 +137,7 @@ export function saveDag(graph: DagGraph, db?: Database): void {
       root_task_id: dagRow.root_task_id,
       status: dagRow.status,
       repo: dagRow.repo,
+      deadline_ms: dagRow.deadline_ms,
       updated_at: dagRow.updated_at,
     })
   } else {

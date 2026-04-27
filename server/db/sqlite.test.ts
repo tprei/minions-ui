@@ -404,6 +404,7 @@ test('getDagNodeBySessionId returns dag_id, node_id, and status for linked node'
     root_task_id: 'root-1',
     status: 'running',
     repo: 'org/repo',
+    deadline_ms: null,
     created_at: now,
     updated_at: now,
   })
@@ -498,6 +499,7 @@ test('getDagNodeBySessionId tracks updates after upsertDagNode replaces session_
     root_task_id: 'root-r',
     status: 'running',
     repo: null,
+    deadline_ms: null,
     created_at: now,
     updated_at: now,
   })
@@ -566,6 +568,7 @@ test('memories table has all expected columns and constraints', () => {
     root_task_id: 'task-1',
     status: 'completed',
     repo: 'test/repo',
+    deadline_ms: null,
     created_at: now,
     updated_at: now,
   })

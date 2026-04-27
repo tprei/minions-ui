@@ -780,6 +780,278 @@ describe("DagScheduler", () => {
     await expect(scheduler.onSessionResumed(session.id)).resolves.toBeUndefined()
   })
 
+  it("watchdog retries running nodes on first no-progress stall", async () => {
+    let now = 1_000
+    const graph = buildDag("dag-stall-retry", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const stoppedSessions: string[] = []
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+    registry.stop = async (id) => { stoppedSessions.push(id) }
+
+    const stallEvents: Array<{ reason: string; action: string; stallCount: number }> = []
+    bus.onKind("dag.stalled", (e) => stallEvents.push({ reason: e.reason, action: e.action, stallCount: e.stallCount }))
+
+    const scheduler = createDagScheduler({
+      registry,
+      db,
+      bus,
+      workspace: "/tmp",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
+      updateStackComment: async () => {},
+      watchdog: {
+        stallThresholdMs: 1000,
+        checkIntervalMs: 1_000_000,
+        maxRetries: 1,
+        now: () => now,
+        setIntervalFn: (() => 0) as unknown as typeof setInterval,
+        clearIntervalFn: (() => {}) as unknown as typeof clearInterval,
+      },
+    })
+
+    await scheduler.start("dag-stall-retry")
+    expect(sessions).toHaveLength(1)
+    const firstSession = sessions[0]!
+
+    now = 5_000
+    await scheduler.watchdogTick(now)
+
+    expect(stallEvents).toHaveLength(1)
+    expect(stallEvents[0]).toMatchObject({ reason: "no-progress", action: "retry", stallCount: 1 })
+    expect(stoppedSessions).toEqual([firstSession])
+    expect(sessions).toHaveLength(2)
+
+    const status = scheduler.status("dag-stall-retry")
+    expect(status.nodes[0]?.status).toBe("running")
+
+    scheduler.shutdown()
+  })
+
+  it("watchdog fail-forwards after retry budget is exhausted", async () => {
+    let now = 1_000
+    const graph = buildDag("dag-stall-fwd", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+    registry.stop = async () => {}
+
+    const stallEvents: Array<{ action: string }> = []
+    bus.onKind("dag.stalled", (e) => stallEvents.push({ action: e.action }))
+
+    const scheduler = createDagScheduler({
+      registry,
+      db,
+      bus,
+      workspace: "/tmp",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
+      updateStackComment: async () => {},
+      watchdog: {
+        stallThresholdMs: 1000,
+        checkIntervalMs: 1_000_000,
+        maxRetries: 1,
+        now: () => now,
+        setIntervalFn: (() => 0) as unknown as typeof setInterval,
+        clearIntervalFn: (() => {}) as unknown as typeof clearInterval,
+      },
+    })
+
+    await scheduler.start("dag-stall-fwd")
+
+    now = 5_000
+    await scheduler.watchdogTick(now)
+    expect(stallEvents.at(-1)?.action).toBe("retry")
+
+    now = 10_000
+    await scheduler.watchdogTick(now)
+    expect(stallEvents.at(-1)?.action).toBe("fail-forward")
+
+    const status = scheduler.status("dag-stall-fwd")
+    const nodeA = status.nodes.find((n) => n.id === "a")
+    const nodeB = status.nodes.find((n) => n.id === "b")
+    expect(nodeA?.status).toBe("failed")
+    expect(nodeA?.error).toContain("dag stalled")
+    expect(nodeB?.status).toBe("skipped")
+
+    scheduler.shutdown()
+  })
+
+  it("watchdog deadline immediately fail-forwards even on first stall", async () => {
+    let now = 1_000
+    const graph = buildDag("dag-stall-deadline", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo", undefined, { deadlineMs: 5_000 })
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+    registry.stop = async () => {}
+
+    const stallEvents: Array<{ reason: string; action: string }> = []
+    bus.onKind("dag.stalled", (e) => stallEvents.push({ reason: e.reason, action: e.action }))
+
+    const scheduler = createDagScheduler({
+      registry,
+      db,
+      bus,
+      workspace: "/tmp",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
+      updateStackComment: async () => {},
+      watchdog: {
+        stallThresholdMs: 1_000_000,
+        checkIntervalMs: 1_000_000,
+        maxRetries: 5,
+        now: () => now,
+        setIntervalFn: (() => 0) as unknown as typeof setInterval,
+        clearIntervalFn: (() => {}) as unknown as typeof clearInterval,
+      },
+    })
+
+    await scheduler.start("dag-stall-deadline")
+
+    now = 6_000
+    await scheduler.watchdogTick(now)
+
+    expect(stallEvents).toHaveLength(1)
+    expect(stallEvents[0]).toEqual({ reason: "deadline", action: "fail-forward" })
+
+    const status = scheduler.status("dag-stall-deadline")
+    expect(status.nodes[0]?.status).toBe("failed")
+
+    scheduler.shutdown()
+  })
+
+  it("watchdog notifyResolved keeps the dag alive across node completion", async () => {
+    let now = 1_000
+    const graph = buildDag("dag-stall-progress", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const stallEvents: unknown[] = []
+    bus.onKind("dag.stalled", (e) => stallEvents.push(e))
+
+    const scheduler = createDagScheduler({
+      registry,
+      db,
+      bus,
+      workspace: "/tmp",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
+      updateStackComment: async () => {},
+      watchdog: {
+        stallThresholdMs: 1000,
+        checkIntervalMs: 1_000_000,
+        maxRetries: 1,
+        now: () => now,
+        setIntervalFn: (() => 0) as unknown as typeof setInterval,
+        clearIntervalFn: (() => {}) as unknown as typeof clearInterval,
+      },
+    })
+
+    await scheduler.start("dag-stall-progress")
+
+    now = 1_500
+    await scheduler.onSessionCompleted(sessions[0]!, "completed")
+
+    now = 2_200
+    await scheduler.watchdogTick(now)
+
+    expect(stallEvents).toHaveLength(0)
+
+    scheduler.shutdown()
+  })
+
+  it("watchdog disarms when the dag completes", async () => {
+    let now = 1_000
+    const graph = buildDag("dag-stall-disarm", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const stallEvents: unknown[] = []
+    bus.onKind("dag.stalled", (e) => stallEvents.push(e))
+
+    const scheduler = createDagScheduler({
+      registry,
+      db,
+      bus,
+      workspace: "/tmp",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
+      updateStackComment: async () => {},
+      watchdog: {
+        stallThresholdMs: 1000,
+        checkIntervalMs: 1_000_000,
+        maxRetries: 1,
+        now: () => now,
+        setIntervalFn: (() => 0) as unknown as typeof setInterval,
+        clearIntervalFn: (() => {}) as unknown as typeof clearInterval,
+      },
+    })
+
+    await scheduler.start("dag-stall-disarm")
+    await scheduler.onSessionCompleted(sessions[0]!, "completed")
+
+    now = 1_000_000
+    await scheduler.watchdogTick(now)
+
+    expect(stallEvents).toHaveLength(0)
+
+    scheduler.shutdown()
+  })
+
   it("onSessionResumed is a no-op when node is not in failed state", async () => {
     const graph = buildDag("dag-resume-noop", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },

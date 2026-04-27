@@ -13,6 +13,8 @@ import type { ApiDagNode, ApiDagGraph } from "../../shared/api-types"
 import type { CIBabysitter } from "../handlers/types"
 import { createRestackManager } from "./restack"
 import type { RestackManager } from "./restack"
+import { createDagWatchdog } from "./watchdog"
+import type { DagWatchdog, DagWatchdogOpts, StallEvent, StallAction } from "./watchdog"
 
 function fetchRootConversation(db: Database, rootSessionId: string): TopicMessage[] {
   const rows = db
@@ -105,6 +107,7 @@ export interface DagSchedulerOpts {
   workspace: string
   ciBabysitter: CIBabysitter
   updateStackComment?: (graph: DagGraph) => Promise<void>
+  watchdog?: Pick<DagWatchdogOpts, "stallThresholdMs" | "checkIntervalMs" | "maxRetries" | "now" | "setIntervalFn" | "clearIntervalFn">
 }
 
 export interface DagScheduler {
@@ -117,6 +120,8 @@ export interface DagScheduler {
   forceNodeLanded(nodeId: string, dagId: string): Promise<void>
   reconcileOnBoot(): Promise<void>
   persistDag(graph: DagGraph): void
+  watchdogTick(at?: number): Promise<void>
+  shutdown(): void
 }
 
 export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
@@ -136,6 +141,62 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
   })
 
   const deferredRestacks = new Map<string, Array<{ dagId: string; nodeId: string; parentSha: string; newSha: string; cascadeDepth: number }>>()
+
+  const watchdog: DagWatchdog = createDagWatchdog({
+    bus,
+    stallThresholdMs: opts.watchdog?.stallThresholdMs,
+    checkIntervalMs: opts.watchdog?.checkIntervalMs,
+    maxRetries: opts.watchdog?.maxRetries,
+    now: opts.watchdog?.now,
+    setIntervalFn: opts.watchdog?.setIntervalFn,
+    clearIntervalFn: opts.watchdog?.clearIntervalFn,
+    onStall: (event, action) => handleStall(event, action),
+  })
+
+  async function handleStall(event: StallEvent, action: StallAction): Promise<void> {
+    const graph = activeGraphs.get(event.graph.id)
+    if (!graph) return
+
+    if (action === "retry") {
+      for (const nodeId of event.runningNodeIds) {
+        const sessionId = nodeToSession.get(nodeId)
+        if (sessionId) {
+          await registry.stop(sessionId, `dag stalled (${event.reason})`).catch(() => {})
+          nodeToSession.delete(nodeId)
+          nodeToGraph.delete(sessionId)
+        }
+        const node = nodeIndex(graph).get(nodeId)
+        if (!node) continue
+        if (node.status === "running") {
+          node.status = "ready"
+          node.error = undefined
+          node.sessionId = undefined
+        }
+      }
+      persist(graph)
+      await commentUpdater(graph).catch(() => {})
+      await tickGraph(graph)
+      return
+    }
+
+    for (const nodeId of event.runningNodeIds) {
+      const sessionId = nodeToSession.get(nodeId)
+      if (sessionId) {
+        await registry.stop(sessionId, `dag stalled (${event.reason})`).catch(() => {})
+        nodeToSession.delete(nodeId)
+        nodeToGraph.delete(sessionId)
+      }
+      const node = nodeIndex(graph).get(nodeId)
+      if (!node) continue
+      node.status = "failed"
+      node.error = `dag stalled: ${event.reason}`
+      failNode(graph, nodeId)
+    }
+
+    persist(graph)
+    await commentUpdater(graph).catch(() => {})
+    await tickGraph(graph)
+  }
 
   function runningCount(graph: DagGraph): number {
     return graph.nodes.filter((n) => n.status === "running").length
@@ -215,6 +276,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
         sessionId: session.id,
       })
 
+      watchdog.notifyProgress(graph.id)
       persist(graph)
       await commentUpdater(graph)
     } catch (err) {
@@ -222,6 +284,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
       node.status = "failed"
       node.error = msg
       failNode(graph, node.id)
+      watchdog.notifyProgress(graph.id)
       persist(graph)
       await commentUpdater(graph)
     }
@@ -240,6 +303,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
 
     if (isDagComplete(graph)) {
       activeGraphs.delete(graph.id)
+      watchdog.disarm(graph.id)
       persist(graph)
       if (!completedDags.has(graph.id)) {
         completedDags.add(graph.id)
@@ -261,6 +325,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     activeGraphs.set(dagId, existing)
     cancelledDags.delete(dagId)
     completedDags.delete(dagId)
+    watchdog.arm(existing)
 
     await tickGraph(existing)
   }
@@ -337,6 +402,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
         sessionId,
         state: "completed",
       })
+      watchdog.notifyResolved(dagId)
     } else {
       node.status = "failed"
       node.error = `session ended with state: ${state}`
@@ -349,6 +415,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
         sessionId,
         state: state === "quota_exhausted" ? "quota_exhausted" : "errored",
       })
+      watchdog.notifyProgress(dagId)
     }
 
     persist(graph)
@@ -371,6 +438,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
 
   async function cancel(dagId: string): Promise<void> {
     cancelledDags.add(dagId)
+    watchdog.disarm(dagId)
 
     let graph = activeGraphs.get(dagId)
     if (!graph) {
@@ -440,6 +508,8 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     completedDags.delete(dagId)
 
     resetFailedNode(graph, nodeId)
+    watchdog.arm(graph)
+    watchdog.notifyResolved(graph.id)
     persist(graph)
     await commentUpdater(graph)
     await tickGraph(graph)
@@ -469,6 +539,8 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     nodeToSession.set(node.id, sessionId)
     nodeToGraph.set(sessionId, graph.id)
 
+    watchdog.arm(graph)
+    watchdog.notifyResolved(graph.id)
     persist(graph)
     await commentUpdater(graph).catch(() => {})
   }
@@ -482,6 +554,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
       if (!nonTerminal) continue
 
       activeGraphs.set(graph.id, graph)
+      watchdog.arm(graph)
 
       for (const node of graph.nodes) {
         if (node.status !== "running") continue
@@ -548,6 +621,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
       nodeId,
     })
 
+    watchdog.notifyResolved(dagId)
     persist(graph)
     await commentUpdater(graph)
     await tickGraph(graph)
@@ -593,5 +667,17 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     })
   })
 
-  return { start, onSessionCompleted, onSessionResumed, cancel, status, retryNode, forceNodeLanded, reconcileOnBoot, persistDag: persist }
+  return {
+    start,
+    onSessionCompleted,
+    onSessionResumed,
+    cancel,
+    status,
+    retryNode,
+    forceNodeLanded,
+    reconcileOnBoot,
+    persistDag: persist,
+    watchdogTick: (at) => watchdog.tick(at),
+    shutdown: () => watchdog.shutdown(),
+  }
 }
