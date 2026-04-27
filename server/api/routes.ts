@@ -106,6 +106,7 @@ const FEATURES = [
   'external-entrypoints',
   'audit-log',
   'memory',
+  'message-feedback',
 ]
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -150,6 +151,14 @@ const CommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('land'), dagId: z.string(), nodeId: z.string() }),
   z.object({ action: z.literal('retry_rebase'), dagId: z.string(), nodeId: z.string() }),
   z.object({ action: z.literal('ship_advance'), sessionId: z.string(), to: z.enum(['think', 'plan', 'dag', 'verify', 'done']).optional() }),
+  z.object({
+    action: z.literal('submit_feedback'),
+    sessionId: z.string().min(1),
+    messageBlockId: z.string().min(1),
+    vote: z.enum(['up', 'down']),
+    reason: z.enum(['incorrect', 'off_topic', 'too_verbose', 'unsafe', 'other']).optional(),
+    comment: z.string().max(2000).optional(),
+  }),
 ])
 
 const MessageSchema = z.object({
