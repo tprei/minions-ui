@@ -9,6 +9,7 @@ import { resetEventBus, getEventBus } from '../events/bus'
 import { runMigrations } from '../db/sqlite'
 import { spawnWithTimeout } from '../workspace/git'
 import type { SpawnFn, SubprocessHandle } from './runtime'
+import { AdmissionDeniedError, createAdmissionController } from '../orchestration/admission'
 
 // ---------------------------------------------------------------------------
 // Infrastructure helpers
@@ -772,5 +773,100 @@ describe('SessionRegistry', () => {
       expect(snap!.mode).toBe('ship')
       expect(snap!.stage).toBeUndefined()
     }, 30_000)
+  })
+
+  describe('priority-ordered admission control', () => {
+    test('throws AdmissionDeniedError when total cap is reached for the requested priority', async () => {
+      const admission = createAdmissionController({
+        totalCap: 2,
+        reservedSlots: { interactive: 0, 'ship-root': 0, 'ship-verify': 0, 'dag-task': 0, loop: 0 },
+      })
+      admission.reserve('existing-1', 'loop')
+      admission.reserve('existing-2', 'loop')
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn(), admission })
+
+      let caught: unknown
+      try {
+        await registry.create({
+          mode: 'task',
+          prompt: 'should be denied',
+          repo: '/nonexistent-this-call-must-not-reach-prepareWorkspace',
+          metadata: { loopId: 'overflow' },
+        })
+      } catch (err) {
+        caught = err
+      }
+
+      expect(caught).toBeInstanceOf(AdmissionDeniedError)
+      expect((caught as AdmissionDeniedError).priority).toBe('loop')
+    })
+
+    test('reserved interactive slots prevent loops from filling the engine', async () => {
+      const admission = createAdmissionController({
+        totalCap: 3,
+        reservedSlots: { interactive: 2, 'ship-root': 0, 'ship-verify': 0, 'dag-task': 0, loop: 0 },
+      })
+
+      admission.reserve('a', 'loop')
+      const denied = admission.tryAdmit('b', 'loop')
+      expect(denied.admitted).toBe(false)
+
+      const registry = createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn(), admission })
+
+      let caught: unknown
+      try {
+        await registry.create({
+          mode: 'task',
+          prompt: 'overflow loop',
+          repo: '/x',
+          metadata: { loopId: 'lp' },
+        })
+      } catch (err) {
+        caught = err
+      }
+      expect(caught).toBeInstanceOf(AdmissionDeniedError)
+      expect((caught as AdmissionDeniedError).priority).toBe('loop')
+
+      const interactivePeek = admission.peek('interactive')
+      expect(interactivePeek.admitted).toBe(true)
+    })
+
+    test('admission slot is released when session.completed is emitted', async () => {
+      const admission = createAdmissionController({
+        totalCap: 1,
+        reservedSlots: { interactive: 0, 'ship-root': 0, 'ship-verify': 0, 'dag-task': 0, loop: 0 },
+      })
+
+      createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn(), admission })
+
+      admission.reserve('s1', 'interactive')
+      expect(admission.stats().total).toBe(1)
+      expect(admission.peek('interactive').admitted).toBe(false)
+
+      getEventBus().emit({
+        kind: 'session.completed',
+        sessionId: 's1',
+        state: 'completed',
+        durationMs: 0,
+      })
+
+      expect(admission.stats().total).toBe(0)
+      expect(admission.peek('interactive').admitted).toBe(true)
+    })
+
+    test('admission slot is released when session.deleted is emitted', async () => {
+      const admission = createAdmissionController({
+        totalCap: 1,
+        reservedSlots: { interactive: 0, 'ship-root': 0, 'ship-verify': 0, 'dag-task': 0, loop: 0 },
+      })
+
+      createSessionRegistry({ getDb: () => db, spawnFn: makeNoopSpawnFn(), admission })
+
+      admission.reserve('s1', 'interactive')
+      getEventBus().emit({ kind: 'session.deleted', sessionId: 's1' })
+
+      expect(admission.stats().total).toBe(0)
+    })
   })
 })

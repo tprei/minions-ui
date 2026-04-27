@@ -7,6 +7,7 @@ import { getLoop, listLoops } from './store'
 import type { SessionRegistry, CreateSessionOpts } from '../session/registry'
 import type { ApiSession } from '../../shared/api-types'
 import type { SessionRuntime } from '../session/runtime'
+import { AdmissionDeniedError, createAdmissionController } from '../orchestration/admission'
 
 function makeTestDb(): Database {
   const db = openDatabase(':memory:')
@@ -200,5 +201,127 @@ describe('LoopScheduler', () => {
 
     await sched.tick(Date.now())
     expect(created).toHaveLength(0)
+  })
+
+  describe('admission integration', () => {
+    test('tick skips when admission peek denies loop priority', async () => {
+      const created: string[] = []
+      const admission = createAdmissionController({
+        totalCap: 2,
+        reservedSlots: { interactive: 2, 'ship-root': 0, 'ship-verify': 0, 'dag-task': 0, loop: 0 },
+      })
+
+      const sched = new LoopScheduler({
+        db,
+        registry: makeRegistry(async (opts) => {
+          created.push(opts.prompt)
+          return { session: makeSession('s'), runtime: {} as SessionRuntime }
+        }),
+        workspaceRoot: '/tmp/test-ws',
+        repo: 'https://github.com/org/repo',
+        maxConcurrentSessions: 10,
+        getInteractiveSessionCount: () => 0,
+        admission,
+      })
+
+      await sched.tick(Date.now())
+      expect(created).toHaveLength(0)
+    })
+
+    test('AdmissionDeniedError from registry.create does not increment failure counter', async () => {
+      const admission = createAdmissionController({
+        totalCap: 1,
+        reservedSlots: { interactive: 0, 'ship-root': 0, 'ship-verify': 0, 'dag-task': 0, loop: 0 },
+      })
+
+      let createCalls = 0
+      const sched = new LoopScheduler({
+        db,
+        registry: makeRegistry(async () => {
+          createCalls++
+          throw new AdmissionDeniedError({
+            admitted: false,
+            priority: 'loop',
+            capForPriority: 1,
+            active: 1,
+            activeAtOrBelow: 1,
+            reason: 'denied for test',
+          })
+        }),
+        workspaceRoot: '/tmp/test-ws',
+        repo: 'https://github.com/org/repo',
+        maxConcurrentSessions: 10,
+        getInteractiveSessionCount: () => 0,
+        admission,
+      })
+
+      await sched.kickLoop('test-coverage')
+
+      expect(createCalls).toBe(1)
+      const row = getLoop(db, 'test-coverage')
+      expect(row!.consecutive_failures).toBe(0)
+    })
+
+    test('non-admission errors still increment failure counter', async () => {
+      const sched = new LoopScheduler({
+        db,
+        registry: makeRegistry(async () => {
+          throw new Error('something else broke')
+        }),
+        workspaceRoot: '/tmp/test-ws',
+        repo: 'https://github.com/org/repo',
+        maxConcurrentSessions: 10,
+        getInteractiveSessionCount: () => 0,
+      })
+
+      await sched.kickLoop('test-coverage')
+
+      const row = getLoop(db, 'test-coverage')
+      expect(row!.consecutive_failures).toBe(1)
+    })
+
+    test('tick fires loops when admission peek for loop priority is admitted', async () => {
+      const admission = createAdmissionController({
+        totalCap: 5,
+        reservedSlots: { interactive: 2, 'ship-root': 0, 'ship-verify': 0, 'dag-task': 0, loop: 0 },
+      })
+
+      const created: string[] = []
+      const sched = new LoopScheduler({
+        db,
+        registry: makeRegistry(async () => {
+          created.push('called')
+          return { session: makeSession('s-' + created.length), runtime: {} as SessionRuntime }
+        }),
+        workspaceRoot: '/tmp/test-ws',
+        repo: 'https://github.com/org/repo',
+        maxConcurrentSessions: 10,
+        getInteractiveSessionCount: () => 0,
+        admission,
+      })
+
+      await sched.tick(Date.now())
+      expect(created.length).toBeGreaterThan(0)
+    })
+
+    test('kickLoop passes loopId in metadata so admission classifies as loop priority', async () => {
+      const seenMetadata: Array<Record<string, unknown> | undefined> = []
+      const sched = new LoopScheduler({
+        db,
+        registry: makeRegistry(async (opts) => {
+          seenMetadata.push(opts.metadata)
+          return { session: makeSession('s'), runtime: {} as SessionRuntime }
+        }),
+        workspaceRoot: '/tmp/test-ws',
+        repo: 'https://github.com/org/repo',
+        maxConcurrentSessions: 10,
+        getInteractiveSessionCount: () => 0,
+      })
+
+      await sched.kickLoop('test-coverage')
+
+      expect(seenMetadata).toHaveLength(1)
+      expect(seenMetadata[0]).toMatchObject({ loopId: 'test-coverage' })
+    })
   })
 })
