@@ -32,6 +32,13 @@ function readFileAsBase64(file: File): Promise<{ mediaType: string; dataBase64: 
 
 const COLLAPSE_KEY = 'minions-ui:newtaskbar-collapsed'
 
+export const NEW_TASK_FOCUS_EVENT = 'minions-ui:focus-new-task'
+
+export function requestNewTaskFocus(): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(NEW_TASK_FOCUS_EVENT))
+}
+
 function readCollapsed(): boolean {
   if (typeof localStorage === 'undefined') return false
   return localStorage.getItem(COLLAPSE_KEY) === 'true'
@@ -169,12 +176,27 @@ export function NewTaskBar({
   // Collapsed state is user-controlled via the − button, persisted in
   // localStorage. Defaults to expanded; tests rely on the expanded render.
   const collapsed = useSignal(readCollapsed())
+  const promptRef = useRef<HTMLTextAreaElement>(null)
 
   function toggleCollapsed() {
     const next = !collapsed.value
     collapsed.value = next
     writeCollapsed(next)
   }
+
+  useEffect(() => {
+    const handler = () => {
+      if (collapsed.value) {
+        collapsed.value = false
+        writeCollapsed(false)
+      }
+      setTimeout(() => promptRef.current?.focus(), 0)
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener(NEW_TASK_FOCUS_EVENT, handler)
+      return () => window.removeEventListener(NEW_TASK_FOCUS_EVENT, handler)
+    }
+  }, [collapsed])
 
   if (!canCreate) {
     return (
@@ -401,6 +423,7 @@ export function NewTaskBar({
           <PaperclipIcon />
         </button>
         <textarea
+          ref={promptRef}
           value={prompt.value}
           onInput={(e) => { prompt.value = (e.currentTarget as HTMLTextAreaElement).value }}
           onPaste={handlePaste}
