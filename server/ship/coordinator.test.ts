@@ -1,13 +1,13 @@
 import { describe, test, expect, beforeEach, mock, spyOn } from 'bun:test'
 import type { Database } from 'bun:sqlite'
 import { openDatabase, prepared, runMigrations } from '../db/sqlite'
-import { advanceShip, cancelShip, DIRECTIVE_PLAN, DIRECTIVE_VERIFY } from './coordinator'
-import { buildDag } from '../dag/dag'
-import { saveDag, loadDag } from '../dag/store'
+import { advanceShip, cancelShip, DIRECTIVE_PLAN, DIRECTIVE_VERIFY, reconcileShipsOnBoot } from './coordinator'
 import type { PlanActionCtx } from '../commands/plan-actions'
 import type { SessionRegistry } from '../session/registry'
 import { getEventBus, resetEventBus } from '../events/bus'
 import type { ShipStage } from '../../shared/api-types'
+import { buildDag } from '../dag/dag'
+import { saveDag, loadDag } from '../dag/store'
 
 function createTestDb(): Database {
   const db = openDatabase(':memory:')
@@ -684,5 +684,298 @@ describe('cancelShip', () => {
     const reloaded = loadDag(dagId, db)
     expect(reloaded!.nodes.find((n) => n.id === 'a')?.status).toBe('cancelled')
     expect(reloaded!.nodes.find((n) => n.id === 'b')?.status).toBe('cancelled')
+  })
+})
+
+describe('reconcileShipsOnBoot', () => {
+  let db: Database
+  let registry: SessionRegistry
+  let scheduler: ReturnType<typeof createMockScheduler>
+  let ctx: PlanActionCtx
+
+  beforeEach(() => {
+    resetEventBus()
+    db = createTestDb()
+    registry = createMockRegistry()
+    scheduler = createMockScheduler()
+    ctx = { db, registry, scheduler }
+  })
+
+  function makeCompleteDag(dagId: string, rootSessionId: string, opts?: { allDone?: boolean; failed?: boolean }): void {
+    const allDone = opts?.allDone ?? true
+    const failed = opts?.failed ?? false
+    const graph = buildDag(
+      dagId,
+      [
+        { id: 'a', title: 'Task A', description: 'A', dependsOn: [] },
+        { id: 'b', title: 'Task B', description: 'B', dependsOn: ['a'] },
+      ],
+      rootSessionId,
+      'https://github.com/test/repo',
+    )
+    if (allDone) {
+      graph.nodes[0]!.status = 'done'
+      graph.nodes[0]!.branch = 'minion/task-a'
+      graph.nodes[1]!.status = failed ? 'failed' : 'done'
+      if (!failed) graph.nodes[1]!.branch = 'minion/task-b'
+    }
+    saveDag(graph, db)
+  }
+
+  function makeRunningDag(dagId: string, rootSessionId: string): void {
+    const graph = buildDag(
+      dagId,
+      [
+        { id: 'a', title: 'Task A', description: 'A', dependsOn: [] },
+        { id: 'b', title: 'Task B', description: 'B', dependsOn: ['a'] },
+      ],
+      rootSessionId,
+      'https://github.com/test/repo',
+    )
+    graph.nodes[0]!.status = 'done'
+    graph.nodes[1]!.status = 'running'
+    saveDag(graph, db)
+  }
+
+  test('advances stuck ship from dag to verify when DAG is fully complete', async () => {
+    const sessionId = 'session-stuck-1'
+    createSession(db, sessionId, 'ship', 'dag')
+    makeCompleteDag('dag-recover-1', sessionId)
+
+    const result = await reconcileShipsOnBoot(ctx)
+
+    expect(result.scanned).toBe(1)
+    expect(result.advanced).toEqual([
+      { sessionId, from: 'dag', to: 'verify' },
+    ])
+    expect(result.failures).toEqual([])
+
+    const row = prepared.getSession(db, sessionId)
+    expect(row?.stage).toBe('verify')
+
+    expect(registry.reply).toHaveBeenCalledTimes(1)
+    const replyMock = registry.reply as unknown as ReturnType<typeof mock>
+    const [calledSessionId, directive] = replyMock.mock.calls[0] as [string, string]
+    expect(calledSessionId).toBe(sessionId)
+    expect(directive).toContain('Task A')
+    expect(directive).toContain('Task B')
+    expect(directive).toContain('minion/task-a')
+    expect(directive).toContain('minion/task-b')
+  })
+
+  test('advances stuck ship even when DAG ended in failure (all nodes terminal)', async () => {
+    const sessionId = 'session-stuck-fail'
+    createSession(db, sessionId, 'ship', 'dag')
+    makeCompleteDag('dag-recover-fail', sessionId, { allDone: true, failed: true })
+
+    const result = await reconcileShipsOnBoot(ctx)
+
+    expect(result.advanced).toHaveLength(1)
+    expect(result.advanced[0]).toEqual({ sessionId, from: 'dag', to: 'verify' })
+
+    const row = prepared.getSession(db, sessionId)
+    expect(row?.stage).toBe('verify')
+  })
+
+  test('leaves ship at dag stage when DAG still has running nodes', async () => {
+    const sessionId = 'session-running-dag'
+    createSession(db, sessionId, 'ship', 'dag')
+    makeRunningDag('dag-still-running', sessionId)
+
+    const result = await reconcileShipsOnBoot(ctx)
+
+    expect(result.scanned).toBe(1)
+    expect(result.advanced).toEqual([])
+    expect(result.failures).toEqual([])
+
+    const row = prepared.getSession(db, sessionId)
+    expect(row?.stage).toBe('dag')
+    expect(registry.reply).not.toHaveBeenCalled()
+  })
+
+  test('skips ships not in dag stage', async () => {
+    const thinkSession = 'ship-think'
+    const planSession = 'ship-plan'
+    const verifySession = 'ship-verify'
+    createSession(db, thinkSession, 'ship', 'think')
+    createSession(db, planSession, 'ship', 'plan')
+    createSession(db, verifySession, 'ship', 'verify')
+    makeCompleteDag('dag-think', thinkSession)
+    makeCompleteDag('dag-plan', planSession)
+    makeCompleteDag('dag-verify', verifySession)
+
+    const result = await reconcileShipsOnBoot(ctx)
+
+    expect(result.scanned).toBe(3)
+    expect(result.advanced).toEqual([])
+    expect(registry.reply).not.toHaveBeenCalled()
+    expect(prepared.getSession(db, thinkSession)?.stage).toBe('think')
+    expect(prepared.getSession(db, planSession)?.stage).toBe('plan')
+    expect(prepared.getSession(db, verifySession)?.stage).toBe('verify')
+  })
+
+  test('skips ships with stage=dag but no associated DAG row', async () => {
+    const sessionId = 'session-no-dag'
+    createSession(db, sessionId, 'ship', 'dag')
+
+    const result = await reconcileShipsOnBoot(ctx)
+
+    expect(result.scanned).toBe(1)
+    expect(result.advanced).toEqual([])
+    expect(result.failures).toEqual([])
+
+    const row = prepared.getSession(db, sessionId)
+    expect(row?.stage).toBe('dag')
+  })
+
+  test('ignores non-ship sessions', async () => {
+    const taskSession = 'task-1'
+    createSession(db, taskSession, 'task', null)
+
+    const result = await reconcileShipsOnBoot(ctx)
+
+    expect(result.scanned).toBe(0)
+    expect(result.advanced).toEqual([])
+  })
+
+  test('skips ships already marked completed', async () => {
+    const sessionId = 'session-already-completed'
+    createSession(db, sessionId, 'ship', 'dag')
+    makeCompleteDag('dag-already-done', sessionId)
+    db.run("UPDATE sessions SET status = 'completed' WHERE id = ?", [sessionId])
+
+    const result = await reconcileShipsOnBoot(ctx)
+
+    expect(result.scanned).toBe(0)
+    expect(result.advanced).toEqual([])
+    expect(registry.reply).not.toHaveBeenCalled()
+  })
+
+  test('skips ships already marked failed', async () => {
+    const sessionId = 'session-already-failed'
+    createSession(db, sessionId, 'ship', 'dag')
+    makeCompleteDag('dag-already-failed', sessionId)
+    db.run("UPDATE sessions SET status = 'failed' WHERE id = ?", [sessionId])
+
+    const result = await reconcileShipsOnBoot(ctx)
+
+    expect(result.scanned).toBe(0)
+    expect(result.advanced).toEqual([])
+  })
+
+  test('handles multiple stuck ships in one pass', async () => {
+    const sessionA = 'multi-aaa'
+    const sessionB = 'multi-bbb'
+    const sessionC = 'multi-ccc'
+    createSession(db, sessionA, 'ship', 'dag')
+    createSession(db, sessionB, 'ship', 'dag')
+    createSession(db, sessionC, 'ship', 'dag')
+    makeCompleteDag('dag-multi-a', sessionA)
+    makeRunningDag('dag-multi-b', sessionB)
+    makeCompleteDag('dag-multi-c', sessionC)
+
+    const result = await reconcileShipsOnBoot(ctx)
+
+    expect(result.scanned).toBe(3)
+    expect(result.advanced).toHaveLength(2)
+    const advancedIds = result.advanced.map((a) => a.sessionId).sort()
+    expect(advancedIds).toEqual([sessionA, sessionC].sort())
+
+    expect(prepared.getSession(db, sessionA)?.stage).toBe('verify')
+    expect(prepared.getSession(db, sessionB)?.stage).toBe('dag')
+    expect(prepared.getSession(db, sessionC)?.stage).toBe('verify')
+  })
+
+  test('emits session.snapshot event for each advanced ship', async () => {
+    const sessionId = 'session-snapshot-emit'
+    createSession(db, sessionId, 'ship', 'dag')
+    makeCompleteDag('dag-snapshot', sessionId)
+
+    const events: Array<{ id: string; stage?: string }> = []
+    getEventBus().onKind('session.snapshot', (e) => {
+      events.push({ id: e.session.id, stage: e.session.stage })
+    })
+
+    await reconcileShipsOnBoot(ctx)
+
+    expect(events).toHaveLength(1)
+    expect(events[0]).toEqual({ id: sessionId, stage: 'verify' })
+  })
+
+  test('reports failures when advance throws and continues with other ships', async () => {
+    const sessionGood = 'ship-good'
+    const sessionBad = 'ship-bad'
+    createSession(db, sessionGood, 'ship', 'dag')
+    createSession(db, sessionBad, 'ship', 'dag')
+    makeCompleteDag('dag-good', sessionGood)
+    makeCompleteDag('dag-bad', sessionBad)
+
+    const realReply = registry.reply
+    let callCount = 0
+    registry.reply = mock(async (id: string, text: string) => {
+      callCount++
+      if (id === sessionBad) throw new Error('injection failed')
+      return (realReply as unknown as (sid: string, t: string) => Promise<boolean>)(id, text)
+    }) as typeof registry.reply
+
+    const consoleErrorSpy = spyOn(console, 'error')
+
+    const result = await reconcileShipsOnBoot(ctx)
+
+    expect(result.scanned).toBe(2)
+    expect(result.advanced).toHaveLength(1)
+    expect(result.advanced[0]?.sessionId).toBe(sessionGood)
+    expect(result.failures).toHaveLength(1)
+    expect(result.failures[0]?.sessionId).toBe(sessionBad)
+    expect(result.failures[0]?.reason).toContain('injection failed')
+
+    expect(callCount).toBe(2)
+    consoleErrorSpy.mockRestore()
+  })
+
+  test('returns empty result when no ship sessions exist', async () => {
+    const result = await reconcileShipsOnBoot(ctx)
+    expect(result).toEqual({ scanned: 0, advanced: [], failures: [] })
+  })
+
+  test('uses child branch info from DAG when building verify directive', async () => {
+    const sessionId = 'session-with-children'
+    createSession(db, sessionId, 'ship', 'dag')
+
+    const dagId = 'dag-with-prs'
+    const graph = buildDag(
+      dagId,
+      [{ id: 'task-1', title: 'Implement feature', description: 'Do the thing.', dependsOn: [] }],
+      sessionId,
+      'https://github.com/test/repo',
+    )
+    graph.nodes[0]!.status = 'done'
+    graph.nodes[0]!.branch = 'minion/feature-branch'
+    graph.nodes[0]!.prUrl = 'https://github.com/test/repo/pull/42'
+    saveDag(graph, db)
+
+    await reconcileShipsOnBoot(ctx)
+
+    const row = prepared.getSession(db, sessionId)
+    expect(row?.stage).toBe('verify')
+
+    expect(registry.reply).toHaveBeenCalledTimes(1)
+    const replyMock = registry.reply as unknown as ReturnType<typeof mock>
+    const [, directive] = replyMock.mock.calls[0] as [string, string]
+    expect(directive).toContain('minion/feature-branch')
+    expect(directive).toContain('https://github.com/test/repo/pull/42')
+  })
+
+  test('is idempotent: running twice does not double-advance', async () => {
+    const sessionId = 'session-idempotent'
+    createSession(db, sessionId, 'ship', 'dag')
+    makeCompleteDag('dag-idempotent', sessionId)
+
+    const first = await reconcileShipsOnBoot(ctx)
+    expect(first.advanced).toHaveLength(1)
+
+    const second = await reconcileShipsOnBoot(ctx)
+    expect(second.advanced).toEqual([])
+    expect(second.scanned).toBe(1)
   })
 })

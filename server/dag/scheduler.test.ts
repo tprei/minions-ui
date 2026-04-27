@@ -1221,6 +1221,126 @@ describe("DagScheduler", () => {
   })
 })
 
+describe("DagScheduler boot reconcile + ship coordinator", () => {
+  it("ship reconcile recovers stuck ship when DAG was already terminal pre-restart", async () => {
+    const db = makeTestDb()
+    const bus = new EngineEventBus()
+
+    const rootId = "ship-root-stuck"
+    insertShipRoot(db, rootId, "dag")
+
+    const childId = "child-already-done"
+    const session = makeSession(childId, db)
+    void session
+
+    const graph = buildDag(
+      "dag-pre-terminated",
+      [{ id: "a", title: "Task A", description: "A", dependsOn: [] }],
+      rootId,
+      "https://github.com/org/repo",
+    )
+    graph.nodes[0]!.status = "done"
+    graph.nodes[0]!.sessionId = childId
+    graph.nodes[0]!.branch = "minion/test-child-already-done"
+    saveDag(graph, db)
+
+    const replies: Array<{ sessionId: string; text: string }> = []
+    const registry = makeRegistry(db)
+    registry.reply = async (sid, text) => {
+      replies.push({ sessionId: sid, text })
+      return true
+    }
+
+    const scheduler = createDagScheduler({
+      registry,
+      db,
+      bus,
+      workspace: "/tmp/workspace",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
+      updateStackComment: async () => {},
+    })
+
+    await scheduler.reconcileOnBoot()
+
+    let row = prepared.getSession(db, rootId)
+    expect(row?.stage).toBe("dag")
+    expect(replies).toHaveLength(0)
+
+    const { reconcileShipsOnBoot } = await import("../ship/coordinator")
+    const result = await reconcileShipsOnBoot({ db, registry, scheduler })
+
+    expect(result.advanced).toEqual([{ sessionId: rootId, from: "dag", to: "verify" }])
+
+    row = prepared.getSession(db, rootId)
+    expect(row?.stage).toBe("verify")
+    expect(replies).toHaveLength(1)
+    expect(replies[0]?.sessionId).toBe(rootId)
+    expect(replies[0]?.text).toContain(buildVerifyDirective([
+      { title: "Task A", description: "A", branch: "minion/test-child-already-done", prUrl: null },
+    ]))
+  })
+
+  it("ship reconcile is a no-op when scheduler reconcile already advanced the ship", async () => {
+    const db = makeTestDb()
+    const bus = new EngineEventBus()
+
+    const rootId = "ship-root-mid-flight"
+    insertShipRoot(db, rootId, "dag")
+
+    const childId = "child-running-at-crash"
+    const childSession = makeSession(childId, db)
+    void childSession
+
+    const graph = buildDag(
+      "dag-mid-flight",
+      [{ id: "a", title: "Task A", description: "A", dependsOn: [] }],
+      rootId,
+      "https://github.com/org/repo",
+    )
+    graph.nodes[0]!.status = "running"
+    graph.nodes[0]!.sessionId = childId
+    saveDag(graph, db)
+
+    prepared.updateSession(db, { id: childId, status: "completed", updated_at: Date.now() })
+
+    const replies: Array<{ sessionId: string; text: string }> = []
+    const registry = makeRegistry(db)
+    registry.reply = async (sid, text) => {
+      replies.push({ sessionId: sid, text })
+      return true
+    }
+
+    const scheduler = createDagScheduler({
+      registry,
+      db,
+      bus,
+      workspace: "/tmp/workspace",
+      ciBabysitter: {
+        babysitPR: async () => {},
+        queueDeferredBabysit: async () => {},
+        babysitDagChildCI: async () => {},
+      },
+      updateStackComment: async () => {},
+    })
+
+    await scheduler.reconcileOnBoot()
+
+    const rowAfterScheduler = prepared.getSession(db, rootId)
+    expect(rowAfterScheduler?.stage).toBe("verify")
+    expect(replies).toHaveLength(1)
+
+    const { reconcileShipsOnBoot } = await import("../ship/coordinator")
+    const result = await reconcileShipsOnBoot({ db, registry, scheduler })
+
+    expect(result.advanced).toEqual([])
+    expect(replies).toHaveLength(1)
+  })
+})
+
 describe("DagScheduler restack integration", () => {
   function countDeferredRestacks(db: Database): number {
     const row = db
