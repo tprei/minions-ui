@@ -135,27 +135,29 @@ function ReadinessSummary({ state }: { state: ReadinessLoadState }) {
   }
 
   const readiness = state.readiness
-  const visibleChecks = readiness.checks.filter((check) => check.required || check.status !== 'ready')
+  const blockingChecks = readiness.checks.filter((check) => check.status !== 'ready')
 
   return (
-    <div class="border-t border-slate-100 dark:border-slate-700 px-3 py-2" data-testid="readiness-summary">
+    <div class="border-t border-slate-100 dark:border-slate-700 px-3 py-1.5" data-testid="readiness-summary">
       <div class="flex flex-wrap items-center gap-2">
         <span class={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${readinessTone(readiness.status)}`}>
           {readiness.status}
         </span>
         <span class="text-xs font-medium text-slate-700 dark:text-slate-200">Merge readiness</span>
-      </div>
-      <div class="mt-2 flex flex-wrap gap-1.5">
-        {visibleChecks.map((check) => (
-          <span
-            key={check.id}
-            title={check.details ?? check.summary}
-            class={`inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] ${readinessTone(check.status)} border-transparent`}
-            data-testid={`readiness-check-${check.id}`}
-          >
-            <span class="truncate">{check.label}</span>
-          </span>
-        ))}
+        {blockingChecks.length > 0 && (
+          <div class="flex flex-wrap gap-1.5">
+            {blockingChecks.map((check) => (
+              <span
+                key={check.id}
+                title={check.details ?? check.summary}
+                class={`inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] ${readinessTone(check.status)} border-transparent`}
+                data-testid={`readiness-check-${check.id}`}
+              >
+                <span class="truncate">{check.label}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -228,6 +230,7 @@ export function PrPreviewCard({ sessionId, prUrl, client, readinessAvailable = f
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [readinessState, setReadinessState] = useState<ReadinessLoadState>({ kind: readinessAvailable ? 'loading' : 'idle' })
   const [expanded, setExpanded] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const [reloadNonce, setReloadNonce] = useState(0)
   const aliveRef = useRef(true)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -316,7 +319,17 @@ export function PrPreviewCard({ sessionId, prUrl, client, readinessAvailable = f
       class="mx-3 mt-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden shrink-0 max-h-64 md:max-h-none overflow-y-auto"
       data-testid="pr-preview-card"
     >
-      <header class="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-700">
+      <header class={`flex flex-wrap items-center gap-2 px-3 py-2 ${collapsed ? '' : 'border-b border-slate-100 dark:border-slate-700'}`}>
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Expand PR preview' : 'Collapse PR preview'}
+          class="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -ml-1 px-1 text-xs"
+          data-testid="pr-collapse-toggle"
+        >
+          <span class={`inline-block transition-transform ${collapsed ? '' : 'rotate-90'}`}>▶</span>
+        </button>
         <span
           class={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${stateBadgeClasses(pr.state)}`}
           data-testid="pr-state-badge"
@@ -340,6 +353,7 @@ export function PrPreviewCard({ sessionId, prUrl, client, readinessAvailable = f
         >
           {pr.title}
         </a>
+        {collapsed && <ChecksSummary rollup={rollup} />}
         <a
           href={pr.url}
           target="_blank"
@@ -350,42 +364,46 @@ export function PrPreviewCard({ sessionId, prUrl, client, readinessAvailable = f
           #{pr.number}
         </a>
       </header>
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
-        <span class="font-mono truncate" data-testid="pr-branches">
-          <span class="text-slate-500 dark:text-slate-400">{pr.baseBranch}</span>
-          <span class="mx-1">←</span>
-          <span>{pr.branch}</span>
-        </span>
-        <AuthorChip login={pr.author} />
-        <ChecksSummary rollup={rollup} />
-        {pr.mergeable === false && (
-          <span
-            class="text-[10px] font-medium uppercase tracking-wide text-red-700 dark:text-red-400"
-            data-testid="pr-mergeable-conflict"
-          >
-            conflicts
-          </span>
-        )}
-      </div>
-      <ReadinessSummary state={readinessState} />
-      {bodySource && (
-        <div class="border-t border-slate-100 dark:border-slate-700">
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            class="w-full px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50"
-            data-testid="pr-body-toggle"
-          >
-            {expanded ? 'Hide description' : 'Show description'}
-          </button>
-          {expanded && (
-            <MarkdownView
-              source={bodySource}
-              class="px-3 pb-3 max-h-64 sm:max-h-80 overflow-y-auto overscroll-contain prose prose-sm dark:prose-invert max-w-none prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-pre:rounded prose-pre:px-2 prose-pre:py-1 prose-pre:text-xs prose-code:before:content-none prose-code:after:content-none prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1 prose-code:rounded text-slate-700 dark:text-slate-200 break-words"
-              data-testid="pr-body"
-            />
+      {!collapsed && (
+        <>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+            <span class="font-mono truncate" data-testid="pr-branches">
+              <span class="text-slate-500 dark:text-slate-400">{pr.baseBranch}</span>
+              <span class="mx-1">←</span>
+              <span>{pr.branch}</span>
+            </span>
+            <AuthorChip login={pr.author} />
+            <ChecksSummary rollup={rollup} />
+            {pr.mergeable === false && (
+              <span
+                class="text-[10px] font-medium uppercase tracking-wide text-red-700 dark:text-red-400"
+                data-testid="pr-mergeable-conflict"
+              >
+                conflicts
+              </span>
+            )}
+          </div>
+          <ReadinessSummary state={readinessState} />
+          {bodySource && (
+            <div class="border-t border-slate-100 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                class="w-full px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                data-testid="pr-body-toggle"
+              >
+                {expanded ? 'Hide description' : 'Show description'}
+              </button>
+              {expanded && (
+                <MarkdownView
+                  source={bodySource}
+                  class="px-3 pb-3 max-h-64 sm:max-h-80 overflow-y-auto overscroll-contain prose prose-sm dark:prose-invert max-w-none prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-pre:rounded prose-pre:px-2 prose-pre:py-1 prose-pre:text-xs prose-code:before:content-none prose-code:after:content-none prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1 prose-code:rounded text-slate-700 dark:text-slate-200 break-words"
+                  data-testid="pr-body"
+                />
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
     </section>
   )
