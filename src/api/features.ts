@@ -21,6 +21,7 @@ export type FeatureName =
   | 'audit-log'
   | 'ship-coordinator'
   | 'memory'
+  | 'message-feedback'
 
 export function hasFeature(
   source: ConnectionStore | VersionInfo | null | undefined,
