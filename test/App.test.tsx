@@ -290,6 +290,44 @@ describe('App', () => {
     await screen.findByTestId('transcript-upgrade-notice')
   })
 
+  it('opens the command palette on Cmd+K and closes it on Escape', { timeout: 15000 }, async () => {
+    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
+      version: 1,
+      connections: [
+        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+      ],
+      activeId: 'c1',
+    }))
+    stubFetch([session()])
+    const App = (await import('../src/App')).default
+    render(<App />)
+
+    await screen.findByText('My Minion')
+    expect(screen.queryByTestId('command-palette')).toBeNull()
+    fireEvent.keyDown(document, { key: 'k', metaKey: true })
+    expect(screen.getByTestId('command-palette')).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('command-palette')).toBeNull()
+  })
+
+  it('opens the keyboard shortcuts help on ?', { timeout: 15000 }, async () => {
+    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
+      version: 1,
+      connections: [
+        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+      ],
+      activeId: 'c1',
+    }))
+    stubFetch([session()])
+    const App = (await import('../src/App')).default
+    render(<App />)
+
+    await screen.findByText('My Minion')
+    expect(screen.queryByTestId('keyboard-shortcuts-help')).toBeNull()
+    fireEvent.keyDown(document, { key: '?' })
+    expect(screen.getByTestId('keyboard-shortcuts-help')).toBeTruthy()
+  })
+
   it('updates the route hash when switching sessions from a routed session page', { timeout: 15000 }, async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,

@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'preact/hooks'
 import { useRegisterSW } from 'virtual:pwa-register/preact'
-import { connections, activeId, getActiveStore } from './connections/store'
+import { connections, activeId, getActiveStore, setActive } from './connections/store'
 import { ConnectionSettings } from './connections/ConnectionSettings'
 import { ConnectionPicker } from './connections/ConnectionPicker'
 import { ConnectionsDrawer } from './connections/ConnectionsDrawer'
@@ -9,7 +9,10 @@ import { ResourceChip } from './components/ResourceChip'
 import { RunningBadge } from './components/RunningBadge'
 import { countRunning } from './state/running'
 import { RuntimeConfigDrawer, type RuntimeTab } from './settings/RuntimeConfigDrawer'
-import { NewTaskBar } from './chat/NewTaskBar'
+import { NewTaskBar, requestNewTaskFocus } from './chat/NewTaskBar'
+import { CommandPalette } from './components/CommandPalette'
+import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp'
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts'
 import { AttentionBar, filterSessionsByReason } from './components/AttentionBar'
 import { UniverseCanvas } from './components/UniverseCanvas'
 import { SessionLogsPopup } from './components/SessionLogsPopup'
@@ -42,6 +45,8 @@ const showSettings = signal(false)
 const showDrawer = signal(false)
 const showRuntime = signal<RuntimeTab | null>(null)
 const showMemory = signal(false)
+const showPalette = signal(false)
+const showShortcutsHelp = signal(false)
 export const viewMode = signal<ViewMode>('list')
 
 function ViewToggle({ mode, onChange, showKanban }: { mode: ViewMode; onChange: (m: ViewMode) => void; showKanban?: boolean }) {
@@ -514,6 +519,22 @@ function ActiveView() {
     }
   }, [store])
 
+  useGlobalShortcuts({
+    onOpenPalette: () => { showPalette.value = true },
+    onOpenHelp: () => { showShortcutsHelp.value = true },
+    onNewTask: () => { requestNewTaskFocus() },
+    onSwitchView: (v) => { viewMode.value = v },
+    onRefresh: () => { void store?.refresh() },
+  })
+
+  const handleJumpSession = useCallback((slug: string) => {
+    const match = sessions.find((s) => s.slug === slug)
+    if (match) {
+      selectSession(match.id)
+      viewMode.value = 'list'
+    }
+  }, [sessions, selectSession])
+
   if (!store || !conn) return null
 
   const selected = sessionId ? sessions.find((s) => s.id === sessionId) ?? null : null
@@ -822,6 +843,24 @@ function ActiveView() {
           onClose={() => { showMemory.value = false }}
         />
       )}
+      <CommandPalette
+        open={showPalette.value}
+        store={store}
+        sessions={sessions}
+        connections={connections.value}
+        activeConnectionId={activeId.value}
+        onClose={() => { showPalette.value = false }}
+        onShowHelp={() => { showShortcutsHelp.value = true }}
+        onSwitchView={(v) => { viewMode.value = v }}
+        onSwitchConnection={(cid) => { setActive(cid) }}
+        onNewTask={() => { requestNewTaskFocus() }}
+        onRefresh={() => { void store.refresh() }}
+        onJumpSession={handleJumpSession}
+      />
+      <KeyboardShortcutsHelp
+        open={showShortcutsHelp.value}
+        onClose={() => { showShortcutsHelp.value = false }}
+      />
       {logsSessionId !== null && (() => {
         const logsSession = sessions.find((s) => s.id === logsSessionId)
         const transcript = logsSession ? store.getTranscript(logsSession.id) : null
