@@ -295,6 +295,48 @@ describe('NewTaskBar', () => {
     expect(recorded?.variantSessionIds).toEqual(['sv-1', 'sv-2'])
   })
 
+  it('paste event with image file queues attachment and shows thumbnail strip', async () => {
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null
+      onload: ((ev: ProgressEvent) => void) | null = null
+      onerror: ((ev: ProgressEvent) => void) | null = null
+      readAsDataURL = vi.fn().mockImplementation(function (this: { result: string | null; onload: ((ev: ProgressEvent) => void) | null }) {
+        Promise.resolve().then(() => {
+          this.result = 'data:image/png;base64,dGVzdA=='
+          this.onload?.call(this, new ProgressEvent('load'))
+        })
+      })
+    })
+
+    const { store } = makeStore({ features: ['sessions-create', 'sessions-create-images'] })
+    render(<NewTaskBar store={store} />)
+
+    const fakeFile = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'paste.png', { type: 'image/png' })
+    const dt = {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => fakeFile }],
+    }
+    const textarea = screen.getByTestId('new-task-prompt')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => expect(screen.getByTestId('new-task-attachments')).toBeTruthy())
+    expect(screen.getByTestId('remove-attachment-0')).toBeTruthy()
+  })
+
+  it('paste ignores non-image clipboard items', async () => {
+    const { store } = makeStore({ features: ['sessions-create', 'sessions-create-images'] })
+    render(<NewTaskBar store={store} />)
+
+    const textFile = new File(['hello'], 'doc.txt', { type: 'text/plain' })
+    const dt = {
+      items: [{ kind: 'file', type: 'text/plain', getAsFile: () => textFile }],
+    }
+    const textarea = screen.getByTestId('new-task-prompt')
+    fireEvent(textarea, Object.assign(new Event('paste', { bubbles: true }), { clipboardData: dt }))
+
+    await waitFor(() => new Promise((r) => setTimeout(r, 50)))
+    expect(screen.queryByTestId('new-task-attachments')).toBeNull()
+  })
+
   it('Launch button label reflects variant count', async () => {
     const { store } = makeStore({
       features: ['sessions-create', 'sessions-variants'],
