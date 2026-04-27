@@ -1,9 +1,10 @@
-import { useSignal } from '@preact/signals'
+import { useSignal, useComputed } from '@preact/signals'
 import { useEffect, useRef, useCallback } from 'preact/hooks'
-import { connections, activeId, setActive } from './store'
+import { connections, activeId, setActive, getAllStores } from './store'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss'
 import { useHaptics } from '../hooks/useHaptics'
+import { computeConnectionStats, type ConnectionStats } from './stats'
 
 interface ConnectionPickerProps {
   onManage: () => void
@@ -17,6 +18,21 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const activeConn = connections.value.find((c) => c.id === activeId.value) ?? null
   const { vibrate } = useHaptics()
+
+  const connectionStats = useComputed<Map<string, ConnectionStats>>(() => {
+    const stores = getAllStores()
+    const statsMap = new Map<string, ConnectionStats>()
+    for (const conn of connections.value) {
+      const store = stores.get(conn.id)
+      if (store) {
+        statsMap.set(
+          conn.id,
+          computeConnectionStats(store.sessions.value, store.dags.value),
+        )
+      }
+    }
+    return statsMap
+  })
 
   const handleClose = useCallback(() => {
     open.value = false
@@ -92,6 +108,8 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
     return () => document.removeEventListener('keydown', handler)
   }, [open.value, open, isDesktop.value])
 
+  const activeStats = activeConn ? connectionStats.value.get(activeConn.id) : null
+
   const triggerButton = (
     <button
       data-testid="connection-picker-trigger"
@@ -102,11 +120,20 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
     >
       {activeConn ? (
         <>
-          <span
-            class="h-2.5 w-2.5 rounded-full shrink-0"
-            style={{ backgroundColor: activeConn.color }}
-            data-testid="picker-active-dot"
-          />
+          <span class="relative shrink-0">
+            <span
+              class="h-2.5 w-2.5 rounded-full block"
+              style={{ backgroundColor: activeConn.color }}
+              data-testid="picker-active-dot"
+            />
+            {activeStats && activeStats.unreadCount > 0 && (
+              <span
+                class="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-1 ring-white dark:ring-slate-800"
+                data-testid="picker-trigger-unread"
+                aria-label={`${activeStats.unreadCount} unread`}
+              />
+            )}
+          </span>
           <span class="flex-1 min-w-0 truncate text-left">{activeConn.label}</span>
         </>
       ) : (
@@ -123,24 +150,54 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
       aria-label="Connections"
       class={isDesktop.value ? 'max-h-64 overflow-y-auto' : ''}
     >
-      {connections.value.map((conn) => (
-        <li key={conn.id}>
-          <button
-            role="option"
-            aria-selected={conn.id === activeId.value}
-            tabIndex={0}
-            data-testid={`picker-option-${conn.id}`}
-            onClick={() => handleSelect(conn.id)}
-            class={`w-full flex items-center gap-2 px-3 py-3 text-sm text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-700 min-h-[44px] ${conn.id === activeId.value ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
-          >
-            <span
-              class="h-2.5 w-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: conn.color }}
-            />
-            <span class="truncate">{conn.label}</span>
-          </button>
-        </li>
-      ))}
+      {connections.value.map((conn) => {
+        const stats = connectionStats.value.get(conn.id)
+        return (
+          <li key={conn.id}>
+            <button
+              role="option"
+              aria-selected={conn.id === activeId.value}
+              tabIndex={0}
+              data-testid={`picker-option-${conn.id}`}
+              onClick={() => handleSelect(conn.id)}
+              class={`w-full flex items-center gap-2 px-3 py-3 text-sm text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-700 min-h-[44px] ${conn.id === activeId.value ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
+            >
+              <span class="relative shrink-0">
+                <span
+                  class="h-2.5 w-2.5 rounded-full block"
+                  style={{ backgroundColor: conn.color }}
+                />
+                {stats && stats.unreadCount > 0 && (
+                  <span
+                    class="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-1 ring-white dark:ring-slate-800"
+                    data-testid={`picker-unread-${conn.id}`}
+                    aria-label={`${stats.unreadCount} unread`}
+                  />
+                )}
+              </span>
+              <span class="truncate flex-1 min-w-0">{conn.label}</span>
+              {stats?.dagProgress && (
+                <span
+                  class="shrink-0 flex items-center gap-1 text-[10px] tabular-nums text-slate-500 dark:text-slate-400"
+                  data-testid={`picker-dag-stats-${conn.id}`}
+                >
+                  <span class="text-green-600 dark:text-green-400">{stats.dagProgress.done}</span>
+                  <span>/</span>
+                  <span>{stats.dagProgress.total}</span>
+                  {stats.dagProgress.failed > 0 && (
+                    <>
+                      <span class="mx-0.5">·</span>
+                      <span class="text-red-600 dark:text-red-400">
+                        {stats.dagProgress.failed} failed
+                      </span>
+                    </>
+                  )}
+                </span>
+              )}
+            </button>
+          </li>
+        )
+      })}
     </ul>
   )
 

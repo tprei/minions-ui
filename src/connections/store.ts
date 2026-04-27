@@ -101,6 +101,10 @@ export function getActiveStore(): ConnectionStore | null {
   return getOrCreateStore(id)
 }
 
+export function getAllStores(): Map<string, ConnectionStore> {
+  return storeCache
+}
+
 export function disposeAll(): void {
   for (const store of storeCache.values()) {
     store.dispose()
