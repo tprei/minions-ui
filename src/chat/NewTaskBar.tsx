@@ -114,6 +114,27 @@ export function NewTaskBar({
     [addFiles],
   )
 
+  const handlePaste = useCallback(
+    (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      const imageItems: File[] = []
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (!item) continue
+        if (item.kind === 'file' && VALID_IMAGE_TYPES.has(item.type)) {
+          const file = item.getAsFile()
+          if (file) imageItems.push(file)
+        }
+      }
+      if (imageItems.length > 0) {
+        e.preventDefault()
+        void addFiles(imageItems)
+      }
+    },
+    [addFiles],
+  )
+
   const removeAttachment = useCallback((idx: number) => {
     setAttachments((prev) => {
       const next = [...prev]
@@ -382,6 +403,7 @@ export function NewTaskBar({
         <textarea
           value={prompt.value}
           onInput={(e) => { prompt.value = (e.currentTarget as HTMLTextAreaElement).value }}
+          onPaste={handlePaste}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
               e.preventDefault()
