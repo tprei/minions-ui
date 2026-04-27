@@ -49,6 +49,7 @@ export function ChatPane({
 }: ChatPaneProps) {
   const [text, setText] = useState('')
   const [pending, setPending] = useState<'stop' | 'close' | null>(null)
+  const [recoveryPending, setRecoveryPending] = useState<'retry' | 'resume' | 'abort' | null>(null)
   const [activeTab, setActiveTab] = useState<SessionTabId>('chat')
   const isDesktopPane = useMediaQuery('(min-width: 768px)')
   const [fullscreen, setFullscreen] = useState<boolean>(() =>
@@ -116,6 +117,40 @@ export function ChatPane({
       await onCommand({ action: 'close', sessionId: session.id })
     } finally {
       setPending(null)
+    }
+  }
+
+  const handleFailureRetry = async () => {
+    setRecoveryPending('retry')
+    try {
+      await onSend('/retry', session.id)
+    } finally {
+      setRecoveryPending(null)
+    }
+  }
+
+  const handleFailureResume = async () => {
+    setRecoveryPending('resume')
+    try {
+      await onSend('/resume', session.id)
+    } finally {
+      setRecoveryPending(null)
+    }
+  }
+
+  const handleFailureAbort = async () => {
+    const ok = await confirm({
+      title: `Abort ${session.slug}?`,
+      message: 'Closes this failed session permanently. Conversation history stays, but you cannot resume it.',
+      destructive: true,
+      confirmLabel: 'Abort',
+    })
+    if (!ok) return
+    setRecoveryPending('abort')
+    try {
+      await onCommand({ action: 'close', sessionId: session.id })
+    } finally {
+      setRecoveryPending(null)
     }
   }
 
@@ -289,6 +324,43 @@ export function ChatPane({
       >
         {activeTab === 'chat' && (
           <>
+            {session.status === 'failed' && (
+              <div
+                class="shrink-0 flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40"
+                data-testid="failure-recovery-strip"
+              >
+                <span class="text-xs font-semibold text-red-800 dark:text-red-200 mr-1" aria-hidden="true">
+                  ⚠ Session failed
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleFailureRetry()}
+                  disabled={recoveryPending !== null}
+                  class="rounded-md border border-red-300 dark:border-red-700 text-red-800 dark:text-red-200 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-medium hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-50 disabled:cursor-not-allowed min-h-[36px]"
+                  data-testid="failure-retry-btn"
+                >
+                  {recoveryPending === 'retry' ? 'Retrying…' : '↻ Retry'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleFailureResume()}
+                  disabled={recoveryPending !== null}
+                  class="rounded-md border border-red-300 dark:border-red-700 text-red-800 dark:text-red-200 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-medium hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-50 disabled:cursor-not-allowed min-h-[36px]"
+                  data-testid="failure-resume-btn"
+                >
+                  {recoveryPending === 'resume' ? 'Resuming…' : '▶ Resume'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleFailureAbort()}
+                  disabled={recoveryPending !== null}
+                  class="ml-auto rounded-md border border-red-400 dark:border-red-700 text-white bg-red-600 hover:bg-red-700 px-3 py-2 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed min-h-[36px]"
+                  data-testid="failure-abort-btn"
+                >
+                  {recoveryPending === 'abort' ? 'Aborting…' : '✕ Abort'}
+                </button>
+              </div>
+            )}
             {session.prUrl && hasFeature(store, 'pr-preview') && (
               <PrPreviewCard
                 sessionId={session.id}

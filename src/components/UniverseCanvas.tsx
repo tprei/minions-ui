@@ -51,6 +51,8 @@ interface UniverseNodeData {
   scale: number
   onContextMenu: (session: ApiSession, position: { x: number; y: number }) => void
   onNodeClick: (session: ApiSession) => void
+  onRetryNode?: (session: ApiSession) => void
+  onViewNodeLogs?: (sessionId: string) => void
 }
 
 function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
@@ -89,8 +91,33 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
   const nodeTypeLabel = data.nodeType === 'dag' ? 'DAG' : data.nodeType === 'parent-child' ? 'Tree' : null
   const isFeedback = isFeedbackSession(session)
 
+  const isFailed = data.status === 'failed' || data.status === 'ci-failed'
+  const showFailureChips = isFailed && Boolean(session) && (Boolean(data.onRetryNode) || Boolean(data.onViewNodeLogs))
+
+  const handleRetryClick = useCallback(
+    (e: Event) => {
+      e.stopPropagation()
+      if (session && data.onRetryNode) {
+        vibrate('light')
+        data.onRetryNode(session)
+      }
+    },
+    [session, data, vibrate]
+  )
+
+  const handleLogsClick = useCallback(
+    (e: Event) => {
+      e.stopPropagation()
+      if (session && data.onViewNodeLogs) {
+        vibrate('light')
+        data.onViewNodeLogs(session.id)
+      }
+    },
+    [session, data, vibrate]
+  )
+
   const baseWidth = isCoordinator ? 300 : 240
-  const baseHeight = isCoordinator ? 120 : 100
+  const baseHeight = isCoordinator ? (showFailureChips ? 152 : 120) : (showFailureChips ? 132 : 100)
   const nodeWidth = Math.round(baseWidth * data.scale)
   const nodeHeight = Math.round(baseHeight * data.scale)
 
@@ -200,6 +227,45 @@ function UniverseNodeComponent({ data }: { data: UniverseNodeData }) {
             <span class="text-[10px] opacity-40 shrink-0">{formatRelativeTime(session.updatedAt)}</span>
           )}
         </div>
+
+        {showFailureChips && (
+          <div class="flex items-center gap-1.5 mt-1.5" data-testid={`failure-chips-${session!.id}`}>
+            {data.onRetryNode && (
+              <button
+                type="button"
+                onClick={handleRetryClick}
+                class="inline-flex items-center gap-1 rounded-full text-[10px] font-semibold px-2 py-1 border transition-colors"
+                style={{
+                  backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : '#fff',
+                  borderColor: colors.border,
+                  color: colors.border,
+                }}
+                title="Retry this node"
+                data-testid={`node-retry-chip-${session!.id}`}
+              >
+                <span aria-hidden="true">↻</span>
+                <span>Retry</span>
+              </button>
+            )}
+            {data.onViewNodeLogs && (
+              <button
+                type="button"
+                onClick={handleLogsClick}
+                class="inline-flex items-center gap-1 rounded-full text-[10px] font-semibold px-2 py-1 border transition-colors"
+                style={{
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff',
+                  borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)',
+                  color: isDark ? '#e5e7eb' : '#374151',
+                }}
+                title="View logs for this node"
+                data-testid={`node-logs-chip-${session!.id}`}
+              >
+                <span aria-hidden="true">📋</span>
+                <span>Logs</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
     </div>
@@ -413,6 +479,10 @@ function UniverseCanvasInner({
     onNodeSelect?.(session)
   }, [onNodeSelect])
 
+  const handleRetryNode = useCallback((session: ApiSession) => {
+    void onSendReply(session.id, '/retry')
+  }, [onSendReply])
+
   const { nodes: layoutNodes, edges: layoutEdges } = useMemo(() => {
     if (sessions.length === 0 && dags.length === 0) {
       return { nodes: [] as Node[], edges: [] as UniverseEdge[] }
@@ -430,9 +500,11 @@ function UniverseCanvasInner({
         scale: nodeScale,
         onContextMenu: handleNodeContextMenu,
         onNodeClick: handleNodeClick,
+        onRetryNode: handleRetryNode,
+        onViewNodeLogs: onViewLogs,
       },
     }))
-  }, [layoutNodes, isDark, nodeScale, handleNodeContextMenu, handleNodeClick])
+  }, [layoutNodes, isDark, nodeScale, handleNodeContextMenu, handleNodeClick, handleRetryNode, onViewLogs])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(nodesWithHandlers)
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutEdges)
