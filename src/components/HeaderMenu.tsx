@@ -95,6 +95,17 @@ export function HeaderMenu({
           </button>
           <button
             type="button"
+            onClick={() => handleViewChange('timeline')}
+            class={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left hover:bg-slate-100 dark:hover:bg-slate-700 ${
+              viewMode.value === 'timeline' ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-slate-700 dark:text-slate-200'
+            }`}
+            data-testid="menu-view-timeline"
+          >
+            <span aria-hidden="true">≡</span>
+            <span>Timeline</span>
+          </button>
+          <button
+            type="button"
             onClick={() => handleViewChange('canvas')}
             class={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left hover:bg-slate-100 dark:hover:bg-slate-700 ${
               viewMode.value === 'canvas' ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-slate-700 dark:text-slate-200'
