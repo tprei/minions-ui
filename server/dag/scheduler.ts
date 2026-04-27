@@ -1,8 +1,10 @@
+import crypto from "node:crypto"
 import type { Database } from "bun:sqlite"
 import { readyNodes, advanceDag, failNode, resetFailedNode, nodeIndex, getUpstreamBranches, isDagComplete, dagGraphStatus, isTerminalStatus } from "./dag"
 import type { DagGraph, DagNode, DagInput } from "./dag"
 import { saveDag, loadDag, listDags } from "./store"
 import { prepared } from "../db/sqlite"
+import type { DagDeferredRestackRow } from "../db/sqlite"
 import { updateStackComment } from "./stack-comment"
 import { buildDagChildPrompt } from "./dag-extract"
 import type { TopicMessage } from "./types"
@@ -140,7 +142,38 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     registry,
   })
 
-  const deferredRestacks = new Map<string, Array<{ dagId: string; nodeId: string; parentSha: string; newSha: string; cascadeDepth: number }>>()
+  function rowToDeferredEvent(row: DagDeferredRestackRow): {
+    dagId: string
+    nodeId: string
+    parentSha: string
+    newSha: string
+    cascadeDepth: number
+  } {
+    return {
+      dagId: row.dag_id,
+      nodeId: row.node_id,
+      parentSha: row.parent_sha,
+      newSha: row.new_sha,
+      cascadeDepth: row.cascade_depth,
+    }
+  }
+
+  async function drainDeferredRestacksForSession(sessionId: string): Promise<void> {
+    const rows = prepared.listDeferredRestacksBySession(db, sessionId)
+    for (const row of rows) {
+      const dagGraph = activeGraphs.get(row.dag_id) ?? loadDag(row.dag_id, db)
+      if (!dagGraph) {
+        prepared.deleteDeferredRestack(db, row.id)
+        continue
+      }
+      try {
+        await restackManager.onParentPushed(rowToDeferredEvent(row), dagGraph)
+      } catch (err) {
+        console.error(`[scheduler] deferred restack failed for node ${row.node_id}:`, err)
+      }
+      prepared.deleteDeferredRestack(db, row.id)
+    }
+  }
 
   const watchdog: DagWatchdog = createDagWatchdog({
     bus,
@@ -422,18 +455,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     await commentUpdater(graph)
     await tickGraph(graph)
 
-    const deferred = deferredRestacks.get(sessionId)
-    if (deferred) {
-      deferredRestacks.delete(sessionId)
-      for (const event of deferred) {
-        const dagGraph = activeGraphs.get(event.dagId)
-        if (dagGraph) {
-          await restackManager.onParentPushed(event, dagGraph).catch((err) => {
-            console.error(`[scheduler] deferred restack failed for node ${event.nodeId}:`, err)
-          })
-        }
-      }
-    }
+    await drainDeferredRestacksForSession(sessionId)
   }
 
   async function cancel(dagId: string): Promise<void> {
@@ -456,7 +478,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
         if (node.status === "running") sessionsToStop.push(sessionId)
         nodeToSession.delete(node.id)
         nodeToGraph.delete(sessionId)
-        deferredRestacks.delete(sessionId)
+        prepared.deleteDeferredRestacksBySession(db, sessionId)
       }
 
       node.status = "cancelled"
@@ -596,6 +618,29 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
       await commentUpdater(graph).catch(() => {})
       await tickGraph(graph)
     }
+
+    await reconcileDeferredRestacks()
+  }
+
+  async function reconcileDeferredRestacks(): Promise<void> {
+    const rows = prepared.listAllDeferredRestacks(db)
+    const sessionsStillRunning = new Set(nodeToSession.values())
+    for (const row of rows) {
+      if (sessionsStillRunning.has(row.session_id)) continue
+
+      const dagGraph = activeGraphs.get(row.dag_id) ?? loadDag(row.dag_id, db)
+      if (!dagGraph) {
+        prepared.deleteDeferredRestack(db, row.id)
+        continue
+      }
+
+      try {
+        await restackManager.onParentPushed(rowToDeferredEvent(row), dagGraph)
+      } catch (err) {
+        console.error(`[scheduler] boot deferred restack failed for node ${row.node_id}:`, err)
+      }
+      prepared.deleteDeferredRestack(db, row.id)
+    }
   }
 
   async function forceNodeLanded(nodeId: string, dagId: string): Promise<void> {
@@ -638,15 +683,15 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     if (node.status === "running") {
       const sessionId = node.sessionId
       if (sessionId) {
-        if (!deferredRestacks.has(sessionId)) {
-          deferredRestacks.set(sessionId, [])
-        }
-        deferredRestacks.get(sessionId)!.push({
-          dagId: event.dagId,
-          nodeId: event.nodeId,
-          parentSha: event.parentSha,
-          newSha: event.newSha,
-          cascadeDepth: 0,
+        prepared.insertDeferredRestack(db, {
+          id: crypto.randomUUID(),
+          dag_id: event.dagId,
+          session_id: sessionId,
+          node_id: event.nodeId,
+          parent_sha: event.parentSha,
+          new_sha: event.newSha,
+          cascade_depth: 0,
+          created_at: Date.now(),
         })
         console.log(`[scheduler] defer restack for running node ${event.nodeId}`)
         return

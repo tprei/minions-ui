@@ -171,6 +171,17 @@ interface DagNodeRow {
   payload: Record<string, unknown>
 }
 
+export interface DagDeferredRestackRow {
+  id: string
+  dag_id: string
+  session_id: string
+  node_id: string
+  parent_sha: string
+  new_sha: string
+  cascade_depth: number
+  created_at: number
+}
+
 interface DagNodeDbRow {
   dag_id: string
   id: string
@@ -210,6 +221,11 @@ type StmtCache = {
   deleteDag?: ReturnType<Database['prepare']>
   upsertDagNode?: ReturnType<Database['prepare']>
   getDagNodeBySessionId?: ReturnType<Database['prepare']>
+  insertDeferredRestack?: ReturnType<Database['prepare']>
+  listDeferredRestacksBySession?: ReturnType<Database['prepare']>
+  listAllDeferredRestacks?: ReturnType<Database['prepare']>
+  deleteDeferredRestack?: ReturnType<Database['prepare']>
+  deleteDeferredRestacksBySession?: ReturnType<Database['prepare']>
 }
 
 export interface DagNodeSessionLookup {
@@ -734,5 +750,63 @@ export const prepared = {
     const row = c.getDagNodeBySessionId.get(sessionId) as { dag_id: string; id: string; status: DagNodeStatus } | null
     if (!row) return null
     return { dag_id: row.dag_id, node_id: row.id, status: row.status }
+  },
+
+  insertDeferredRestack(db: Database, row: DagDeferredRestackRow): void {
+    const c = stmts(db)
+    if (!c.insertDeferredRestack) {
+      c.insertDeferredRestack = db.prepare(
+        `INSERT INTO dag_deferred_restacks (id, dag_id, session_id, node_id, parent_sha, new_sha, cascade_depth, created_at)
+         VALUES ($id, $dag_id, $session_id, $node_id, $parent_sha, $new_sha, $cascade_depth, $created_at)`,
+      )
+    }
+    c.insertDeferredRestack.run({
+      $id: row.id,
+      $dag_id: row.dag_id,
+      $session_id: row.session_id,
+      $node_id: row.node_id,
+      $parent_sha: row.parent_sha,
+      $new_sha: row.new_sha,
+      $cascade_depth: row.cascade_depth,
+      $created_at: row.created_at,
+    })
+  },
+
+  listDeferredRestacksBySession(db: Database, sessionId: string): DagDeferredRestackRow[] {
+    const c = stmts(db)
+    if (!c.listDeferredRestacksBySession) {
+      c.listDeferredRestacksBySession = db.prepare<DagDeferredRestackRow, [string]>(
+        'SELECT * FROM dag_deferred_restacks WHERE session_id = ? ORDER BY created_at ASC',
+      )
+    }
+    return c.listDeferredRestacksBySession.all(sessionId) as DagDeferredRestackRow[]
+  },
+
+  listAllDeferredRestacks(db: Database): DagDeferredRestackRow[] {
+    const c = stmts(db)
+    if (!c.listAllDeferredRestacks) {
+      c.listAllDeferredRestacks = db.prepare<DagDeferredRestackRow, []>(
+        'SELECT * FROM dag_deferred_restacks ORDER BY created_at ASC',
+      )
+    }
+    return c.listAllDeferredRestacks.all() as DagDeferredRestackRow[]
+  },
+
+  deleteDeferredRestack(db: Database, id: string): void {
+    const c = stmts(db)
+    if (!c.deleteDeferredRestack) {
+      c.deleteDeferredRestack = db.prepare('DELETE FROM dag_deferred_restacks WHERE id = ?')
+    }
+    c.deleteDeferredRestack.run(id)
+  },
+
+  deleteDeferredRestacksBySession(db: Database, sessionId: string): void {
+    const c = stmts(db)
+    if (!c.deleteDeferredRestacksBySession) {
+      c.deleteDeferredRestacksBySession = db.prepare(
+        'DELETE FROM dag_deferred_restacks WHERE session_id = ?',
+      )
+    }
+    c.deleteDeferredRestacksBySession.run(sessionId)
   },
 }
