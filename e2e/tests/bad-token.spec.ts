@@ -23,6 +23,9 @@ test.describe('bad token', () => {
     ])
 
     try {
+      await page.addInitScript(() => {
+        try { localStorage.setItem('minions-ui:onboarding-tour:v1', 'completed') } catch { /* ignore */ }
+      })
       await page.goto('/')
 
       await page.getByRole('button', { name: 'Add connection' }).click()

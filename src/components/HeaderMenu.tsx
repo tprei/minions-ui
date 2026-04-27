@@ -17,6 +17,7 @@ export function HeaderMenu({
   onClean,
   onRefresh,
   onInbox,
+  onHelp,
   showMemory,
   memoryProposalsCount,
   showRuntimeConfig,
@@ -28,6 +29,7 @@ export function HeaderMenu({
   onClean?: () => void
   onRefresh: () => void
   onInbox?: () => void
+  onHelp?: () => void
   showMemory: boolean
   memoryProposalsCount?: number
   showRuntimeConfig: boolean
@@ -240,6 +242,20 @@ export function HeaderMenu({
             <span aria-hidden="true">🔄</span>
             <span>Refresh</span>
           </button>
+          {onHelp && (
+            <button
+              type="button"
+              onClick={() => {
+                onHelp()
+                closeMenu()
+              }}
+              class="w-full flex items-center gap-3 px-3 py-2 text-sm text-left text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
+              data-testid="menu-help"
+            >
+              <span aria-hidden="true">❓</span>
+              <span>Help</span>
+            </button>
+          )}
         </div>
       )}
     </div>

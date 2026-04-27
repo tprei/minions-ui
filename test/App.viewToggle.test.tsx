@@ -154,6 +154,7 @@ describe('App view toggle', () => {
 
   beforeEach(() => {
     localStorage.clear()
+    localStorage.setItem('minions-ui:onboarding-tour:v1', 'completed')
     mock = installMockEventSource()
     vi.resetModules()
     setDesktop(true)

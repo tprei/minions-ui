@@ -10,6 +10,9 @@ test.describe('connection flow', () => {
     mock.setVersion({ features: ['messages', 'auth', 'cors-allowlist'] })
 
     try {
+      await page.addInitScript(() => {
+        try { localStorage.setItem('minions-ui:onboarding-tour:v1', 'completed') } catch { /* ignore */ }
+      })
       await page.goto('/')
 
       await expect(page.getByRole('heading', { name: 'Connect a minion' })).toBeVisible()
@@ -53,6 +56,9 @@ test.describe('connection flow', () => {
     ])
 
     try {
+      await page.addInitScript(() => {
+        try { localStorage.setItem('minions-ui:onboarding-tour:v1', 'completed') } catch { /* ignore */ }
+      })
       await page.goto('/')
       await page.getByRole('button', { name: 'Add connection' }).click()
       await page.getByPlaceholder('My minion').fill('Minion A')
