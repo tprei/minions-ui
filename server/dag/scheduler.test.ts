@@ -747,6 +747,143 @@ describe("DagScheduler", () => {
     const after = scheduler.status("dag-resume-noop")
     expect(after.nodes[0]?.status).toBe("running")
   })
+
+  it("emits dag.completed when all nodes finish successfully", async () => {
+    const graph = buildDag("dag-emit-complete", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const events: Array<{ dagId: string; status: string }> = []
+    bus.onKind("dag.completed", (e) => events.push({ dagId: e.dagId, status: e.status }))
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-emit-complete")
+
+    expect(events).toHaveLength(0)
+
+    await scheduler.onSessionCompleted(sessions[0]!, "completed")
+    expect(events).toHaveLength(0)
+
+    await scheduler.onSessionCompleted(sessions[1]!, "completed")
+    expect(events).toEqual([{ dagId: "dag-emit-complete", status: "completed" }])
+  })
+
+  it("emits dag.completed with status 'failed' when a node fails", async () => {
+    const graph = buildDag("dag-emit-failed", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const events: Array<{ dagId: string; status: string }> = []
+    bus.onKind("dag.completed", (e) => events.push({ dagId: e.dagId, status: e.status }))
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-emit-failed")
+
+    await scheduler.onSessionCompleted(sessions[0]!, "errored")
+
+    expect(events).toEqual([{ dagId: "dag-emit-failed", status: "failed" }])
+  })
+
+  it("emits dag.completed only once per terminal transition", async () => {
+    const graph = buildDag("dag-emit-once", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const events: Array<{ dagId: string }> = []
+    bus.onKind("dag.completed", (e) => events.push({ dagId: e.dagId }))
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-emit-once")
+    await scheduler.onSessionCompleted(sessions[0]!, "completed")
+    expect(events).toHaveLength(1)
+
+    await scheduler.forceNodeLanded("a", "dag-emit-once")
+    expect(events).toHaveLength(1)
+  })
+
+  it("emits dag.completed again after retry resurrects a failed DAG", async () => {
+    const graph = buildDag("dag-emit-retry", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const events: Array<{ status: string }> = []
+    bus.onKind("dag.completed", (e) => events.push({ status: e.status }))
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-emit-retry")
+    await scheduler.onSessionCompleted(sessions[0]!, "errored")
+
+    expect(events).toEqual([{ status: "failed" }])
+
+    await scheduler.retryNode("a", "dag-emit-retry")
+    await scheduler.onSessionCompleted(sessions[1]!, "completed")
+
+    expect(events).toEqual([{ status: "failed" }, { status: "completed" }])
+  })
+
+  it("emits dag.cancelled when cancel is called on an active DAG", async () => {
+    const graph = buildDag("dag-emit-cancel", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const cancelled: Array<{ dagId: string }> = []
+    const completed: Array<{ dagId: string }> = []
+    bus.onKind("dag.cancelled", (e) => cancelled.push({ dagId: e.dagId }))
+    bus.onKind("dag.completed", (e) => completed.push({ dagId: e.dagId }))
+
+    const registry = makeRegistry(db, async () => ({ session: makeSession("ss", db), runtime: {} as never }))
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-emit-cancel")
+    await scheduler.cancel("dag-emit-cancel")
+
+    expect(cancelled).toEqual([{ dagId: "dag-emit-cancel" }])
+    expect(completed).toHaveLength(0)
+  })
+
+  it("does not emit dag.cancelled when cancelling an unknown DAG", async () => {
+    const cancelled: Array<{ dagId: string }> = []
+    bus.onKind("dag.cancelled", (e) => cancelled.push({ dagId: e.dagId }))
+
+    const scheduler = makeScheduler(makeRegistry(db))
+    await scheduler.cancel("never-started")
+
+    expect(cancelled).toHaveLength(0)
+  })
 })
 
 describe("DagScheduler restack integration", () => {
