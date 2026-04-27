@@ -35,7 +35,7 @@ function createMockStore(features: string[] = ['message-feedback']): ConnectionS
     client: {
       submitFeedback,
     },
-  } as ConnectionStore
+  } as unknown as ConnectionStore
 }
 
 describe('FeedbackButtons', () => {
