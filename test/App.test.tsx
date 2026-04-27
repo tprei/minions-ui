@@ -269,6 +269,49 @@ describe('App', () => {
     expect(body.sessionId).toBeUndefined()
   })
 
+  it('renders example task chips in EmptyPane when no session is selected', { timeout: 15000 }, async () => {
+    localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
+      version: 1,
+      connections: [
+        { id: 'c1', label: 'My Minion', baseUrl: 'https://example.com', token: 'tok', color: '#3b82f6' },
+      ],
+      activeId: 'c1',
+    }))
+    const versionWithCreate: VersionInfo = {
+      apiVersion: '1',
+      libraryVersion: '1.111.0',
+      features: ['sessions-create'],
+    }
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/version')) {
+        return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ data: versionWithCreate }) })
+      }
+      if (url.includes('/api/sessions')) {
+        return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ data: [] }) })
+      }
+      if (url.includes('/api/dags')) {
+        return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ data: [] }) })
+      }
+      return Promise.resolve({ ok: false, status: 404, statusText: 'NF', json: () => Promise.resolve({ data: null }) })
+    }))
+    const App = (await import('../src/App')).default
+    render(<App />)
+
+    const empty = await screen.findByTestId('empty-pane')
+    expect(empty).toBeTruthy()
+    const examples = screen.getByTestId('empty-pane-examples')
+    const chips = Array.from(examples.querySelectorAll('button'))
+    expect(chips.length).toBeGreaterThanOrEqual(3)
+
+    fireEvent.click(screen.getByTestId('empty-pane-example-0'))
+
+    await vi.waitFor(() => {
+      const ta = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
+      expect(ta.value.length).toBeGreaterThan(0)
+    })
+    expect(screen.getByTestId('mode-task').getAttribute('aria-checked')).toBe('true')
+  })
+
   it('switching sessions keeps the chat pane mounted', { timeout: 15000 }, async () => {
     localStorage.setItem('minions-ui:connections:v1', JSON.stringify({
       version: 1,

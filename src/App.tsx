@@ -10,7 +10,7 @@ import { ResourceChip } from './components/ResourceChip'
 import { RunningBadge } from './components/RunningBadge'
 import { countRunning } from './state/running'
 import { RuntimeConfigDrawer, type RuntimeTab } from './settings/RuntimeConfigDrawer'
-import { NewTaskBar, requestNewTaskFocus } from './chat/NewTaskBar'
+import { NewTaskBar, NEW_TASK_EXAMPLES, prefillNewTask, requestNewTaskFocus } from './chat/NewTaskBar'
 import { CommandPalette } from './components/CommandPalette'
 import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp'
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts'
@@ -199,16 +199,43 @@ function ConnectionStatusBadge({
 
 function EmptyPane() {
   return (
-    <div class="flex-1 flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-900">
-      <div class="text-center flex flex-col items-center gap-3">
+    <div
+      class="flex-1 flex items-center justify-center p-6 sm:p-10 bg-slate-50 dark:bg-slate-900 overflow-y-auto"
+      data-testid="empty-pane"
+    >
+      <div class="flex flex-col items-center gap-5 text-center max-w-md w-full">
         <img
           src="/minion.svg"
           alt=""
           aria-hidden="true"
-          class="w-16 h-16 opacity-20 dark:opacity-30 dark:invert"
+          class="w-20 h-20 opacity-30 dark:opacity-40 dark:invert"
         />
-        <div class="text-sm text-slate-500 dark:text-slate-400">
-          Select a session on the left, or start a new one with the task bar above.
+        <div class="flex flex-col gap-1.5">
+          <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            Start a task
+          </h2>
+          <p class="text-sm text-slate-500 dark:text-slate-400">
+            Type a prompt in the bar above, or pick an example to get started.
+          </p>
+        </div>
+        <div class="flex flex-col gap-2 w-full" data-testid="empty-pane-examples">
+          <div class="text-[10px] uppercase tracking-wider font-semibold text-slate-400 dark:text-slate-500">
+            Try one of these
+          </div>
+          <div class="flex flex-wrap gap-2 justify-center">
+            {NEW_TASK_EXAMPLES.map((ex, idx) => (
+              <button
+                key={ex.label}
+                type="button"
+                onClick={() => prefillNewTask({ prompt: ex.prompt, mode: ex.mode })}
+                class="rounded-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:border-indigo-400 dark:hover:border-indigo-600 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors min-h-[44px]"
+                data-testid={`empty-pane-example-${idx}`}
+                title={ex.prompt}
+              >
+                {ex.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

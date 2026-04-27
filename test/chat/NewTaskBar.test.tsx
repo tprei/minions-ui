@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/preact'
 import { signal } from '@preact/signals'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { NewTaskBar } from '../../src/chat/NewTaskBar'
+import { NewTaskBar, newTaskPrefill, prefillNewTask } from '../../src/chat/NewTaskBar'
 import { getVariantGroup, resetVariantGroupsForTests } from '../../src/groups/store'
 import type { ConnectionStore } from '../../src/state/types'
 import type {
@@ -101,6 +101,7 @@ describe('NewTaskBar', () => {
   beforeEach(() => {
     localStorage.clear()
     resetVariantGroupsForTests()
+    newTaskPrefill.value = null
     if (!window.matchMedia) {
       Object.defineProperty(window, 'matchMedia', {
         writable: true,
@@ -345,5 +346,37 @@ describe('NewTaskBar', () => {
     expect(screen.getByTestId('new-task-send').textContent).toBe('Launch')
     fireEvent.change(screen.getByTestId('variant-count'), { target: { value: '4' } })
     expect(screen.getByTestId('new-task-send').textContent).toBe('Launch ×4')
+  })
+
+  it('applies prefillNewTask payload to the prompt and mode', async () => {
+    const { store } = makeStore({ features: ['sessions-create'] })
+    render(<NewTaskBar store={store} />)
+
+    prefillNewTask({ prompt: 'fix the broken thing', mode: 'plan' })
+
+    await waitFor(() => {
+      const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
+      expect(textarea.value).toBe('fix the broken thing')
+    })
+    expect(screen.getByTestId('mode-plan').getAttribute('aria-checked')).toBe('true')
+    expect(newTaskPrefill.value).toBeNull()
+  })
+
+  it('expands the collapsed bar when prefillNewTask is called', async () => {
+    localStorage.setItem('minions-ui:newtaskbar-collapsed', 'true')
+    const { store } = makeStore({ features: ['sessions-create'] })
+    render(<NewTaskBar store={store} />)
+
+    expect(screen.getByTestId('new-task-bar').getAttribute('data-collapsed')).toBe('true')
+
+    prefillNewTask({ prompt: 'do the thing', mode: 'task' })
+
+    await waitFor(() => {
+      const bar = screen.getByTestId('new-task-bar')
+      expect(bar.getAttribute('data-collapsed')).toBeNull()
+    })
+    const textarea = screen.getByTestId('new-task-prompt') as HTMLTextAreaElement
+    expect(textarea.value).toBe('do the thing')
+    expect(localStorage.getItem('minions-ui:newtaskbar-collapsed')).toBe('false')
   })
 })
