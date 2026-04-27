@@ -5,6 +5,7 @@ import { clearSnapshot } from '../state/persist'
 import type { ConnectionStore } from '../state/types'
 import type { Connection, ConnectionsState } from './types'
 import { nextColor } from '../theme/colors'
+import { clearInbox, markInboxSeen } from '../state/inbox'
 
 const STORAGE_KEY = 'minions-ui:connections:v1'
 
@@ -47,7 +48,9 @@ function getOrCreateStore(id: string): ConnectionStore {
   const conn = connections.value.find((c) => c.id === id)
   if (!conn) throw new Error(`Connection ${id} not found`)
   const client = createApiClient({ baseUrl: conn.baseUrl, token: conn.token })
-  const store = createConnectionStore(client, id)
+  const store = createConnectionStore(client, id, {
+    isActive: () => activeId.value === id,
+  })
   storeCache.set(id, store)
   return store
 }
@@ -78,6 +81,7 @@ export function removeConnection(id: string): void {
   connections.value = connections.value.filter((c) => c.id !== id)
   if (activeId.value === id) activeId.value = null
   saveState()
+  clearInbox(id)
   void clearSnapshot(id)
 }
 
@@ -91,7 +95,10 @@ export function setActive(id: string | null): void {
     }
   }
   activeId.value = id
-  if (id) getOrCreateStore(id)
+  if (id) {
+    getOrCreateStore(id)
+    markInboxSeen(id)
+  }
   saveState()
 }
 

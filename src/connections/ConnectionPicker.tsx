@@ -5,6 +5,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss'
 import { useHaptics } from '../hooks/useHaptics'
 import { computeConnectionStats, type ConnectionStats } from './stats'
+import { inboxSignal } from '../state/inbox'
 
 interface ConnectionPickerProps {
   onManage: () => void
@@ -18,6 +19,14 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const activeConn = connections.value.find((c) => c.id === activeId.value) ?? null
   const { vibrate } = useHaptics()
+
+  const inboxCounts = useComputed<Map<string, number>>(() => {
+    const counts = new Map<string, number>()
+    for (const conn of connections.value) {
+      counts.set(conn.id, inboxSignal(conn.id).value.unseenCount)
+    }
+    return counts
+  })
 
   const connectionStats = useComputed<Map<string, ConnectionStats>>(() => {
     const stores = getAllStores()
@@ -176,6 +185,20 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
                 )}
               </span>
               <span class="truncate flex-1 min-w-0">{conn.label}</span>
+              {(() => {
+                const unseen = inboxCounts.value.get(conn.id) ?? 0
+                if (unseen <= 0) return null
+                return (
+                  <span
+                    class="shrink-0 inline-flex items-center justify-center rounded-full bg-indigo-500 text-white text-[10px] font-semibold tabular-nums px-1.5 min-w-[18px] h-[18px]"
+                    data-testid={`picker-inbox-count-${conn.id}`}
+                    aria-label={`${unseen} new`}
+                    title={`${unseen} new since last visit`}
+                  >
+                    +{unseen}
+                  </span>
+                )
+              })()}
               {stats?.dagProgress && (
                 <span
                   class="shrink-0 flex items-center gap-1 text-[10px] tabular-nums text-slate-500 dark:text-slate-400"
