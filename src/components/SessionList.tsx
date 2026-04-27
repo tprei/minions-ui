@@ -11,6 +11,40 @@ export function statusDot(status: ApiSession['status']): string {
   return 'bg-slate-400'
 }
 
+export function statusGlyph(status: ApiSession['status']): string {
+  if (status === 'running') return '⟳'
+  if (status === 'completed') return '✓'
+  if (status === 'failed') return '!'
+  return '·'
+}
+
+interface StatusIndicatorProps {
+  status: ApiSession['status']
+  label?: string
+}
+
+export function StatusIndicator({ status, label }: StatusIndicatorProps) {
+  const glyph = statusGlyph(status)
+  const accessibleLabel = label ?? `Status: ${status}`
+  return (
+    <span
+      class="inline-flex items-center gap-1 shrink-0"
+      role="img"
+      aria-label={accessibleLabel}
+      data-testid={`status-indicator-${status}`}
+    >
+      <span class={`inline-block h-2 w-2 rounded-full ${statusDot(status)}`} aria-hidden="true" />
+      <span
+        class="inline-block text-[10px] leading-none font-mono text-slate-500 dark:text-slate-400"
+        aria-hidden="true"
+        data-testid={`status-glyph-${status}`}
+      >
+        {glyph}
+      </span>
+    </span>
+  )
+}
+
 function useFlashOnChange(session: ApiSession): 'success' | 'fail' | 'update' | null {
   const [flash, setFlash] = useState<'success' | 'fail' | 'update' | null>(null)
   const prev = useRef({ status: session.status, updatedAt: session.updatedAt, mounted: false })
@@ -94,7 +128,7 @@ function SessionItem({ session, active, onSelect, indent = 0, kind }: SessionIte
         data-testid={`session-item-${session.id}`}
       >
         <div class="flex items-center gap-2">
-          <span class={`inline-block h-2 w-2 rounded-full shrink-0 ${statusDot(session.status)}`} />
+          <StatusIndicator status={session.status} label={`${session.slug}: ${session.status}`} />
           {kind && <KindBadge kind={kind} />}
           <span class="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{session.slug}</span>
           {session.repo && (

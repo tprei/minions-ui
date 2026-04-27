@@ -89,6 +89,40 @@ describe('ConfirmDialog', () => {
     expect(screen.getByText('Processing...')).toBeTruthy()
   })
 
+  it('should render a spinner and aria-busy when loading', () => {
+    render(
+      <ConfirmDialog
+        isOpen={true}
+        title="Test Title"
+        message="Test message"
+        isLoading={true}
+        onConfirm={mockOnConfirm}
+        onCancel={mockOnCancel}
+      />
+    )
+
+    expect(screen.getByTestId('confirm-dialog-spinner')).toBeTruthy()
+    const button = screen.getByTestId('confirm-dialog-confirm-btn')
+    expect(button.getAttribute('aria-busy')).toBe('true')
+  })
+
+  it('should not render a spinner when not loading', () => {
+    render(
+      <ConfirmDialog
+        isOpen={true}
+        title="Test Title"
+        message="Test message"
+        isLoading={false}
+        onConfirm={mockOnConfirm}
+        onCancel={mockOnCancel}
+      />
+    )
+
+    expect(screen.queryByTestId('confirm-dialog-spinner')).toBe(null)
+    const button = screen.getByTestId('confirm-dialog-confirm-btn')
+    expect(button.getAttribute('aria-busy')).toBe('false')
+  })
+
   it('should disable buttons when loading', () => {
     render(
       <ConfirmDialog
@@ -101,7 +135,7 @@ describe('ConfirmDialog', () => {
       />
     )
 
-    const confirmButton = screen.getByText('Processing...')
+    const confirmButton = screen.getByTestId('confirm-dialog-confirm-btn')
     expect(confirmButton.hasAttribute('disabled')).toBe(true)
   })
 
@@ -241,5 +275,37 @@ describe('ReplyDialog', () => {
     )
 
     expect(screen.getByText('Sending...')).toBeTruthy()
+  })
+
+  it('should render a spinner and aria-busy when loading', () => {
+    render(
+      <ReplyDialog
+        isOpen={true}
+        sessionId="session-1"
+        isLoading={true}
+        onSend={mockOnSend}
+        onCancel={mockOnCancel}
+      />
+    )
+
+    expect(screen.getByTestId('reply-dialog-spinner')).toBeTruthy()
+    const button = screen.getByTestId('reply-dialog-send-btn')
+    expect(button.getAttribute('aria-busy')).toBe('true')
+  })
+
+  it('should not render a spinner when not loading', () => {
+    render(
+      <ReplyDialog
+        isOpen={true}
+        sessionId="session-1"
+        isLoading={false}
+        onSend={mockOnSend}
+        onCancel={mockOnCancel}
+      />
+    )
+
+    expect(screen.queryByTestId('reply-dialog-spinner')).toBe(null)
+    const button = screen.getByTestId('reply-dialog-send-btn')
+    expect(button.getAttribute('aria-busy')).toBe('false')
   })
 })

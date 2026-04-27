@@ -7,6 +7,7 @@ import { confirm } from '../hooks/useConfirm'
 import { hasFeature } from '../api/features'
 import { formatRoute } from '../routing/route'
 import { variantGroupsSignal, setVariantWinner } from './store'
+import { StatusIndicator } from '../components/SessionList'
 import type { VariantGroup } from './types'
 
 interface VariantGroupViewProps {
@@ -19,13 +20,6 @@ function defaultNavigate(hash: string): void {
   if (typeof window !== 'undefined') {
     window.location.hash = hash
   }
-}
-
-function statusDot(status: ApiSession['status']): string {
-  if (status === 'running') return 'bg-blue-500 animate-pulse'
-  if (status === 'completed') return 'bg-green-500'
-  if (status === 'failed') return 'bg-red-500'
-  return 'bg-slate-400'
 }
 
 export function VariantGroupView({ store, groupId, navigate = defaultNavigate }: VariantGroupViewProps) {
@@ -226,7 +220,7 @@ function VariantColumn({ id, session, group, store, onPickWinner, onOpen }: Vari
       <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
         {session ? (
           <>
-            <span class={`inline-block h-2 w-2 rounded-full ${statusDot(session.status)}`} />
+            <StatusIndicator status={session.status} label={`${session.slug}: ${session.status}`} />
             <button
               type="button"
               onClick={onOpen}
@@ -241,7 +235,7 @@ function VariantColumn({ id, session, group, store, onPickWinner, onOpen }: Vari
           </>
         ) : (
           <>
-            <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
+            <span class="inline-block h-2 w-2 rounded-full bg-slate-400" aria-hidden="true" />
             <span class="font-mono text-xs text-slate-500 dark:text-slate-400 truncate">waiting…</span>
           </>
         )}
