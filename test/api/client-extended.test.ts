@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createApiClient, ApiError } from '../../src/api/client'
 import type {
   ApiSession,
+  CommandResult,
   CreateSessionRequest,
   CreateSessionVariantsRequest,
   CreateSessionVariantsResult,
+  MinionCommand,
   PrPreview,
   PushSubscriptionJSON,
   ScreenshotList,
@@ -292,5 +294,62 @@ describe('ApiClient — sendMessage with images', () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     const body = JSON.parse(init.body as string) as { images?: unknown }
     expect(body.images).toBeUndefined()
+  })
+})
+
+describe('ApiClient — submitFeedback', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('delegates to sendCommand with submit_feedback action and all fields', async () => {
+    const result: CommandResult = { success: true }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: result }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    const out = await client.submitFeedback({
+      sessionId: 's-1',
+      messageBlockId: 'b-42',
+      vote: 'down',
+      reason: 'incorrect',
+      comment: 'This was wrong',
+    })
+
+    expect(out).toEqual(result)
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE_URL}/api/commands`)
+    expect(init.method).toBe('POST')
+    const body = JSON.parse(init.body as string) as MinionCommand
+    expect(body).toEqual({
+      action: 'submit_feedback',
+      sessionId: 's-1',
+      messageBlockId: 'b-42',
+      vote: 'down',
+      reason: 'incorrect',
+      comment: 'This was wrong',
+    })
+  })
+
+  it('omits optional reason and comment when not provided', async () => {
+    const result: CommandResult = { success: true }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: result }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = createApiClient({ baseUrl: BASE_URL, token: TOKEN })
+    await client.submitFeedback({
+      sessionId: 's-1',
+      messageBlockId: 'b-42',
+      vote: 'up',
+    })
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string) as MinionCommand
+    expect(body).toEqual({
+      action: 'submit_feedback',
+      sessionId: 's-1',
+      messageBlockId: 'b-42',
+      vote: 'up',
+      reason: undefined,
+      comment: undefined,
+    })
   })
 })
