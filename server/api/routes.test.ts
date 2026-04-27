@@ -130,6 +130,7 @@ describe('GET /api/version', () => {
     expect(features).toContain('transcript')
     expect(features).toContain('auth')
     expect(features).toContain('cors-allowlist')
+    expect(features).toContain('message-feedback')
     expect(body.data.provider).toBe('claude')
   })
 })
@@ -937,5 +938,204 @@ describe('DELETE /api/push-subscribe', () => {
       body: JSON.stringify({}),
     }))
     expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /api/commands - submit_feedback', () => {
+  test('accepts valid submit_feedback command with minimal fields', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          sessionId: 'test-session-id',
+          messageBlockId: 'block-123',
+          vote: 'up',
+        }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    const body = await json<{ data: { success: boolean } }>(res)
+    expect(body.data.success).toBe(true)
+  })
+
+  test('accepts submit_feedback with all optional fields', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          sessionId: 'test-session-id',
+          messageBlockId: 'block-456',
+          vote: 'down',
+          reason: 'incorrect',
+          comment: 'This response was not accurate.',
+        }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    const body = await json<{ data: { success: boolean } }>(res)
+    expect(body.data.success).toBe(true)
+  })
+
+  test('accepts all valid feedback reasons', async () => {
+    const app = makeApp(testDb)
+    const reasons = ['incorrect', 'off_topic', 'too_verbose', 'unsafe', 'other']
+    for (const reason of reasons) {
+      const res = await app.fetch(
+        new Request('http://localhost/api/commands', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'submit_feedback',
+            sessionId: 'test-session-id',
+            messageBlockId: 'block-123',
+            vote: 'down',
+            reason,
+          }),
+        }),
+      )
+      expect(res.status).toBe(200)
+    }
+  })
+
+  test('rejects submit_feedback with missing sessionId', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          messageBlockId: 'block-123',
+          vote: 'up',
+        }),
+      }),
+    )
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toContain('sessionId')
+  })
+
+  test('rejects submit_feedback with empty sessionId', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          sessionId: '',
+          messageBlockId: 'block-123',
+          vote: 'up',
+        }),
+      }),
+    )
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toContain('sessionId')
+  })
+
+  test('rejects submit_feedback with missing messageBlockId', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          sessionId: 'test-session-id',
+          vote: 'up',
+        }),
+      }),
+    )
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toContain('messageBlockId')
+  })
+
+  test('rejects submit_feedback with invalid vote', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          sessionId: 'test-session-id',
+          messageBlockId: 'block-123',
+          vote: 'invalid',
+        }),
+      }),
+    )
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toContain('vote')
+  })
+
+  test('rejects submit_feedback with invalid reason', async () => {
+    const app = makeApp(testDb)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          sessionId: 'test-session-id',
+          messageBlockId: 'block-123',
+          vote: 'down',
+          reason: 'invalid-reason',
+        }),
+      }),
+    )
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toContain('reason')
+  })
+
+  test('rejects submit_feedback with comment exceeding 2000 chars', async () => {
+    const app = makeApp(testDb)
+    const longComment = 'x'.repeat(2001)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          sessionId: 'test-session-id',
+          messageBlockId: 'block-123',
+          vote: 'down',
+          comment: longComment,
+        }),
+      }),
+    )
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toContain('comment')
+  })
+
+  test('accepts submit_feedback with comment at 2000 chars', async () => {
+    const app = makeApp(testDb)
+    const maxComment = 'x'.repeat(2000)
+    const res = await app.fetch(
+      new Request('http://localhost/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          sessionId: 'test-session-id',
+          messageBlockId: 'block-123',
+          vote: 'down',
+          comment: maxComment,
+        }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    const body = await json<{ data: { success: boolean } }>(res)
+    expect(body.data.success).toBe(true)
   })
 })
