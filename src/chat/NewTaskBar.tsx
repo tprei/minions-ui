@@ -1,4 +1,4 @@
-import { useSignal, useComputed } from '@preact/signals'
+import { signal, useSignal, useComputed } from '@preact/signals'
 import { useRef, useCallback, useEffect, useState } from 'preact/hooks'
 import type { ConnectionStore } from '../state/types'
 import type { CreateSessionMode } from '../api/types'
@@ -63,6 +63,25 @@ export const NEW_TASK_MODES: ModeOption[] = [
 ]
 
 export const VARIANT_COUNTS: ReadonlyArray<number> = [1, 2, 3, 4]
+
+export interface NewTaskExample {
+  label: string
+  prompt: string
+  mode: CreateSessionMode
+}
+
+export const NEW_TASK_EXAMPLES: ReadonlyArray<NewTaskExample> = [
+  { label: 'Fix flaky test', mode: 'task', prompt: 'Fix the flaky test in <path/to/file> — describe symptoms and any leads.' },
+  { label: 'Add /health endpoint', mode: 'task', prompt: 'Add a /health endpoint that returns 200 with build info (commit, version, uptime).' },
+  { label: 'Refactor X to Y', mode: 'plan', prompt: 'Plan a refactor: replace <X> with <Y>. Survey call sites first, then propose a migration order.' },
+  { label: 'Brainstorm an approach', mode: 'think', prompt: 'Investigate how we could <goal>. Compare 2–3 options with tradeoffs; do not change code yet.' },
+]
+
+export const newTaskPrefill = signal<{ prompt: string; mode: CreateSessionMode } | null>(null)
+
+export function prefillNewTask(payload: { prompt: string; mode: CreateSessionMode }): void {
+  newTaskPrefill.value = payload
+}
 
 export interface NewTaskBarProps {
   store: ConnectionStore
@@ -197,6 +216,24 @@ export function NewTaskBar({
       return () => window.removeEventListener(NEW_TASK_FOCUS_EVENT, handler)
     }
   }, [collapsed])
+
+  const pendingPrefill = newTaskPrefill.value
+  useEffect(() => {
+    if (!pendingPrefill) return
+    prompt.value = pendingPrefill.prompt
+    mode.value = pendingPrefill.mode
+    if (collapsed.value) {
+      collapsed.value = false
+      writeCollapsed(false)
+    }
+    newTaskPrefill.value = null
+    queueMicrotask(() => {
+      const ta = promptRef.current
+      if (!ta) return
+      ta.focus()
+      ta.setSelectionRange(ta.value.length, ta.value.length)
+    })
+  }, [pendingPrefill])
 
   if (!canCreate) {
     return (
