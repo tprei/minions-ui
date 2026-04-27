@@ -1,10 +1,12 @@
 import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent } from './types'
+import { HANDLER_PRIORITIES } from './priorities'
+
 
 const QUOTA_RETRY_MAX_DEFAULT = 3
 
 export const quotaHandler: CompletionHandler = {
   name: 'quota',
-  priority: 20,
+  priority: HANDLER_PRIORITIES.RETRY,
 
   matches(ev: SessionCompletedEvent): boolean {
     return ev.state === 'quota_exhausted'

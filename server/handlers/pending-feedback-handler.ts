@@ -1,8 +1,10 @@
 import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent, SessionMetadata } from './types'
+import { HANDLER_PRIORITIES } from './priorities'
+
 
 export const pendingFeedbackHandler: CompletionHandler = {
   name: 'pending-feedback',
-  priority: 0,
+  priority: HANDLER_PRIORITIES.OBSERVE,
 
   matches(): boolean {
     return true
