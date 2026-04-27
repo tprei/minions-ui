@@ -27,7 +27,7 @@ function makeSourceSession(): ApiSession {
 test.describe('feedback flow', () => {
   test('thumbs-down opens reason popup, submits, and spawns a feedback minion', async ({ page }) => {
     const mock = await createMockMinion({ token: 'tok' })
-    mock.setVersion({ features: ['messages', 'feedback'] })
+    mock.setVersion({ features: ['messages', 'message-feedback'] })
     mock.setSessions([makeSourceSession()])
 
     try {
@@ -102,7 +102,7 @@ test.describe('feedback flow', () => {
 
   test('thumbs-up submits immediately without a popup', async ({ page }) => {
     const mock = await createMockMinion({ token: 'tok' })
-    mock.setVersion({ features: ['messages', 'feedback'] })
+    mock.setVersion({ features: ['messages', 'message-feedback'] })
     mock.setSessions([makeSourceSession()])
 
     try {
