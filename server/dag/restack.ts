@@ -7,8 +7,10 @@ import type { DagGraph, DagNode } from "./dag"
 import type { EngineEventBus } from "../events/bus"
 import type { ExecCall, ExecFn } from "./preflight"
 import type { SessionRegistry } from "../session/registry"
+import { createLogger } from "./logger"
 
 const execFileP = promisify(execFileCb)
+const log = createLogger("restack")
 
 const MAX_RESTACK_DEPTH = Number(process.env["MAX_RESTACK_DEPTH"] ?? 5)
 const RESTACK_DEBOUNCE_MS = Number(process.env["RESTACK_DEBOUNCE_MS"] ?? 10_000)
@@ -86,7 +88,7 @@ export function createRestackManager(opts: RestackManagerOpts): RestackManager {
     const attempts = resolverAttempts.get(attemptKey) ?? 0
 
     if (attempts >= 1) {
-      console.error(`[restack] max resolver attempts (1) reached for node ${node.id}`)
+      log.error({ dagId: graph.id, nodeId: node.id, attempts }, "max resolver attempts reached")
       node.status = "rebase-conflict"
       node.error = "Automatic conflict resolution failed"
       bus.emit({
@@ -139,9 +141,9 @@ If the conflict cannot be resolved automatically or requires human judgment, run
           resolverAttemptKey: attemptKey,
         },
       })
-      console.log(`[restack] spawned resolver session for node ${node.id}`)
+      log.info({ dagId: graph.id, nodeId: node.id, parentBranch: ctx.parentBranch, parentSha: ctx.parentSha }, "spawned resolver session")
     } catch (err) {
-      console.error(`[restack] failed to spawn resolver for node ${node.id}:`, err)
+      log.error({ dagId: graph.id, nodeId: node.id, err }, "failed to spawn resolver")
       node.status = "rebase-conflict"
       node.error = `Failed to spawn resolver: ${err instanceof Error ? err.message : String(err)}`
       bus.emit({
@@ -191,25 +193,25 @@ If the conflict cannot be resolved automatically or requires human judgment, run
     ctx: RestackContext,
   ): Promise<void> {
     if (!node.branch) {
-      console.error(`[restack] skip node ${node.id}: no branch`)
+      log.error({ dagId: graph.id, nodeId: node.id }, "skip node: no branch")
       return
     }
 
     const cwd = worktreeDir(workspaceRoot, node.branch)
     if (!fs.existsSync(cwd)) {
-      console.error(`[restack] skip node ${node.id}: worktree ${cwd} missing`)
+      log.error({ dagId: graph.id, nodeId: node.id, cwd }, "skip node: worktree missing")
       return
     }
 
     const now = Date.now()
     const lastTime = lastRestackTime.get(node.id) ?? 0
     if (now - lastTime < RESTACK_DEBOUNCE_MS) {
-      console.log(`[restack] debounce node ${node.id}: ${now - lastTime}ms since last restack`)
+      log.info({ dagId: graph.id, nodeId: node.id, sinceMs: now - lastTime }, "debounce node restack")
       return
     }
 
     if (ctx.cascadeDepth >= MAX_RESTACK_DEPTH) {
-      console.error(`[restack] max depth ${MAX_RESTACK_DEPTH} reached for node ${node.id}`)
+      log.error({ dagId: graph.id, nodeId: node.id, maxDepth: MAX_RESTACK_DEPTH }, "max restack depth reached")
       node.status = "rebase-conflict"
       node.error = `Max restack depth (${MAX_RESTACK_DEPTH}) exceeded`
       bus.emit({
@@ -236,7 +238,7 @@ If the conflict cannot be resolved automatically or requires human judgment, run
     const rebaseResult = await rebaseOntoParent(node, ctx.parentBranch, cwd)
 
     if (!rebaseResult.success) {
-      console.error(`[restack] rebase failed for node ${node.id}:`, rebaseResult.error)
+      log.error({ dagId: graph.id, nodeId: node.id, error: rebaseResult.error }, "rebase failed")
       node.status = "rebasing"
       node.error = rebaseResult.error
       await spawnResolver(node, graph, ctx, cwd)
@@ -250,7 +252,7 @@ If the conflict cannot be resolved automatically or requires human judgment, run
         opts: { cwd, timeout: 60_000, encoding: "utf-8" },
       })
     } catch (err) {
-      console.error(`[restack] force-push failed for node ${node.id}:`, err)
+      log.error({ dagId: graph.id, nodeId: node.id, err }, "force-push failed")
       node.status = priorStatus
       node.error = err instanceof Error ? err.message : String(err)
       bus.emit({
@@ -297,7 +299,7 @@ If the conflict cannot be resolved automatically or requires human judgment, run
     const idx = nodeIndex(graph)
     const parent = idx.get(event.nodeId)
     if (!parent || !parent.branch) {
-      console.error(`[restack] parent node ${event.nodeId} has no branch`)
+      log.error({ dagId: event.dagId, nodeId: event.nodeId }, "parent node has no branch")
       return
     }
 
@@ -322,13 +324,13 @@ If the conflict cannot be resolved automatically or requires human judgment, run
 
     for (const child of directChildren) {
       if (child.status === "running") {
-        console.log(`[restack] defer restack for running node ${child.id}`)
+        log.info({ dagId: graph.id, nodeId: child.id, parentNodeId: event.nodeId }, "defer restack for running node")
         continue
       }
 
       const existingRestack = inflightRestacks.get(child.id)
       if (existingRestack) {
-        console.log(`[restack] restack already in flight for node ${child.id}`)
+        log.info({ dagId: graph.id, nodeId: child.id }, "restack already in flight")
         await existingRestack
         continue
       }

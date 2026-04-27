@@ -5,8 +5,10 @@ import { promisify } from 'node:util'
 import path from 'node:path'
 import { loadDag } from '../dag/store'
 import { HANDLER_PRIORITIES } from './priorities'
+import { createLogger } from '../dag/logger'
 
 const execFileP = promisify(execFileCb)
+const log = createLogger('ci-babysit-handler')
 
 export const ciBabysitHandler: CompletionHandler = {
   name: 'ci-babysit',
@@ -34,7 +36,7 @@ export const ciBabysitHandler: CompletionHandler = {
 
     if (meta.dagNodeId && row.workspace_root) {
       await detectAndEmitPush(ev.sessionId, row.workspace_root, meta, ctx).catch((err) => {
-        console.error(`[ci-babysit-handler] push detection failed for ${ev.sessionId}:`, err)
+        log.error({ sessionId: ev.sessionId, dagId: meta.dagId, nodeId: meta.dagNodeId, err }, "push detection failed")
       })
     }
 
@@ -84,7 +86,7 @@ async function detectAndEmitPush(
     }) as { stdout: string; stderr: string }
     currentSha = result.stdout.trim()
   } catch (err) {
-    console.error(`[ci-babysit-handler] failed to get HEAD SHA for ${node.id}:`, err)
+    log.error({ sessionId, dagId: meta.dagId, nodeId: node.id, err }, "failed to get HEAD SHA")
     return
   }
 

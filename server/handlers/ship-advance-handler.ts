@@ -1,8 +1,10 @@
 import type { CompletionHandler, HandlerCtx, HandlerResult, SessionCompletedEvent } from './types'
 import { handleExecute } from '../commands/plan-actions'
 import { HANDLER_PRIORITIES } from './priorities'
+import { createLogger } from '../dag/logger'
 
 const SHIP_ADVANCE_MODES = new Set(['ship-think', 'ship-plan'])
+const log = createLogger('ship-advance-handler')
 
 export const shipAdvanceHandler: CompletionHandler = {
   name: 'ship-advance',
@@ -31,7 +33,7 @@ export const shipAdvanceHandler: CompletionHandler = {
         scheduler: ctx.scheduler,
       })
     } catch (err) {
-      console.error(`[ship-advance] failed to advance session ${ev.sessionId} (mode=${row.mode}):`, err)
+      log.error({ sessionId: ev.sessionId, mode: row.mode, err }, "failed to advance session")
       throw err
     }
     return { handled: true }

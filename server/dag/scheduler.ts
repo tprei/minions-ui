@@ -17,6 +17,9 @@ import { createRestackManager } from "./restack"
 import type { RestackManager } from "./restack"
 import { createDagWatchdog } from "./watchdog"
 import type { DagWatchdog, DagWatchdogOpts, StallEvent, StallAction } from "./watchdog"
+import { createLogger } from "./logger"
+
+const log = createLogger("scheduler")
 
 function fetchRootConversation(db: Database, rootSessionId: string): TopicMessage[] {
   const rows = db
@@ -693,7 +696,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
           cascade_depth: 0,
           created_at: Date.now(),
         })
-        console.log(`[scheduler] defer restack for running node ${event.nodeId}`)
+        log.info({ dagId: event.dagId, nodeId: event.nodeId, sessionId }, "defer restack for running node")
         return
       }
     }
@@ -708,7 +711,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
       },
       graph,
     ).catch((err) => {
-      console.error(`[scheduler] restack failed for node ${event.nodeId}:`, err)
+      log.error({ dagId: event.dagId, nodeId: event.nodeId, err }, "restack failed")
     })
   })
 

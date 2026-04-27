@@ -8,6 +8,7 @@ import { createRestackManager } from "./restack"
 import type { ExecFn } from "./preflight"
 import type { EngineEvent } from "../events/types"
 import type { SessionRegistry } from "../session/registry"
+import { setLogLevel, getLogLevel, setLogSink, resetLogSink, type LogEntry } from "./logger"
 
 function makeExecWithSha(headSha: string): { exec: ExecFn; calls: string[][]; setHeadSha: (sha: string) => void } {
   const calls: string[][] = []
@@ -368,5 +369,88 @@ describe("RestackManager.onParentPushed", () => {
     }, graph)
 
     expect(graph.nodes[1]!.headSha).toBe("new-sha-b-updated")
+  })
+})
+
+describe("RestackManager logging", () => {
+  let logEntries: LogEntry[]
+  let priorLevel: ReturnType<typeof getLogLevel>
+
+  beforeEach(() => {
+    logEntries = []
+    priorLevel = getLogLevel()
+    setLogLevel("debug")
+    setLogSink((entry) => logEntries.push(entry))
+  })
+
+  afterEach(() => {
+    resetLogSink()
+    setLogLevel(priorLevel)
+  })
+
+  it("threads dagId and nodeId into rebase failure logs", async () => {
+    const { exec } = makeFailingExec("rebase")
+    const { bus } = makeBus()
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
+    const graph = makeGraph()
+
+    await manager.onParentPushed({
+      dagId: "dag-1",
+      nodeId: "a",
+      parentSha: "old-sha-a",
+      newSha: "new-sha-a",
+      cascadeDepth: 0,
+    }, graph)
+
+    const rebaseFailEntry = logEntries.find((e) => e.msg === "rebase failed")
+    expect(rebaseFailEntry).toBeDefined()
+    expect(rebaseFailEntry!.component).toBe("restack")
+    expect(rebaseFailEntry!.level).toBe("error")
+    expect(rebaseFailEntry!.fields.dagId).toBe("dag-1")
+    expect(rebaseFailEntry!.fields.nodeId).toBe("b")
+  })
+
+  it("threads dagId and nodeId into max-depth logs", async () => {
+    const { exec } = makeExecWithSha("new-sha-b")
+    const { bus } = makeBus()
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
+    const graph = makeGraph()
+
+    await manager.onParentPushed({
+      dagId: "dag-1",
+      nodeId: "a",
+      parentSha: "old-sha-a",
+      newSha: "new-sha-a",
+      cascadeDepth: 5,
+    }, graph)
+
+    const depthEntry = logEntries.find((e) => e.msg === "max restack depth reached")
+    expect(depthEntry).toBeDefined()
+    expect(depthEntry!.fields.dagId).toBe("dag-1")
+    expect(depthEntry!.fields.nodeId).toBe("b")
+    expect(depthEntry!.fields.maxDepth).toBeDefined()
+  })
+
+  it("threads dagId and nodeId into worktree-missing logs", async () => {
+    const { exec } = makeExecWithSha("new-sha-b")
+    const { bus } = makeBus()
+    const graph = makeGraph()
+
+    fs.rmSync(path.join(workspaceRoot, "slug-b"), { recursive: true, force: true })
+
+    const manager = createRestackManager({ bus, workspaceRoot, registry: makeMockRegistry(), execFile: exec })
+    await manager.onParentPushed({
+      dagId: "dag-1",
+      nodeId: "a",
+      parentSha: "old-sha-a",
+      newSha: "new-sha-a",
+      cascadeDepth: 0,
+    }, graph)
+
+    const missingEntry = logEntries.find((e) => e.msg === "skip node: worktree missing")
+    expect(missingEntry).toBeDefined()
+    expect(missingEntry!.fields.dagId).toBe("dag-1")
+    expect(missingEntry!.fields.nodeId).toBe("b")
+    expect(missingEntry!.fields.cwd).toBeDefined()
   })
 })
