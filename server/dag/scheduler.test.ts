@@ -503,6 +503,88 @@ describe("DagScheduler", () => {
     expect(afterResume.nodes.find((n) => n.id === "a")?.sessionId).toBe(sessionId)
   })
 
+  it("onSessionCompleted recovers from DB when in-memory cache is empty", async () => {
+    const graph = buildDag("dag-recover", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`session-${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const firstScheduler = makeScheduler(registry)
+    await firstScheduler.start("dag-recover")
+    expect(sessions).toHaveLength(1)
+    const sessionId = sessions[0]!
+
+    const secondScheduler = makeScheduler(registry)
+
+    await secondScheduler.onSessionCompleted(sessionId, "completed")
+
+    const after = secondScheduler.status("dag-recover")
+    const nodeA = after.nodes.find((n) => n.id === "a")
+    expect(nodeA?.status).toBe("done")
+    expect(sessions).toHaveLength(2)
+  })
+
+  it("onSessionCompleted ignores DB-discovered nodes that are not running", async () => {
+    const graph = buildDag("dag-stale", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const registry = makeRegistry(db, async () => ({ session: makeSession("stale-sess", db), runtime: {} as never }))
+    const firstScheduler = makeScheduler(registry)
+    await firstScheduler.start("dag-stale")
+
+    await firstScheduler.onSessionCompleted("stale-sess", "completed")
+
+    const secondScheduler = makeScheduler(registry)
+    await secondScheduler.onSessionCompleted("stale-sess", "completed")
+
+    const after = secondScheduler.status("dag-stale")
+    const nodeA = after.nodes.find((n) => n.id === "a")
+    expect(nodeA?.status).toBe("done")
+  })
+
+  it("onSessionResumed uses indexed dag_nodes.session_id lookup, not session metadata", async () => {
+    const graph = buildDag("dag-resume-indexed", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const id = `session-${sessions.length}`
+      const session = makeSession(id, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-resume-indexed")
+
+    const sessionId = sessions[0]!
+    await scheduler.onSessionCompleted(sessionId, "errored")
+
+    prepared.updateSession(db, {
+      id: sessionId,
+      updated_at: Date.now(),
+      metadata: {},
+    })
+
+    await scheduler.onSessionResumed(sessionId)
+
+    const after = scheduler.status("dag-resume-indexed")
+    expect(after.nodes.find((n) => n.id === "a")?.status).toBe("running")
+  })
+
   it("onSessionResumed is a no-op when session is not part of a DAG", async () => {
     const scheduler = makeScheduler(makeRegistry(db))
     const session = makeSession("loner", db)

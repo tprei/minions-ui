@@ -208,6 +208,13 @@ type StmtCache = {
   listDags?: ReturnType<Database['prepare']>
   deleteDag?: ReturnType<Database['prepare']>
   upsertDagNode?: ReturnType<Database['prepare']>
+  getDagNodeBySessionId?: ReturnType<Database['prepare']>
+}
+
+export interface DagNodeSessionLookup {
+  dag_id: string
+  node_id: string
+  status: DagNodeStatus
 }
 
 const dbCaches = new WeakMap<Database, StmtCache>()
@@ -711,5 +718,17 @@ export const prepared = {
       .query<DagNodeDbRow, [string]>('SELECT * FROM dag_nodes WHERE dag_id = ?')
       .all(dagId)
     return rows.map(mapDagNodeRow)
+  },
+
+  getDagNodeBySessionId(db: Database, sessionId: string): DagNodeSessionLookup | null {
+    const c = stmts(db)
+    if (!c.getDagNodeBySessionId) {
+      c.getDagNodeBySessionId = db.prepare<{ dag_id: string; id: string; status: DagNodeStatus }, [string]>(
+        'SELECT dag_id, id, status FROM dag_nodes WHERE session_id = ? LIMIT 1',
+      )
+    }
+    const row = c.getDagNodeBySessionId.get(sessionId) as { dag_id: string; id: string; status: DagNodeStatus } | null
+    if (!row) return null
+    return { dag_id: row.dag_id, node_id: row.id, status: row.status }
   },
 }
