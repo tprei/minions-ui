@@ -25,7 +25,6 @@ import { usePullToRefresh } from './hooks/usePullToRefresh'
 import { ThemeToggle } from './chat/ThemeToggle'
 import { ResizeHandle } from './chat/ResizeHandle'
 import { ChatPane } from './chat/ChatPane'
-import { ChatPanel } from './chat/ChatPanel'
 import { useResizable } from './hooks/useResizable'
 import { SessionList } from './components/SessionList'
 import type { ApiDagGraph } from './api/types'
@@ -699,7 +698,7 @@ function ActiveView() {
           )}
           <div
             {...pullToRefresh.containerProps}
-            class="flex flex-col flex-1 min-h-0 overflow-y-auto"
+            class="flex flex-col flex-1 min-h-0"
             style={{
               transform: pullToRefresh.pullDistance > 0 ? `translateY(${pullToRefresh.pullDistance}px)` : undefined,
               transition: pullToRefresh.isRefreshing || pullToRefresh.pullDistance === 0 ? 'transform 0.2s ease-out' : 'none',
@@ -716,7 +715,18 @@ function ActiveView() {
               activeSessionId={sessionId}
               onSelect={selectSession}
             />
-            {!selected && <EmptyPane />}
+            {selected ? (
+              <ChatPane
+                key={selected.id}
+                session={selected}
+                store={store}
+                onSend={handleSendMessage}
+                onCommand={handleCommand}
+                onNavigate={selectSession}
+              />
+            ) : (
+              <EmptyPane />
+            )}
           </div>
         </div>
       )}
@@ -789,16 +799,6 @@ function ActiveView() {
             />
           </div>
         </div>
-      )}
-      {!isDesktop.value && selected && mode === 'list' && (
-        <ChatPanel
-          key={selected.id}
-          session={selected}
-          store={store}
-          onSend={handleSendMessage}
-          onCommand={handleCommand}
-          onNavigate={selectSession}
-        />
       )}
       {showDrawer.value && (
         <ConnectionsDrawer onClose={() => { showDrawer.value = false }} />
