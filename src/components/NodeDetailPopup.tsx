@@ -421,13 +421,13 @@ export function NodeDetailPopup({
   }
 
   return (
-    <div class="fixed inset-0 z-50 flex items-center justify-center">
-      <div class={`absolute inset-0 ${overlayBg}`} onClick={onClose} />
+    <div class="fixed inset-y-0 right-0 z-50 flex pointer-events-none">
       <div
         ref={popupRef}
-        class={`relative ${dialogBg} rounded-xl max-w-sm w-full mx-4 shadow-xl overflow-hidden`}
+        data-anim="slide-in-right"
+        data-testid="node-detail-slideover"
+        class={`relative ${dialogBg} w-full sm:w-[24rem] md:w-[26rem] h-full shadow-2xl border-l ${borderColor} pointer-events-auto overflow-y-auto`}
         role="dialog"
-        aria-modal="true"
         aria-labelledby="node-detail-title"
       >
         <div class={`px-4 pt-4 pb-3 border-b ${borderColor}`}>

@@ -612,7 +612,7 @@ describe('NodeDetailPopup mobile bottom sheet', () => {
     expect(handle).toBeTruthy()
   })
 
-  it('renders as centered modal on desktop', () => {
+  it('renders as right-side slide-over on desktop', () => {
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query !== '(max-width: 767px)',
       media: query,
@@ -622,10 +622,59 @@ describe('NodeDetailPopup mobile bottom sheet', () => {
 
     const session = makeSession()
     const { container } = render(<NodeDetailPopup session={session} onClose={vi.fn()} />)
-    const modal = container.querySelector('.flex.items-center.justify-center')
-    expect(modal).toBeTruthy()
+    const slideover = container.querySelector('[data-testid="node-detail-slideover"]')
+    expect(slideover).toBeTruthy()
+    expect(slideover!.className).toContain('h-full')
+    expect(slideover!.className).toContain('border-l')
     const handle = container.querySelector('.w-10.h-1.rounded-full')
     expect(handle).toBeFalsy()
+  })
+
+  it('does not render a backdrop overlay on desktop (canvas stays interactive)', () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query !== '(max-width: 767px)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+
+    const session = makeSession()
+    const { container } = render(<NodeDetailPopup session={session} onClose={vi.fn()} />)
+    const overlays = container.querySelectorAll('[class*="bg-black/"]')
+    expect(overlays.length).toBe(0)
+
+    const wrapper = container.querySelector('[role="dialog"]')!.parentElement!
+    expect(wrapper.className).toContain('pointer-events-none')
+    expect(wrapper.className).toContain('right-0')
+  })
+
+  it('desktop slide-over panel itself remains clickable while wrapper passes events through', () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query !== '(max-width: 767px)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+
+    const session = makeSession()
+    const { container } = render(<NodeDetailPopup session={session} onClose={vi.fn()} />)
+    const slideover = container.querySelector('[data-testid="node-detail-slideover"]') as HTMLElement
+    expect(slideover.className).toContain('pointer-events-auto')
+  })
+
+  it('desktop slide-over closes on Escape key', () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query !== '(max-width: 767px)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+
+    const session = makeSession()
+    const onClose = vi.fn()
+    render(<NodeDetailPopup session={session} onClose={onClose} />)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalled()
   })
 })
 
