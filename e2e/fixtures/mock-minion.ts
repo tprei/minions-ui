@@ -14,6 +14,7 @@ import type {
   ScreenshotEntry,
   VapidPublicKey,
   PushSubscriptionJSON,
+  FeedbackMetadata,
 } from '../../src/api/types'
 
 export type {
@@ -282,6 +283,26 @@ export async function createMockMinion(opts?: {
       return
     }
 
+    const transcriptMatch = path.match(/^\/api\/sessions\/([^/]+)\/transcript$/)
+    if (transcriptMatch && req.method === 'GET') {
+      const slug = decodeURIComponent(transcriptMatch[1])
+      const session = sessions.find((s) => s.slug === slug || s.id === slug)
+      if (!session) return notFound(res)
+      sendJson(res, 200, {
+        data: {
+          session: {
+            sessionId: session.id,
+            mode: session.mode,
+            startedAt: new Date(session.createdAt).getTime(),
+            active: session.status !== 'completed',
+          },
+          events: [],
+          highWaterMark: 0,
+        },
+      })
+      return
+    }
+
     if (path === '/api/events' && req.method === 'GET') {
       const origin = req.headers['origin'] ?? allowedOrigin
       res.writeHead(200, {
@@ -305,6 +326,49 @@ export async function createMockMinion(opts?: {
       const body = await readBody(req)
       const cmd = JSON.parse(body) as MinionCommand
       lastCommands.push(cmd)
+      if (cmd.action === 'submit_feedback') {
+        const parent = sessions.find((s) => s.id === cmd.sessionId)
+        sessionCounter += 1
+        const id = `mock-feedback-${sessionCounter}`
+        const now = new Date().toISOString()
+        const metadata: Record<string, unknown> = {
+          kind: 'feedback',
+          vote: cmd.vote,
+          reason: cmd.reason,
+          comment: cmd.comment,
+          sourceSessionId: cmd.sessionId,
+          sourceSessionSlug: parent?.slug ?? '',
+          sourceMessageBlockId: cmd.messageBlockId,
+        } satisfies FeedbackMetadata
+        const child: ApiSession = {
+          id,
+          slug: `feedback-${sessionCounter}`,
+          status: 'pending',
+          command: `/feedback ${cmd.vote}${cmd.reason ? ` (${cmd.reason})` : ''}`,
+          parentId: cmd.sessionId,
+          childIds: [],
+          needsAttention: false,
+          attentionReasons: [],
+          quickActions: [],
+          mode: 'feedback',
+          createdAt: now,
+          updatedAt: now,
+          conversation: [],
+          metadata,
+        }
+        if (parent) {
+          const updatedParent: ApiSession = {
+            ...parent,
+            childIds: [...parent.childIds, child.id],
+            updatedAt: now,
+          }
+          sessions = sessions.map((s) => (s.id === parent.id ? updatedParent : s)).concat(child)
+          if (activeSseRes) writeSse(activeSseRes, { type: 'session_updated', session: updatedParent })
+        } else {
+          sessions = [...sessions, child]
+        }
+        if (activeSseRes) writeSse(activeSseRes, { type: 'session_created', session: child })
+      }
       sendJson(res, 200, { data: { success: true } })
       return
     }
