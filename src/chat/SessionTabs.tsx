@@ -22,7 +22,7 @@ export function SessionTabs({ tabs, active, onChange, children }: SessionTabsPro
       <div
         role="tablist"
         aria-label="Session views"
-        class="flex items-center gap-1 px-3 py-1.5 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0"
+        class="flex items-center gap-1.5 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0"
         data-testid="session-tabs"
       >
         {visible.map((t) => {
@@ -37,7 +37,7 @@ export function SessionTabs({ tabs, active, onChange, children }: SessionTabsPro
               id={`session-tab-${t.id}`}
               onClick={() => onChange(t.id)}
               class={
-                'px-3 py-1 text-xs font-medium rounded-md transition-colors ' +
+                'px-3 py-1.5 text-xs font-medium rounded-md transition-colors ' +
                 (isActive
                   ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
                   : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 border border-transparent')

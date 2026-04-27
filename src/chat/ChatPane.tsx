@@ -134,7 +134,7 @@ export function ChatPane({
 
   return (
     <div class={rootClass} data-testid="chat-pane" data-fullscreen={mobileFullscreen ? 'true' : 'false'}>
-      <header class="flex items-center gap-2 px-4 py-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
+      <header class="flex items-center gap-2.5 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 shrink-0">
         {parentSession && onNavigate && (
           <button
             type="button"

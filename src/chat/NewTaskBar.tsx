@@ -266,11 +266,11 @@ export function NewTaskBar({
 
   return (
     <div
-      class="flex flex-col gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+      class="flex flex-col gap-3 px-3 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
       data-testid="new-task-bar"
     >
-      <div class="flex flex-wrap items-center gap-2">
-        <div class="flex gap-1" role="radiogroup" aria-label="Task mode" data-testid="mode-picker">
+      <div class="flex flex-wrap items-center gap-2.5">
+        <div class="flex gap-1.5" role="radiogroup" aria-label="Task mode" data-testid="mode-picker">
           {availableModes.map((m) => {
             const active = mode.value === m.value
             const btnClass = active
@@ -286,7 +286,7 @@ export function NewTaskBar({
                 disabled={sending.value}
                 onClick={() => { mode.value = m.value }}
                 data-testid={`mode-${m.value}`}
-                class={`rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${btnClass}`}
+                class={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${btnClass}`}
               >
                 {m.label}
               </button>
@@ -358,7 +358,7 @@ export function NewTaskBar({
         </div>
       )}
 
-      <div class="flex items-end gap-2">
+      <div class="flex items-end gap-2.5">
         <input
           ref={fileInputRef}
           type="file"
@@ -374,7 +374,7 @@ export function NewTaskBar({
           disabled={sending.value}
           aria-label="Attach image"
           title="Attach image"
-          class="shrink-0 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors border shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600"
+          class="shrink-0 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors border shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600"
           data-testid="new-task-attach-btn"
         >
           <PaperclipIcon />
@@ -391,14 +391,14 @@ export function NewTaskBar({
           disabled={sending.value}
           rows={2}
           placeholder={`New ${mode.value}: describe what you want…`}
-          class="flex-1 resize-y rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 disabled:opacity-50"
+          class="flex-1 resize-y rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 disabled:opacity-50"
           data-testid="new-task-prompt"
         />
         <button
           type="button"
           onClick={() => void submit()}
           disabled={!canSubmit}
-          class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          class="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           data-testid="new-task-send"
         >
           {launchLabel}
@@ -406,7 +406,7 @@ export function NewTaskBar({
         <button
           type="button"
           onClick={toggleCollapsed}
-          class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-2 py-2 text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+          class="rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-2.5 py-2.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
           title="Collapse the task bar"
           aria-label="Collapse task bar"
           data-testid="new-task-collapse"
