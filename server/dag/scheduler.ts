@@ -128,6 +128,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
   const nodeToSession = new Map<string, string>()
   const nodeToGraph = new Map<string, string>()
   const cancelledDags = new Set<string>()
+  const completedDags = new Set<string>()
 
   const restackManager: RestackManager = createRestackManager({
     bus,
@@ -241,6 +242,14 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
     if (isDagComplete(graph)) {
       activeGraphs.delete(graph.id)
       persist(graph)
+      if (!completedDags.has(graph.id)) {
+        completedDags.add(graph.id)
+        bus.emit({
+          kind: "dag.completed",
+          dagId: graph.id,
+          status: dagGraphStatus(graph) === "failed" ? "failed" : "completed",
+        })
+      }
       await advanceShip(graph.rootSessionId, "verify", { db, registry, scheduler: { start } })
     }
   }
@@ -251,6 +260,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
 
     activeGraphs.set(dagId, existing)
     cancelledDags.delete(dagId)
+    completedDags.delete(dagId)
 
     await tickGraph(existing)
   }
@@ -398,6 +408,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
         console.error(`[scheduler] failed to stop session ${sessionId} during cancel:`, err)
       }
     }
+    bus.emit({ kind: "dag.cancelled", dagId })
   }
 
   function status(dagId: string): DagStatusSnapshot {
@@ -426,6 +437,7 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
       activeGraphs.set(dagId, graph)
       cancelledDags.delete(dagId)
     }
+    completedDags.delete(dagId)
 
     resetFailedNode(graph, nodeId)
     persist(graph)
