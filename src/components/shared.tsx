@@ -64,6 +64,12 @@ export const STATUS_CONFIG: Record<StatusType, { emoji: string; label: string; c
     className: 'bg-amber-100 text-amber-700',
     darkClassName: 'bg-amber-900/50 text-amber-300',
   },
+  cancelled: {
+    emoji: '🚫',
+    label: 'Cancelled',
+    className: 'bg-stone-100 text-stone-700',
+    darkClassName: 'bg-stone-800/50 text-stone-400',
+  },
 }
 
 interface StatusBadgeProps {
@@ -176,6 +182,7 @@ export function getStatusColors(isDark: boolean): Record<DagNodeStatus, { bg: st
       landed: { bg: '#022c22', border: '#059669', text: '#6ee7b7' },
       rebasing: { bg: '#312e81', border: '#6366f1', text: '#a5b4fc' },
       'rebase-conflict': { bg: '#451a03', border: '#f59e0b', text: '#fcd34d' },
+      cancelled: { bg: '#292524', border: '#78716c', text: '#a8a29e' },
     }
   }
   return {
@@ -189,6 +196,7 @@ export function getStatusColors(isDark: boolean): Record<DagNodeStatus, { bg: st
     landed: { bg: '#d1fae5', border: '#059669', text: '#065f46' },
     rebasing: { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3' },
     'rebase-conflict': { bg: '#fef3c7', border: '#f59e0b', text: '#78350f' },
+    cancelled: { bg: '#f5f5f4', border: '#a8a29e', text: '#57534e' },
   }
 }
 

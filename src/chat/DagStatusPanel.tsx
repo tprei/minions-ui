@@ -72,6 +72,7 @@ const DAG_NODE_COLORS: Record<ApiDagNode['status'], string> = {
   skipped: 'bg-slate-400',
   rebasing: 'bg-indigo-500 animate-pulse',
   'rebase-conflict': 'bg-amber-500',
+  cancelled: 'bg-slate-400 dark:bg-slate-600',
 }
 
 const DAG_NODE_LABELS: Record<ApiDagNode['status'], string> = {
@@ -85,6 +86,7 @@ const DAG_NODE_LABELS: Record<ApiDagNode['status'], string> = {
   skipped: 'skipped',
   rebasing: 'rebasing',
   'rebase-conflict': 'conflict',
+  cancelled: 'cancelled',
 }
 
 export function DagStatusPanel({ session, store, onSelect, onLand }: DagStatusPanelProps) {

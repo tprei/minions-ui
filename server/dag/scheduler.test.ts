@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "bun:test"
 import { Database } from "bun:sqlite"
 import { buildDag } from "./dag"
-import { saveDag } from "./store"
+import { saveDag, loadDag } from "./store"
 import { createDagScheduler } from "./scheduler"
 import { EngineEventBus } from "../events/bus"
 import { openDatabase, prepared, runMigrations } from "../db/sqlite"
@@ -357,7 +357,7 @@ describe("DagScheduler", () => {
     expect(replies).toEqual([{ sessionId: rootId, text: expected }])
   })
 
-  it("cancel stops running sessions and marks them failed", async () => {
+  it("cancel stops running sessions and marks them cancelled", async () => {
     const graph = buildDag("dag-cancel", [
       { id: "a", title: "Task A", description: "A", dependsOn: [] },
     ], "root-session", "https://github.com/org/repo")
@@ -381,7 +381,133 @@ describe("DagScheduler", () => {
 
     const s = scheduler.status("dag-cancel")
     const nodeA = s.nodes.find((n) => n.id === "a")
-    expect(nodeA?.status).toBe("failed")
+    expect(nodeA?.status).toBe("cancelled")
+    expect(nodeA?.error).toBe("dag cancelled")
+  })
+
+  it("cancel sweeps pending and ready nodes to cancelled without spawning them", async () => {
+    const graph = buildDag("dag-cancel-sweep", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+      { id: "c", title: "Task C", description: "C", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-cancel-sweep")
+
+    expect(sessions).toHaveLength(1)
+
+    await scheduler.cancel("dag-cancel-sweep")
+
+    const s = scheduler.status("dag-cancel-sweep")
+    expect(s.nodes.find((n) => n.id === "a")?.status).toBe("cancelled")
+    expect(s.nodes.find((n) => n.id === "b")?.status).toBe("cancelled")
+    expect(s.nodes.find((n) => n.id === "c")?.status).toBe("cancelled")
+  })
+
+  it("cancel persists cancelled state to the DB so it survives reload", async () => {
+    const graph = buildDag("dag-cancel-persist", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+    registry.stop = async () => {}
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-cancel-persist")
+    await scheduler.cancel("dag-cancel-persist")
+
+    const reloaded = loadDag("dag-cancel-persist", db)
+    expect(reloaded).not.toBeNull()
+    expect(reloaded!.nodes.find((n) => n.id === "a")?.status).toBe("cancelled")
+    expect(reloaded!.nodes.find((n) => n.id === "b")?.status).toBe("cancelled")
+  })
+
+  it("cancel preserves already-terminal nodes (done, failed, landed)", async () => {
+    const graph = buildDag("dag-cancel-terminal", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: [] },
+      { id: "c", title: "Task C", description: "C", dependsOn: [] },
+      { id: "d", title: "Task D", description: "D", dependsOn: ["a", "b", "c"] },
+    ], "root-session", "https://github.com/org/repo")
+    graph.nodes.find((n) => n.id === "a")!.status = "done"
+    graph.nodes.find((n) => n.id === "b")!.status = "failed"
+    graph.nodes.find((n) => n.id === "c")!.status = "landed"
+    saveDag(graph, db)
+
+    const registry = makeRegistry(db)
+    const scheduler = makeScheduler(registry)
+    await scheduler.cancel("dag-cancel-terminal")
+
+    const reloaded = loadDag("dag-cancel-terminal", db)
+    expect(reloaded!.nodes.find((n) => n.id === "a")?.status).toBe("done")
+    expect(reloaded!.nodes.find((n) => n.id === "b")?.status).toBe("failed")
+    expect(reloaded!.nodes.find((n) => n.id === "c")?.status).toBe("landed")
+    expect(reloaded!.nodes.find((n) => n.id === "d")?.status).toBe("cancelled")
+  })
+
+  it("cancel works on a cold DAG that was never started", async () => {
+    const graph = buildDag("dag-cold-cancel", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+      { id: "b", title: "Task B", description: "B", dependsOn: ["a"] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const registry = makeRegistry(db)
+    const scheduler = makeScheduler(registry)
+
+    await scheduler.cancel("dag-cold-cancel")
+
+    const reloaded = loadDag("dag-cold-cancel", db)
+    expect(reloaded!.nodes.find((n) => n.id === "a")?.status).toBe("cancelled")
+    expect(reloaded!.nodes.find((n) => n.id === "b")?.status).toBe("cancelled")
+  })
+
+  it("cancel emits a dag.snapshot with cancelled status", async () => {
+    const graph = buildDag("dag-cancel-snapshot", [
+      { id: "a", title: "Task A", description: "A", dependsOn: [] },
+    ], "root-session", "https://github.com/org/repo")
+    saveDag(graph, db)
+
+    const sessions: string[] = []
+    const registry = makeRegistry(db, async () => {
+      const session = makeSession(`s${sessions.length}`, db)
+      sessions.push(session.id)
+      return { session, runtime: {} as never }
+    })
+    registry.stop = async () => {}
+
+    const snapshots: Array<{ status: string }> = []
+    bus.onKind("dag.snapshot", (e) => snapshots.push({ status: e.dag.status }))
+
+    const scheduler = makeScheduler(registry)
+    await scheduler.start("dag-cancel-snapshot")
+    snapshots.length = 0
+
+    await scheduler.cancel("dag-cancel-snapshot")
+
+    expect(snapshots.at(-1)?.status).toBe("cancelled")
+  })
+
+  it("cancel is idempotent and safe on an unknown DAG", async () => {
+    const registry = makeRegistry(db)
+    const scheduler = makeScheduler(registry)
+    await expect(scheduler.cancel("does-not-exist")).resolves.toBeUndefined()
   })
 
   it("retryNode resets a failed node and re-spawns it", async () => {

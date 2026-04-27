@@ -37,7 +37,7 @@ function graphToRows(graph: DagGraph): { dagRow: Parameters<typeof prepared.inse
   return { dagRow, nodeRows }
 }
 
-type DbNodeStatus = "pending" | "running" | "completed" | "failed" | "skipped" | "ci-pending" | "ci-failed" | "landed"
+type DbNodeStatus = "pending" | "running" | "completed" | "failed" | "skipped" | "ci-pending" | "ci-failed" | "landed" | "cancelled"
 
 function mapNodeStatus(status: DagNode["status"]): DbNodeStatus {
   if (status === "ready") return "pending"

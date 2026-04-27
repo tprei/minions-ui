@@ -1,7 +1,9 @@
 import { describe, test, expect, beforeEach, mock, spyOn } from 'bun:test'
 import type { Database } from 'bun:sqlite'
 import { openDatabase, prepared, runMigrations } from '../db/sqlite'
-import { advanceShip, DIRECTIVE_PLAN, DIRECTIVE_VERIFY } from './coordinator'
+import { advanceShip, cancelShip, DIRECTIVE_PLAN, DIRECTIVE_VERIFY } from './coordinator'
+import { buildDag } from '../dag/dag'
+import { saveDag, loadDag } from '../dag/store'
 import type { PlanActionCtx } from '../commands/plan-actions'
 import type { SessionRegistry } from '../session/registry'
 import { getEventBus, resetEventBus } from '../events/bus'
@@ -503,5 +505,184 @@ describe('advanceShip', () => {
 
       consoleLogSpy.mockRestore()
     })
+  })
+})
+
+describe('cancelShip', () => {
+  let db: Database
+  let registry: SessionRegistry
+  let scheduler: ReturnType<typeof createMockScheduler> & { cancel: ReturnType<typeof mock> }
+  let ctx: PlanActionCtx
+
+  beforeEach(() => {
+    resetEventBus()
+    db = createTestDb()
+    registry = createMockRegistry()
+    const baseScheduler = createMockScheduler()
+    scheduler = {
+      ...baseScheduler,
+      cancel: mock(async () => {}),
+    }
+    ctx = { db, registry, scheduler }
+  })
+
+  test('rejects when session does not exist', async () => {
+    const result = await cancelShip('does-not-exist', ctx)
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('session not found')
+  })
+
+  test('rejects when session is not in ship mode', async () => {
+    const sessionId = 'cancel-not-ship'
+    createSession(db, sessionId, 'task', null)
+
+    const result = await cancelShip(sessionId, ctx)
+    expect(result.ok).toBe(false)
+    expect(result.reason).toContain('not ship')
+  })
+
+  test('marks ship session as failed and records cancellation', async () => {
+    const sessionId = 'cancel-no-dag'
+    createSession(db, sessionId, 'ship', 'think')
+
+    const result = await cancelShip(sessionId, ctx)
+    expect(result.ok).toBe(true)
+    expect(result.dagId).toBeUndefined()
+    expect(result.cancelledChildren).toEqual([])
+
+    const row = prepared.getSession(db, sessionId)
+    expect(row?.status).toBe('failed')
+    expect(registry.stop).toHaveBeenCalledWith(sessionId, 'ship cancelled')
+  })
+
+  test('cascades cancellation through the DAG to scheduler.cancel', async () => {
+    const sessionId = 'cancel-with-dag'
+    createSession(db, sessionId, 'ship', 'dag')
+
+    const childId = 'child-running-1'
+    createSession(db, childId, 'dag-task', null)
+
+    const dagId = 'dag-for-ship-cancel'
+    const graph = buildDag(dagId, [
+      { id: 'a', title: 'Task A', description: 'A', dependsOn: [] },
+      { id: 'b', title: 'Task B', description: 'B', dependsOn: ['a'] },
+    ], sessionId, 'https://github.com/org/repo')
+    graph.nodes[0]!.status = 'running'
+    graph.nodes[0]!.sessionId = childId
+    saveDag(graph, db)
+
+    const result = await cancelShip(sessionId, ctx)
+    expect(result.ok).toBe(true)
+    expect(result.dagId).toBe(dagId)
+    expect(result.cancelledChildren).toContain(childId)
+
+    expect(scheduler.cancel).toHaveBeenCalledWith(dagId)
+
+    const row = prepared.getSession(db, sessionId)
+    expect(row?.status).toBe('failed')
+  })
+
+  test('reports children that were running when cancelled', async () => {
+    const sessionId = 'cancel-list-children'
+    createSession(db, sessionId, 'ship', 'dag')
+    createSession(db, 's-a', 'dag-task', null)
+    createSession(db, 's-b', 'dag-task', null)
+    createSession(db, 's-c', 'dag-task', null)
+
+    const dagId = 'dag-children'
+    const graph = buildDag(dagId, [
+      { id: 'a', title: 'Task A', description: 'A', dependsOn: [] },
+      { id: 'b', title: 'Task B', description: 'B', dependsOn: [] },
+      { id: 'c', title: 'Task C', description: 'C', dependsOn: [] },
+      { id: 'd', title: 'Task D', description: 'D', dependsOn: [] },
+    ], sessionId, 'https://github.com/org/repo')
+    graph.nodes[0]!.status = 'running'
+    graph.nodes[0]!.sessionId = 's-a'
+    graph.nodes[1]!.status = 'ci-pending'
+    graph.nodes[1]!.sessionId = 's-b'
+    graph.nodes[2]!.status = 'done'
+    graph.nodes[2]!.sessionId = 's-c'
+    graph.nodes[3]!.status = 'pending'
+    saveDag(graph, db)
+
+    const result = await cancelShip(sessionId, ctx)
+    expect(result.ok).toBe(true)
+    expect(result.cancelledChildren).toEqual(expect.arrayContaining(['s-a', 's-b']))
+    expect(result.cancelledChildren).not.toContain('s-c')
+  })
+
+  test('cancelShip works when scheduler does not implement cancel', async () => {
+    const sessionId = 'cancel-no-scheduler-cancel'
+    createSession(db, sessionId, 'ship', 'dag')
+
+    const dagId = 'dag-no-cancel'
+    const graph = buildDag(dagId, [
+      { id: 'a', title: 'Task A', description: 'A', dependsOn: [] },
+    ], sessionId, 'https://github.com/org/repo')
+    saveDag(graph, db)
+
+    const baseScheduler = createMockScheduler()
+    const ctxWithoutCancel: PlanActionCtx = { db, registry, scheduler: baseScheduler }
+
+    const result = await cancelShip(sessionId, ctxWithoutCancel)
+    expect(result.ok).toBe(true)
+    expect(result.dagId).toBe(dagId)
+  })
+
+  test('cancelShip is idempotent on already-completed ship', async () => {
+    const sessionId = 'cancel-completed'
+    createSession(db, sessionId, 'ship', 'done')
+    db.run('UPDATE sessions SET status = ? WHERE id = ?', ['completed', sessionId])
+
+    const result = await cancelShip(sessionId, ctx)
+    expect(result.ok).toBe(true)
+
+    const row = prepared.getSession(db, sessionId)
+    expect(row?.status).toBe('completed')
+  })
+
+  test('emits a session.snapshot for the cancelled ship', async () => {
+    const sessionId = 'cancel-emits-snapshot'
+    createSession(db, sessionId, 'ship', 'dag')
+
+    const bus = getEventBus()
+    const events: { session: { id: string; status: string } }[] = []
+    bus.onKind('session.snapshot', (e) => events.push(e as { session: { id: string; status: string } }))
+
+    await cancelShip(sessionId, ctx)
+
+    expect(events.find((e) => e.session.id === sessionId)?.session.status).toBe('failed')
+  })
+
+  test('persists DAG node cancellation through cancelShip → scheduler.cancel', async () => {
+    const sessionId = 'cancel-persist-children'
+    createSession(db, sessionId, 'ship', 'dag')
+
+    const dagId = 'dag-persist-children'
+    const graph = buildDag(dagId, [
+      { id: 'a', title: 'Task A', description: 'A', dependsOn: [] },
+      { id: 'b', title: 'Task B', description: 'B', dependsOn: ['a'] },
+    ], sessionId, 'https://github.com/org/repo')
+    saveDag(graph, db)
+
+    // Stand-in scheduler.cancel that delegates to the real DAG store mutation
+    scheduler.cancel = mock(async (id: string) => {
+      const g = loadDag(id, db)
+      if (!g) return
+      for (const node of g.nodes) {
+        if (node.status === 'pending' || node.status === 'ready' || node.status === 'running') {
+          node.status = 'cancelled'
+          node.error = 'dag cancelled'
+        }
+      }
+      saveDag(g, db)
+    })
+
+    const result = await cancelShip(sessionId, ctx)
+    expect(result.ok).toBe(true)
+
+    const reloaded = loadDag(dagId, db)
+    expect(reloaded!.nodes.find((n) => n.id === 'a')?.status).toBe('cancelled')
+    expect(reloaded!.nodes.find((n) => n.id === 'b')?.status).toBe('cancelled')
   })
 })

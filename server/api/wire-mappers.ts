@@ -5,7 +5,7 @@ import { computeAttentionReasons, computeQuickActions } from './attention'
 interface DagRow {
   id: string
   root_task_id: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   created_at: number
   updated_at: number
 }
@@ -14,7 +14,7 @@ interface DagNodeRow {
   dag_id: string
   id: string
   slug: string
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'ci-pending' | 'ci-failed' | 'landed'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'ci-pending' | 'ci-failed' | 'landed' | 'cancelled'
   session_id: string | null
   dependencies: string[]
   dependents: string[]

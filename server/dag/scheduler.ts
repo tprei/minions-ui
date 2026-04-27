@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite"
-import { readyNodes, advanceDag, failNode, resetFailedNode, nodeIndex, getUpstreamBranches, isDagComplete, dagGraphStatus } from "./dag"
+import { readyNodes, advanceDag, failNode, resetFailedNode, nodeIndex, getUpstreamBranches, isDagComplete, dagGraphStatus, isTerminalStatus } from "./dag"
 import type { DagGraph, DagNode, DagInput } from "./dag"
 import { saveDag, loadDag, listDags } from "./store"
 import { prepared } from "../db/sqlite"
@@ -347,23 +347,43 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
 
   async function cancel(dagId: string): Promise<void> {
     cancelledDags.add(dagId)
-    const graph = activeGraphs.get(dagId)
-    if (!graph) return
 
-    const runningNodes = graph.nodes.filter((n) => n.status === "running")
-    for (const node of runningNodes) {
-      const sessionId = nodeToSession.get(node.id)
+    let graph = activeGraphs.get(dagId)
+    if (!graph) {
+      const stored = loadDag(dagId, db)
+      if (!stored) return
+      graph = stored
+    }
+
+    const sessionsToStop: string[] = []
+    for (const node of graph.nodes) {
+      if (isTerminalStatus(node.status)) continue
+
+      const sessionId = nodeToSession.get(node.id) ?? node.sessionId
       if (sessionId) {
-        await registry.stop(sessionId, "dag cancelled")
+        if (node.status === "running") sessionsToStop.push(sessionId)
         nodeToSession.delete(node.id)
         nodeToGraph.delete(sessionId)
+        deferredRestacks.delete(sessionId)
       }
-      node.status = "failed"
-      node.error = "dag cancelled"
+
+      node.status = "cancelled"
+      node.error = node.error ?? "dag cancelled"
     }
 
     persist(graph)
+    await commentUpdater(graph).catch((err) => {
+      console.error(`[scheduler] stack comment update failed during cancel:`, err)
+    })
     activeGraphs.delete(dagId)
+
+    for (const sessionId of sessionsToStop) {
+      try {
+        await registry.stop(sessionId, "dag cancelled")
+      } catch (err) {
+        console.error(`[scheduler] failed to stop session ${sessionId} during cancel:`, err)
+      }
+    }
   }
 
   function status(dagId: string): DagStatusSnapshot {

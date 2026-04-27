@@ -229,3 +229,101 @@ export async function advanceShip(
     return { ok: true, from: currentStage, to: nextStage, dagId }
   })
 }
+
+export interface CancelShipResult {
+  ok: boolean
+  reason?: string
+  dagId?: string
+  cancelledChildren?: string[]
+}
+
+/**
+ * Cancel a ship session and cascade cancellation through its DAG to all child sessions.
+ *
+ * 1. Marks the ship session as failed.
+ * 2. Cancels the associated DAG (if any), sweeping every non-terminal node
+ *    to the `cancelled` state and stopping any running child sessions.
+ * 3. Stops the ship runtime itself if still alive.
+ *
+ * Idempotent: calling on an already-cancelled or already-completed ship is a no-op
+ * for the ship itself, but still attempts to drain any orphan DAG state.
+ */
+export async function cancelShip(
+  sessionId: string,
+  ctx: PlanActionCtx,
+): Promise<CancelShipResult> {
+  return withMutex(sessionId, async () => {
+    const row = prepared.getSession(ctx.db, sessionId)
+    if (!row) return { ok: false, reason: 'session not found' }
+    if (row.mode !== 'ship') {
+      return { ok: false, reason: `session mode is ${row.mode}, not ship` }
+    }
+
+    const cancelledChildren: string[] = []
+
+    const dag = listDags(ctx.db).find((g) => g.rootSessionId === sessionId)
+    if (dag) {
+      for (const node of dag.nodes) {
+        if (node.sessionId && (node.status === 'running' || node.status === 'ci-pending' || node.status === 'rebasing' || node.status === 'rebase-conflict' || node.status === 'pending' || node.status === 'ready')) {
+          cancelledChildren.push(node.sessionId)
+        }
+      }
+
+      if (typeof ctx.scheduler.cancel === 'function') {
+        await ctx.scheduler.cancel(dag.id)
+      }
+    }
+
+    const now = Date.now()
+    if (row.status !== 'completed' && row.status !== 'failed') {
+      ctx.db.run(
+        'UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?',
+        ['failed', now, sessionId],
+      )
+    }
+
+    try {
+      await ctx.registry.stop(sessionId, 'ship cancelled')
+    } catch (err) {
+      console.error(`[ship] failed to stop ship session ${sessionId}:`, err)
+    }
+
+    const updatedRow = prepared.getSession(ctx.db, sessionId)
+    if (updatedRow) {
+      const bus = getEventBus()
+      const childRows = ctx.db
+        .query<{ id: string }, [string]>(
+          'SELECT id FROM sessions WHERE parent_id = ? ORDER BY created_at ASC',
+        )
+        .all(sessionId)
+      const childIds = childRows.map((r) => r.id)
+
+      bus.emit({
+        kind: 'session.snapshot',
+        session: {
+          id: updatedRow.id,
+          slug: updatedRow.slug,
+          status: updatedRow.status === 'waiting_input' ? 'running' : updatedRow.status,
+          command: updatedRow.command,
+          repo: updatedRow.repo ?? undefined,
+          branch: updatedRow.branch ?? undefined,
+          createdAt: new Date(updatedRow.created_at).toISOString(),
+          updatedAt: new Date(updatedRow.updated_at).toISOString(),
+          parentId: updatedRow.parent_id ?? undefined,
+          childIds,
+          needsAttention: updatedRow.needs_attention,
+          attentionReasons: updatedRow.attention_reasons as AttentionReason[],
+          quickActions: updatedRow.quick_actions as QuickAction[],
+          mode: updatedRow.mode,
+          stage: updatedRow.stage as ShipStage | undefined,
+          conversation: [],
+          transcriptUrl: `/api/sessions/${updatedRow.slug}/transcript`,
+        },
+      })
+    }
+
+    console.log('[ship]', sessionId, 'cancelled', dag ? `dag=${dag.id}` : 'no-dag', `children=${cancelledChildren.length}`)
+
+    return { ok: true, dagId: dag?.id, cancelledChildren }
+  })
+}

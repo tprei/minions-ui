@@ -24,6 +24,7 @@ export function classifyNodeForShip(status: ApiDagNode['status']): ShipColumn {
       return 'ci'
     case 'landed':
     case 'skipped':
+    case 'cancelled':
       return 'landed'
     case 'rebasing':
     case 'rebase-conflict':

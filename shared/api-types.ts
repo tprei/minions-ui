@@ -66,6 +66,7 @@ export interface ApiDagNode {
     | 'landed'
     | 'rebasing'
     | 'rebase-conflict'
+    | 'cancelled'
   dependencies: string[]
   dependents: string[]
   session?: ApiSession
@@ -76,7 +77,7 @@ export interface ApiDagGraph {
   id: string
   rootTaskId: string
   nodes: Record<string, ApiDagNode>
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   createdAt: string
   updatedAt: string
 }
