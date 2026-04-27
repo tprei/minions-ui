@@ -39,6 +39,15 @@ export type EngineEvent =
       status: 'completed' | 'failed'
     }
   | { kind: 'dag.cancelled'; dagId: string }
+  | {
+      kind: 'dag.stalled'
+      dagId: string
+      reason: 'deadline' | 'no-progress'
+      sinceMs: number
+      runningNodeIds: string[]
+      action: 'retry' | 'fail-forward'
+      stallCount: number
+    }
   | { kind: 'dag.node.landed'; dagId: string; nodeId: string }
   | { kind: 'dag.node.land_reverted'; dagId: string; nodeId: string }
   | { kind: 'dag.node.pushed'; dagId: string; nodeId: string; parentSha: string; newSha: string }

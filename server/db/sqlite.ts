@@ -155,6 +155,7 @@ interface DagRow {
   root_task_id: string
   status: DagStatus
   repo: string | null
+  deadline_ms: number | null
   created_at: number
   updated_at: number
 }
@@ -627,8 +628,8 @@ export const prepared = {
     const c = stmts(db)
     if (!c.insertDag) {
       c.insertDag = db.prepare(
-        `INSERT INTO dags (id, root_task_id, status, repo, created_at, updated_at)
-         VALUES ($id, $root_task_id, $status, $repo, $created_at, $updated_at)`,
+        `INSERT INTO dags (id, root_task_id, status, repo, deadline_ms, created_at, updated_at)
+         VALUES ($id, $root_task_id, $status, $repo, $deadline_ms, $created_at, $updated_at)`,
       )
     }
     c.insertDag.run({
@@ -636,6 +637,7 @@ export const prepared = {
       $root_task_id: row.root_task_id,
       $status: row.status,
       $repo: row.repo,
+      $deadline_ms: row.deadline_ms,
       $created_at: row.created_at,
       $updated_at: row.updated_at,
     })
@@ -649,6 +651,7 @@ export const prepared = {
           root_task_id = COALESCE($root_task_id, root_task_id),
           status = COALESCE($status, status),
           repo = COALESCE($repo, repo),
+          deadline_ms = COALESCE($deadline_ms, deadline_ms),
           updated_at = $updated_at
         WHERE id = $id`,
       )
@@ -658,6 +661,7 @@ export const prepared = {
       $root_task_id: row.root_task_id ?? null,
       $status: row.status ?? null,
       $repo: row.repo ?? null,
+      $deadline_ms: row.deadline_ms ?? null,
       $updated_at: row.updated_at,
     })
   },

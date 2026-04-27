@@ -39,6 +39,19 @@ describe("buildDag", () => {
     expect(graph.nodes[2]!.status).toBe("pending")
   })
 
+  it("propagates deadlineMs option onto the graph", () => {
+    const graph = buildDag(
+      "deadline-dag",
+      [{ id: "a", title: "Step A", description: "", dependsOn: [] }],
+      "root-session",
+      "myrepo",
+      undefined,
+      { deadlineMs: 1234567 },
+    )
+
+    expect(graph.deadlineMs).toBe(1234567)
+  })
+
   it("builds a diamond DAG", () => {
     const items: DagInput[] = [
       { id: "a", title: "Base", description: "Foundation", dependsOn: [] },

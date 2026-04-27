@@ -70,6 +70,7 @@ export interface DagGraph {
   repoUrl?: string
   repo: string
   createdAt: number
+  deadlineMs?: number
 }
 
 export interface DagInput {
@@ -125,6 +126,7 @@ export function buildDag(
   rootSessionId: string,
   repo: string,
   repoUrl?: string,
+  opts?: { deadlineMs?: number },
 ): DagGraph {
   const ids = new Set(items.map((i) => i.id))
 
@@ -154,6 +156,7 @@ export function buildDag(
     repo,
     repoUrl,
     createdAt: Date.now(),
+    deadlineMs: opts?.deadlineMs,
   }
 
   const sorted = topologicalSort(graph)
