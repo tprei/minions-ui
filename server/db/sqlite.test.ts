@@ -368,6 +368,168 @@ test('migration 0007 migrates legacy ship modes to ship with stage', () => {
   }
 })
 
+test('getDagNodeBySessionId returns dag_id, node_id, and status for linked node', () => {
+  const now = Date.now()
+
+  prepared.insertSession(db, {
+    id: 'sess-dag-link',
+    slug: 'dag-link',
+    status: 'running',
+    command: 'cmd',
+    mode: 'dag-task',
+    repo: 'org/repo',
+    branch: null,
+    bare_dir: null,
+    pr_url: null,
+    parent_id: null,
+    variant_group_id: null,
+    claude_session_id: null,
+    workspace_root: null,
+    created_at: now,
+    updated_at: now,
+    needs_attention: false,
+    attention_reasons: [],
+    quick_actions: [],
+    conversation: [],
+    quota_sleep_until: null,
+    quota_retry_count: 0,
+    metadata: { dagId: 'dag-1', dagNodeId: 'node-a' },
+    pipeline_advancing: false,
+    stage: null,
+    coordinator_children: [],
+  })
+
+  prepared.insertDag(db, {
+    id: 'dag-1',
+    root_task_id: 'root-1',
+    status: 'running',
+    repo: 'org/repo',
+    created_at: now,
+    updated_at: now,
+  })
+
+  prepared.upsertDagNode(db, {
+    dag_id: 'dag-1',
+    id: 'node-a',
+    slug: 'node-a',
+    status: 'running',
+    session_id: 'sess-dag-link',
+    dependencies: [],
+    dependents: [],
+    payload: { title: 'Node A', description: 'first' },
+  })
+
+  const lookup = prepared.getDagNodeBySessionId(db, 'sess-dag-link')
+  expect(lookup).not.toBeNull()
+  expect(lookup!.dag_id).toBe('dag-1')
+  expect(lookup!.node_id).toBe('node-a')
+  expect(lookup!.status).toBe('running')
+})
+
+test('getDagNodeBySessionId returns null for unlinked session', () => {
+  const now = Date.now()
+  prepared.insertSession(db, {
+    id: 'sess-loner',
+    slug: 'loner',
+    status: 'running',
+    command: 'cmd',
+    mode: 'task',
+    repo: null,
+    branch: null,
+    bare_dir: null,
+    pr_url: null,
+    parent_id: null,
+    variant_group_id: null,
+    claude_session_id: null,
+    workspace_root: null,
+    created_at: now,
+    updated_at: now,
+    needs_attention: false,
+    attention_reasons: [],
+    quick_actions: [],
+    conversation: [],
+    quota_sleep_until: null,
+    quota_retry_count: 0,
+    metadata: {},
+    pipeline_advancing: false,
+    stage: null,
+    coordinator_children: [],
+  })
+
+  expect(prepared.getDagNodeBySessionId(db, 'sess-loner')).toBeNull()
+  expect(prepared.getDagNodeBySessionId(db, 'sess-nonexistent')).toBeNull()
+})
+
+test('getDagNodeBySessionId tracks updates after upsertDagNode replaces session_id', () => {
+  const now = Date.now()
+
+  for (const id of ['old-session', 'new-session']) {
+    prepared.insertSession(db, {
+      id,
+      slug: id,
+      status: 'running',
+      command: 'cmd',
+      mode: 'dag-task',
+      repo: null,
+      branch: null,
+      bare_dir: null,
+      pr_url: null,
+      parent_id: null,
+      variant_group_id: null,
+      claude_session_id: null,
+      workspace_root: null,
+      created_at: now,
+      updated_at: now,
+      needs_attention: false,
+      attention_reasons: [],
+      quick_actions: [],
+      conversation: [],
+      quota_sleep_until: null,
+      quota_retry_count: 0,
+      metadata: {},
+      pipeline_advancing: false,
+      stage: null,
+      coordinator_children: [],
+    })
+  }
+
+  prepared.insertDag(db, {
+    id: 'dag-retry',
+    root_task_id: 'root-r',
+    status: 'running',
+    repo: null,
+    created_at: now,
+    updated_at: now,
+  })
+
+  prepared.upsertDagNode(db, {
+    dag_id: 'dag-retry',
+    id: 'node-r',
+    slug: 'node-r',
+    status: 'running',
+    session_id: 'old-session',
+    dependencies: [],
+    dependents: [],
+    payload: { title: 'r', description: 'r' },
+  })
+
+  expect(prepared.getDagNodeBySessionId(db, 'old-session')!.node_id).toBe('node-r')
+
+  prepared.upsertDagNode(db, {
+    dag_id: 'dag-retry',
+    id: 'node-r',
+    slug: 'node-r',
+    status: 'running',
+    session_id: 'new-session',
+    dependencies: [],
+    dependents: [],
+    payload: { title: 'r', description: 'r' },
+  })
+
+  expect(prepared.getDagNodeBySessionId(db, 'old-session')).toBeNull()
+  expect(prepared.getDagNodeBySessionId(db, 'new-session')!.node_id).toBe('node-r')
+})
+
 test('memories table has all expected columns and constraints', () => {
   const now = Date.now()
 

@@ -256,19 +256,33 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
   }
 
   async function onSessionCompleted(sessionId: string, state: SessionRunState): Promise<void> {
-    const dagId = nodeToGraph.get(sessionId)
-    if (!dagId) return
+    let dagId = nodeToGraph.get(sessionId)
+    let nodeId: string | undefined
 
-    const graph = activeGraphs.get(dagId)
-    if (!graph) return
+    if (dagId) {
+      const nodeEntry = Array.from(nodeToSession.entries()).find(([, sid]) => sid === sessionId)
+      if (nodeEntry) nodeId = nodeEntry[0]
+    }
 
-    const nodeEntry = Array.from(nodeToSession.entries()).find(([, sid]) => sid === sessionId)
-    if (!nodeEntry) return
-    const [nodeId] = nodeEntry
+    if (!dagId || !nodeId) {
+      const lookup = prepared.getDagNodeBySessionId(db, sessionId)
+      if (!lookup) return
+      dagId = lookup.dag_id
+      nodeId = lookup.node_id
+    }
+
+    let graph = activeGraphs.get(dagId)
+    if (!graph) {
+      const stored = loadDag(dagId, db)
+      if (!stored) return
+      graph = stored
+      activeGraphs.set(dagId, graph)
+    }
 
     const idx = nodeIndex(graph)
     const node = idx.get(nodeId)
     if (!node) return
+    if (node.status !== "running") return
 
     nodeToSession.delete(nodeId)
     nodeToGraph.delete(sessionId)
@@ -420,22 +434,20 @@ export function createDagScheduler(opts: DagSchedulerOpts): DagScheduler {
   }
 
   async function onSessionResumed(sessionId: string): Promise<void> {
-    const row = prepared.getSession(db, sessionId)
-    if (!row) return
-    const meta = row.metadata as { dagId?: string; dagNodeId?: string }
-    if (!meta.dagId || !meta.dagNodeId) return
+    const lookup = prepared.getDagNodeBySessionId(db, sessionId)
+    if (!lookup) return
 
-    let graph = activeGraphs.get(meta.dagId)
+    let graph = activeGraphs.get(lookup.dag_id)
     if (!graph) {
-      const stored = loadDag(meta.dagId, db)
+      const stored = loadDag(lookup.dag_id, db)
       if (!stored) return
       graph = stored
-      activeGraphs.set(meta.dagId, graph)
-      cancelledDags.delete(meta.dagId)
+      activeGraphs.set(lookup.dag_id, graph)
+      cancelledDags.delete(lookup.dag_id)
     }
 
     const idx = nodeIndex(graph)
-    const node = idx.get(meta.dagNodeId)
+    const node = idx.get(lookup.node_id)
     if (!node) return
     if (node.status !== "failed" && node.status !== "ci-failed") return
 
